@@ -8,6 +8,14 @@ import './SettingsPage.css';
 
 export const SettingsPage: React.FC = () => {
   const { primary, themeBackground, setPrimary, setThemeBackground } = useThemeStore();
+  const [appVersion, setAppVersion] = React.useState('Loading...');
+
+  React.useEffect(() => {
+    import('@tauri-apps/api/app')
+      .then(app => app.getVersion())
+      .then(v => setAppVersion(`Version ${v}`))
+      .catch(() => setAppVersion('Version 1.0.0'));
+  }, []);
 
   return (
     <div className="settings-page">
@@ -107,7 +115,7 @@ export const SettingsPage: React.FC = () => {
             <div className="settings-row">
               <div className="settings-info">
                 <h3 className="label-lg">Vega Desktop</h3>
-                <p className="body-md text-muted">Version 1.0.0-alpha</p>
+                <p className="body-md text-muted">{appVersion}</p>
               </div>
               <div className="flex gap-3">
                 <a
