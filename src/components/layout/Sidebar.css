@@ -1,0 +1,59 @@
+.sidebar {
+  width: 72px; /* Narrow width */
+  background-color: transparent; /* No theme background */
+  display: flex;
+  flex-direction: column;
+  padding: 16px 0; /* No horizontal padding so active tab touches left edge */
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-right: 1px solid var(--surface-variant);
+}
+
+.sidebar-logo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0 8px 32px 8px;
+}
+
+.logo-img {
+  width: 32px;
+  height: auto;
+  object-fit: contain;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(100% - 16px); /* Leave space on the right for border-radius */
+  padding: 12px 0;
+  border-radius: 0 16px 16px 0; /* Rounded right side only */
+  color: var(--on-surface-variant); /* Theme-aware inactive icon color */
+  transition: all 0.2s ease;
+  cursor: pointer;
+  margin-right: 16px;
+}
+
+.nav-item:hover {
+  background-color: var(--surface-container-highest);
+  color: var(--on-surface);
+}
+
+.nav-item.active {
+  background-color: var(--on-surface);
+  color: var(--surface); /* Inverted color for active */
+}
+
+.nav-spacer {
+  flex: 1;
+}

@@ -1,0 +1,122 @@
+.search-page {
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 var(--spacing-xl) 0;
+  min-height: calc(100vh - 72px);
+}
+
+.search-page-header-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
+  padding-bottom: var(--spacing-lg);
+  border-bottom: 1px solid var(--surface-variant);
+}
+
+.search-page-form {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  background-color: transparent;
+}
+
+.search-page-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--on-surface);
+  outline: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.search-page-input::placeholder {
+  color: var(--on-surface-variant);
+  opacity: 0.6;
+}
+
+.search-page-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  margin-top: 10vh;
+}
+
+.search-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+.search-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.search-card {
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.search-card:hover {
+  transform: translateY(-4px);
+}
+
+.search-poster-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--rounded-lg);
+  overflow: hidden;
+  margin-bottom: var(--spacing-sm);
+  background-color: var(--surface-container);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.search-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.search-card:hover .search-poster {
+  transform: scale(1.05);
+}
+
+.search-hover-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  color: var(--on-surface);
+}
+
+.search-card:hover .search-hover-overlay {
+  opacity: 1;
+}
+
+.search-title {
+  color: var(--on-surface-variant);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}

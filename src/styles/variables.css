@@ -1,0 +1,93 @@
+:root, [data-theme="gray"] {
+  --background: #131313;
+  --on-background: #e2e2e2;
+  --surface: #131313;
+  --surface-dim: #131313;
+  --surface-bright: #393939;
+  --surface-container-lowest: #0e0e0e;
+  --surface-container-low: #1b1b1b;
+  --surface-container: #1f1f1f;
+  --surface-container-high: #2a2a2a;
+  --surface-container-highest: #353535;
+  --surface-variant: #353535;
+  --on-surface: #e2e2e2;
+  --on-surface-variant: #a3a3a3;
+  --inverse-surface: #e2e2e2;
+  --inverse-on-surface: #303030;
+  
+  --outline: #737373;
+  --outline-variant: #404040;
+  --surface-tint: #ffffff;
+  --primary: #ffb2be;
+  --on-primary: #660025;
+  --primary-container: #ff4e7c;
+  --on-primary-container: #5a0020;
+  --inverse-primary: #bc004b;
+  --secondary: #c6c6c7;
+  --on-secondary: #2f3131;
+  --secondary-container: #454747;
+  --on-secondary-container: #b4b5b5;
+  --tertiary: #c8c6c5;
+  --on-tertiary: #303030;
+  --tertiary-container: #929090;
+  --on-tertiary-container: #2a2a2a;
+  --error: #ffb4ab;
+  --on-error: #690005;
+  --error-container: #93000a;
+  --on-error-container: #ffdad6;
+}
+
+[data-theme="oled"] {
+  --background: #000000;
+  --on-background: #e2e2e2;
+  --surface: #000000;
+  --surface-dim: #000000;
+  --surface-bright: #222222;
+  --surface-container-lowest: #000000;
+  --surface-container-low: #0a0a0a;
+  --surface-container: #121212;
+  --surface-container-high: #1a1a1a;
+  --surface-container-highest: #222222;
+  --surface-variant: #222222;
+}
+
+[data-theme="white"] {
+  --background: #ffffff;
+  --on-background: #131313;
+  --surface: #ffffff;
+  --surface-dim: #ffffff;
+  --surface-bright: #e2e2e2;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f8f8f8;
+  --surface-container: #f0f0f0;
+  --surface-container-high: #e8e8e8;
+  --surface-container-highest: #e0e0e0;
+  --surface-variant: #e0e0e0;
+  --on-surface: #131313;
+  --on-surface-variant: #4a4a4a;
+  --inverse-surface: #131313;
+  --inverse-on-surface: #e2e2e2;
+}
+
+:root {
+
+  /* Typography */
+  --font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  
+  --rounded-sm: 0.25rem;
+  --rounded-DEFAULT: 0.5rem;
+  --rounded-md: 0.75rem;
+  --rounded-lg: 1rem;
+  --rounded-xl: 1.5rem;
+  --rounded-full: 9999px;
+
+  --spacing-base: 8px;
+  --spacing-xs: 4px;
+  --spacing-sm: 12px;
+  --spacing-md: 24px;
+  --spacing-lg: 48px;
+  --spacing-xl: 80px;
+  --spacing-gutter: 24px;
+  --spacing-margin-desktop: 64px;
+  --spacing-margin-mobile: 16px;
+}

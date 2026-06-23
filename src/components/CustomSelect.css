@@ -1,0 +1,79 @@
+.custom-select-container {
+  position: relative;
+  min-width: 200px;
+  width: max-content;
+}
+
+.custom-select-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 16px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.custom-select-button:hover,
+.custom-select-button[aria-expanded="true"] {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.custom-select-value {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 12px;
+}
+
+.custom-select-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.custom-select-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  margin: 0;
+  padding: 8px 0;
+  list-style: none;
+  background-color: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.custom-select-option {
+  padding: 12px 16px;
+  color: #fff;
+  cursor: pointer;
+  white-space: normal; /* Allow text to wrap to the next line */
+  word-wrap: break-word;
+  transition: background-color 0.2s ease;
+  line-height: 1.4;
+}
+
+.custom-select-option:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.custom-select-option.selected {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: var(--primary, #3b82f6);
+  font-weight: 500;
+}

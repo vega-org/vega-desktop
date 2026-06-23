@@ -1,0 +1,150 @@
+.hero-container {
+  position: relative;
+  /* Break out of .layout-content horizontal padding */
+  width: calc(100% + calc(var(--spacing-gutter) * 2));
+  margin-left: calc(var(--spacing-gutter) * -1);
+  margin-right: calc(var(--spacing-gutter) * -1);
+  height: clamp(400px, 70vh, 800px);
+  margin-bottom: var(--spacing-xl);
+}
+
+.hero-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  transition: background-image 0.5s ease-in-out;
+}
+
+.hero-vignette {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  /* Fade into the background color at the bottom so there is no sharp edge */
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.9) 0%,
+    rgba(0, 0, 0, 0.4) 40%,
+    rgba(0, 0, 0, 0) 100%
+  ),
+  linear-gradient(
+    to top,
+    var(--background) 0%,
+    rgba(0, 0, 0, 0.5) 30%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+.hero-content {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 50%;
+  padding: var(--spacing-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  z-index: 10;
+}
+
+.hero-logo {
+  max-width: 400px;
+  max-height: 150px;
+  object-fit: contain;
+  margin-bottom: var(--spacing-xs);
+}
+
+.hero-title {
+  color: var(--on-surface);
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  margin-bottom: var(--spacing-xs);
+}
+
+.hero-description {
+  color: var(--on-surface-variant);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+.btn-play {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--primary);
+  color: var(--on-primary);
+  padding: 12px 28px;
+  border-radius: var(--rounded-lg);
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.btn-play:hover {
+  background-color: var(--primary-container);
+  color: var(--on-primary-container);
+  transform: scale(1.05);
+}
+
+.btn-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  border-radius: var(--rounded-lg);
+  border: 1px solid var(--surface-variant);
+  color: var(--on-surface);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.btn-info:hover {
+  background-color: var(--surface-container-highest);
+  transform: scale(1.05);
+}
+
+/* Skeleton State */
+.hero-container.skeleton {
+  background-color: var(--surface-container);
+}
+
+.hero-skeleton-bg {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--surface-container) 0%,
+    var(--surface-container-high) 50%,
+    var(--surface-container) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite linear;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@media (max-width: 768px) {
+  .hero-content {
+    width: 100%;
+    padding: var(--spacing-md);
+  }
+}

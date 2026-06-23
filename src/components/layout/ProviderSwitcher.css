@@ -1,0 +1,90 @@
+.provider-switcher-container {
+  position: relative;
+  min-width: 200px;
+}
+
+.provider-switcher-button {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 8px 16px;
+  background-color: var(--surface-container-high);
+  border: 1px solid var(--surface-variant);
+  border-radius: var(--rounded-full);
+  color: var(--on-surface);
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.provider-switcher-button:hover {
+  background-color: var(--surface-container-highest);
+}
+
+.provider-switcher-button .chevron {
+  margin-left: auto;
+  transition: transform 0.2s ease;
+}
+
+.provider-switcher-button .chevron.open {
+  transform: rotate(180deg);
+}
+
+.provider-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 240px;
+  background-color: var(--surface-container-high);
+  border: 1px solid var(--surface-variant);
+  border-radius: var(--rounded-xl);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 50;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+}
+
+.provider-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: var(--rounded-md);
+  border: none;
+  background: transparent;
+  color: var(--on-surface-variant);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.provider-option:hover {
+  background-color: var(--surface-container-highest);
+  color: var(--on-surface);
+}
+
+.provider-option.active {
+  background-color: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.provider-option-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.provider-icon-small {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

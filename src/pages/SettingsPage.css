@@ -1,0 +1,166 @@
+.settings-page {
+  padding: var(--spacing-xl) 0;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.settings-header {
+  margin-bottom: var(--spacing-xl);
+}
+
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-group h2 {
+  color: var(--on-surface);
+  opacity: 0.9;
+  margin-bottom: var(--spacing-sm);
+}
+
+.settings-card {
+  background-color: var(--surface-container);
+  border-radius: var(--rounded-lg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  /* Removed overflow: hidden so dropdowns can overflow the card */
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  transition: background-color 0.2s ease;
+}
+
+.settings-divider {
+  height: 1px;
+  background-color: var(--surface-variant);
+  margin: 0;
+}
+
+.settings-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.settings-info p {
+  opacity: 0.7;
+}
+
+/* Theme Toggle Buttons */
+.theme-toggle-group {
+  display: flex;
+  background-color: var(--surface-variant);
+  border-radius: var(--rounded-md);
+  padding: 4px;
+}
+
+.theme-toggle-btn {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--on-surface-variant);
+  border-radius: var(--rounded-sm);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.theme-toggle-btn:hover {
+  color: var(--on-surface);
+}
+
+.theme-toggle-btn.active {
+  background-color: var(--surface-bright);
+  color: var(--on-surface);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Accent Color Buttons */
+.accent-color-grid {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.accent-color-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.accent-color-btn:hover {
+  transform: scale(1.1);
+}
+
+.accent-color-btn.active {
+  border-color: var(--on-surface);
+  transform: scale(1.1);
+}
+
+/* Social Buttons */
+.social-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--rounded-md);
+  background-color: var(--surface-variant);
+  color: var(--on-surface);
+  transition: all 0.2s ease;
+}
+
+.social-btn:hover {
+  background-color: var(--primary-container);
+  color: var(--on-primary-container);
+  transform: translateY(-2px);
+}
+
+/* Range Sliders */
+input[type="range"] {
+  accent-color: var(--primary);
+  width: 150px;
+  cursor: pointer;
+}
+
+/* Quality Toggles */
+.quality-toggle-btn {
+  padding: 6px 16px;
+  border-radius: var(--rounded-full);
+  border: 1px solid var(--surface-variant);
+  background: var(--surface-container);
+  color: var(--on-surface);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.quality-toggle-btn:hover {
+  background-color: var(--surface-bright);
+}
+
+.quality-toggle-btn.excluded {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}

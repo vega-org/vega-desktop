@@ -1,0 +1,52 @@
+.topbar {
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--spacing-md);
+  background-color: transparent;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  margin-bottom: -72px; /* Pull content up underneath topbar */
+  pointer-events: none; /* Let clicks pass through empty spaces to the hero below */
+}
+
+/* Re-enable pointer events for interactive elements */
+.search-container, .topbar-actions {
+  pointer-events: auto;
+}
+
+.search-container {
+  display: flex;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.4); /* Make it translucent over hero bg */
+  backdrop-filter: blur(8px);
+  border-radius: var(--rounded-full);
+  padding: 8px 16px;
+  width: 400px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+}
+
+.search-container:focus-within {
+  border-color: var(--primary);
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.search-icon {
+  color: var(--on-surface-variant);
+  margin-right: 12px;
+}
+
+.search-input {
+  background: transparent;
+  border: none;
+  color: var(--on-surface);
+  flex: 1;
+  outline: none;
+}
+
+.search-input::placeholder {
+  color: var(--on-surface-variant);
+}

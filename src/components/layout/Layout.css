@@ -1,0 +1,21 @@
+.layout-root {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background-color: var(--background);
+}
+
+.layout-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0; /* Important for flex children to allow truncating */
+}
+
+.layout-content {
+  flex: 1;
+  padding: 0 var(--spacing-gutter) var(--spacing-gutter) var(--spacing-gutter);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
