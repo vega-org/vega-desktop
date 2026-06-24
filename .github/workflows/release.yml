@@ -102,25 +102,27 @@ jobs:
           VITE_TV_MODE: 'true'
         run: npm run tauri android build -- --apk
 
-      - name: Prepare APK for signing
-        run: |
-          mkdir -p android-release-apk
-          # Find the largest unsigned apk (usually the universal one) and copy it
-          find src-tauri/gen/android/app/build/outputs/apk -name "*-unsigned.apk" | xargs ls -S | head -n 1 | xargs -I {} cp {} android-release-apk/app-release-unsigned.apk
-
       - name: Sign APK
-        uses: ilharp/sign-android-release@v1
-        id: sign_app
-        with:
-          releaseDirectory: android-release-apk
-          signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-
-      - name: Rename APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          mv ${{steps.sign_app.outputs.signedReleaseFile}} vega-tv-android.apk
+          # 1. Decode Keystore
+          echo "$KEYSTORE_BASE64" | base64 --decode > release.jks
+          
+          # 2. Get the largest unsigned APK path
+          UNSIGNED_APK=$(find src-tauri/gen/android/app/build/outputs/apk -name "*-unsigned.apk" | xargs ls -S | head -n 1)
+          
+          # 3. Locate the latest Android Build Tools on the GitHub Runner
+          BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          
+          # 4. Zipalign it
+          $BUILD_TOOLS/zipalign -v -p 4 "$UNSIGNED_APK" app-aligned.apk
+          
+          # 5. Sign it
+          $BUILD_TOOLS/apksigner sign --ks release.jks --ks-key-alias "$KEY_ALIAS" --ks-pass pass:"$KEYSTORE_PASSWORD" --key-pass pass:"$KEY_PASSWORD" --out vega-tv-android.apk app-aligned.apk
 
       - name: Upload APK to Release
         uses: softprops/action-gh-release@v1
