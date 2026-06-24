@@ -6,6 +6,39 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+/// Test command: spawns an external mpv process with the given URL.
+/// Used to verify that external mpv playback works on Linux (Docker/X11)
+/// without touching the embedded tauri-plugin-libmpv path.
+#[tauri::command]
+async fn test_mpv(
+    url: String,
+    headers: Option<std::collections::HashMap<String, String>>,
+) -> Result<(), String> {
+    let mut cmd = tokio::process::Command::new("mpv");
+    cmd.arg("--fullscreen")
+       .arg("--vo=gpu")
+       .arg("--hwdec=no");
+
+    if let Some(ref hdrs) = headers {
+        let fields: Vec<String> = hdrs
+            .iter()
+            .filter(|(k, _)| k.to_lowercase() != "user-agent")
+            .map(|(k, v)| format!("{}: {}", k, v))
+            .collect();
+        if !fields.is_empty() {
+            cmd.arg(format!("--http-header-fields={}", fields.join(",")));
+        }
+        let ua = hdrs.get("user-agent").or_else(|| hdrs.get("User-Agent"));
+        if let Some(ua) = ua {
+            cmd.arg(format!("--user-agent={}", ua));
+        }
+    }
+
+    cmd.arg(&url);
+    cmd.spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()
@@ -28,6 +61,7 @@ pub fn run() {
         .manage(download_manager::DownloadState::new())
         .invoke_handler(tauri::generate_handler![
             greet,
+            test_mpv,
             download_manager::start_download,
             download_manager::pause_download,
             download_manager::cancel_download

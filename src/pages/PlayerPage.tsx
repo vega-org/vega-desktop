@@ -9,6 +9,7 @@ import { cacheStorage } from '../lib/storage';
 import { PlayerControls } from './PlayerControls';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { LogicalSize } from '@tauri-apps/api/dpi';
+import { invoke } from '@tauri-apps/api/core';
 import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation-react';
 import { FocusableButton } from '../components/layout/FocusableButton';
 
@@ -587,6 +588,31 @@ const DesktopPlayer: React.FC<any> = ({
       {toasts.map(t => (
         <div key={t.id} className="player-toast">{t.msg}</div>
       ))}
+      {selectedStream?.link && (
+        <button
+          onClick={() =>
+            invoke('test_mpv', {
+              url: selectedStream.link,
+              headers: selectedStream.headers ?? {},
+            }).catch(console.error)
+          }
+          style={{
+            position: 'fixed',
+            bottom: '80px',
+            right: '16px',
+            zIndex: 9999,
+            padding: '8px 14px',
+            background: 'rgba(255,100,0,0.85)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            fontSize: '13px',
+            cursor: 'pointer',
+          }}
+        >
+          Test External MPV
+        </button>
+      )}
     </div>
   );
 };
