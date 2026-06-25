@@ -35,7 +35,8 @@ const FocusableEpisodeCard: React.FC<{
           border: 'none', 
           textAlign: 'left', 
           color: 'inherit',
-          borderRadius: 'var(--rounded-lg)'
+          borderRadius: 'var(--rounded-lg)',
+          minWidth: 0
         }}
       >
         {children[0]}
@@ -462,7 +463,7 @@ export const MetaPage: React.FC = () => {
           {filteredLinkList && filteredLinkList.length > 0 && (
             <div className="meta-episodes-section">
               <div className="episodes-header-row">
-                {filteredLinkList.length > 1 && (
+                {filteredLinkList.length > 1 ? (
                   <CustomSelect
                     options={filteredLinkList.map((season: Link) => ({
                       value: season.title,
@@ -478,6 +479,10 @@ export const MetaPage: React.FC = () => {
                     }}
                     className="season-selector-custom"
                   />
+                ) : (
+                  <h3 className="title-md text-primary" style={{ marginBottom: '16px' }}>
+                    {activeSeason?.title || 'Episodes'}
+                  </h3>
                 )}
               </div>
 

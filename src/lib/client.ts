@@ -6,16 +6,17 @@ export const queryClient = new QueryClient({
     queries: {
       // Retry configuration
       retry: (failureCount, error) => {
-        // Don't retry on abort errors or 4xx errors
         if (error.name === 'AbortError') {
           return false;
         }
+        if (error.message?.includes('WAF')) {
+          return false;
+        }
         if (error.message?.includes('4')) {
-          return false; // 4xx errors
+          return false;
         }
 
-        // Retry up to 3 times for other errors with exponential backoff
-        return failureCount < 3;
+        return failureCount < 1;
       },
       retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
 

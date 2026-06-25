@@ -4,7 +4,7 @@ use reqwest::Client;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
-use std::io::{Seek, SeekFrom, Write};
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
@@ -77,15 +77,15 @@ pub async fn start_download(
         .unwrap_or(0)
         .saturating_add(start_byte);
 
-    let mut dest = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .open(&part_path)
-        .map_err(|e| e.to_string())?;
-
-    if start_byte > 0 {
-        dest.seek(SeekFrom::End(0)).map_err(|e| e.to_string())?;
+    let mut open_opts = OpenOptions::new();
+    open_opts.create(true);
+    if start_byte == 0 {
+        open_opts.write(true).truncate(true);
+    } else {
+        open_opts.append(true);
     }
+    
+    let mut dest = open_opts.open(&part_path).map_err(|e| e.to_string())?;
 
     let (cancel_tx, mut cancel_rx) = mpsc::channel::<()>(1);
 

@@ -85,9 +85,7 @@ export class SettingsStorage {
 
   // UI preferences
   showTabBarLabels(): boolean {
-    return mainStorage.getBool(SettingsKeys.SHOW_TAB_BAR_LABELS) === null
-      ? false
-      : mainStorage.getBool(SettingsKeys.SHOW_TAB_BAR_LABELS);
+    return mainStorage.getBool(SettingsKeys.SHOW_TAB_BAR_LABELS, false);
   }
 
   setShowTabBarLabels(show: boolean): void {
@@ -96,9 +94,7 @@ export class SettingsStorage {
 
   isTvModeEnabled(): boolean {
     const defaultTvMode = import.meta.env.VITE_TV_MODE === 'true';
-    return mainStorage.getBool(SettingsKeys.TV_MODE_ENABLED) === null
-      ? defaultTvMode
-      : mainStorage.getBool(SettingsKeys.TV_MODE_ENABLED);
+    return mainStorage.getBool(SettingsKeys.TV_MODE_ENABLED, defaultTvMode);
   }
 
   setTvModeEnabled(enabled: boolean): void {
@@ -106,18 +102,14 @@ export class SettingsStorage {
   }
 
   isHapticFeedbackEnabled(): boolean {
-    return mainStorage.getBool(SettingsKeys.HAPTIC_FEEDBACK) === null
-      ? true
-      : mainStorage.getBool(SettingsKeys.HAPTIC_FEEDBACK);
+    return mainStorage.getBool(SettingsKeys.HAPTIC_FEEDBACK, true);
   }
   setHapticFeedbackEnabled(enabled: boolean): void {
     mainStorage.setBool(SettingsKeys.HAPTIC_FEEDBACK, enabled);
   }
 
   isNotificationsEnabled(): boolean {
-    return mainStorage.getBool(SettingsKeys.NOTIFICATIONS_ENABLED) === null
-      ? true
-      : mainStorage.getBool(SettingsKeys.NOTIFICATIONS_ENABLED);
+    return mainStorage.getBool(SettingsKeys.NOTIFICATIONS_ENABLED, true);
   }
 
   setNotificationsEnabled(enabled: boolean): void {
@@ -143,9 +135,7 @@ export class SettingsStorage {
 
   // Player settings
   showMediaControls(): boolean {
-    return mainStorage.getBool(SettingsKeys.SHOW_MEDIA_CONTROLS) === null
-      ? true
-      : mainStorage.getBool(SettingsKeys.SHOW_MEDIA_CONTROLS);
+    return mainStorage.getBool(SettingsKeys.SHOW_MEDIA_CONTROLS, true);
   }
 
   setShowMediaControls(show: boolean): void {

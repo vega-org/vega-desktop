@@ -1,5 +1,6 @@
 import { AxiosAdapter, AxiosResponse, AxiosHeaders } from 'axios';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { getGlobalCookies } from './cookieStore';
 
 export const tauriAxiosAdapter: AxiosAdapter = async (config): Promise<AxiosResponse> => {
   // Build URL with params
@@ -19,6 +20,17 @@ export const tauriAxiosAdapter: AxiosAdapter = async (config): Promise<AxiosResp
     Object.keys(config.headers).forEach((key) => {
       headers.append(key, config.headers[key] as string);
     });
+  }
+
+  // Inject global cookies from the purely in-memory cookie store
+  const globalCookies = getGlobalCookies(url);
+  if (globalCookies) {
+    const existingCookie = headers.get('Cookie');
+    if (existingCookie) {
+      headers.set('Cookie', existingCookie + '; ' + globalCookies);
+    } else {
+      headers.set('Cookie', globalCookies);
+    }
   }
 
   // Convert method and body
@@ -76,7 +88,7 @@ export const tauriAxiosAdapter: AxiosAdapter = async (config): Promise<AxiosResp
     responseHeaders.set(key, value);
   });
 
-  return {
+  const responseObj = {
     data: responseData,
     status: response.status,
     statusText: response.statusText,
@@ -84,4 +96,18 @@ export const tauriAxiosAdapter: AxiosAdapter = async (config): Promise<AxiosResp
     config,
     request: response.url,
   };
+
+  const validateStatus = config.validateStatus || ((status) => status >= 200 && status < 300);
+  
+  if (!validateStatus(response.status)) {
+    const error: any = new Error(`Request failed with status code ${response.status}`);
+    error.config = config;
+    error.request = response.url;
+    error.response = responseObj;
+    error.isAxiosError = true;
+    error.status = response.status;
+    throw error;
+  }
+
+  return responseObj;
 };

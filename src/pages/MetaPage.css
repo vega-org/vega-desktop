@@ -168,7 +168,7 @@
 
 .meta-episodes-section {
   padding: 0 var(--spacing-xs);
-  width: fit-content;
+  width: 100%;
 }
 
 .episodes-header-row {
@@ -210,6 +210,7 @@
   gap: 16px;
   cursor: pointer;
   transition: all 0.2s;
+  min-width: 0;
 }
 
 .episode-card:hover {
@@ -228,6 +229,7 @@
 
 .episode-info {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;

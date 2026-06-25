@@ -164,6 +164,8 @@ export interface OpenWebViewResult {
   cookieMap: Record<string, string>;
   // The User-Agent used by the WebView.
   userAgent: string;
+  // Expiry timestamp in seconds
+  expires?: number;
   // The URL that was opened.
   url: string;
 }

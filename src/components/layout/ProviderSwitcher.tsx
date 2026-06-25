@@ -30,7 +30,7 @@ export const ProviderSwitcher: React.FC = () => {
 
   return (
     <div className="provider-switcher-container" ref={dropdownRef}>
-      <FocusableButton 
+      <FocusableButton
         className="provider-switcher-button glass-overlay"
         onClick={() => setIsOpen(!isOpen)}
       >

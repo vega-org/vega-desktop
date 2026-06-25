@@ -254,7 +254,7 @@ export const ExtensionsPage: React.FC = () => {
             {installedProviders.length === 0 && (
               <p className="text-muted body-md">No providers installed yet.</p>
             )}
-            {installedProviders.map(provider => (
+            {installedProviders.filter(p => !p.disabled).map(provider => (
               <div key={provider.value} className="provider-card installed glass-overlay">
                 <div className="provider-info">
                   <div className="provider-icon">
@@ -285,7 +285,7 @@ export const ExtensionsPage: React.FC = () => {
         <div className="providers-column">
           <h2 className="headline-md mb-md">Available</h2>
           <div className="provider-list">
-            {availableProviders.map(provider => {
+            {availableProviders.filter(p => !p.disabled).map(provider => {
               const isInstalled = installedProviders.some(p => p.value === provider.value);
               if (isInstalled) return null;
 

@@ -19,8 +19,8 @@ fn main() {
                 let dst = target_debug.join(dll);
                 if src.exists()
                     && (!dst.exists()
-                        || fs::metadata(&src).ok().and_then(|m| Some(m.len()))
-                            != fs::metadata(&dst).ok().and_then(|m| Some(m.len())))
+                        || fs::metadata(&src).ok().map(|m| m.len())
+                            != fs::metadata(&dst).ok().map(|m| m.len()))
                 {
                     let _ = fs::copy(&src, &dst);
                     println!("cargo:warning=Copied {} to {}", dll, target_debug.display());
