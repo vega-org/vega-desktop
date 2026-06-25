@@ -19,7 +19,7 @@ ___
 
 [![Download Installers](https://custom-icon-badges.demolab.com/badge/-Download_From_Github-black?style=for-the-badge&logo=download&logoColor=white)](https://github.com/vega-org/vega-desktop/releases/latest)
 
-[![Download From Website](https://custom-icon-badges.demolab.com/badge/-Download_From_Website-tomato?style=for-the-badge&logo=download&logoColor=white)](https://vega.8man.in/#download)
+[![Download From Website](https://custom-icon-badges.demolab.com/badge/-Download_From_Website-tomato?style=for-the-badge&logo=download&logoColor=white)](https://vega.8man.in/#desktop)
 
 
 ## Vega for Mobile
