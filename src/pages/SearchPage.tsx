@@ -41,14 +41,14 @@ export const SearchPage: React.FC = () => {
           <FocusableButton
             className="search-page-form-inner"
             onClick={() => nativeInputRef.current?.focus()}
-            style={{ flex: 1, display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', padding: 0, outline: 'none' }}
+            style={{ flex: 1, gap: "8px", display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', padding: 0, outline: 'none' }}
           >
-            <Search size={28} className="search-page-icon text-muted" />
+            <Search size={25} className="search-page-icon text-muted" />
             <input
               ref={nativeInputRef}
               type="text"
               placeholder="Search all providers..."
-              className="search-page-input display-sm"
+              className="search-page-input"
               value={localQuery}
               onChange={e => setLocalQuery(e.target.value)}
               onKeyDown={(e) => {

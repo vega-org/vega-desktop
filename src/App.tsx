@@ -16,6 +16,7 @@ import { initDownloadListeners } from './lib/zustand/downloadStore';
 import { DownloadsPage } from './pages/DownloadsPage';
 import { DownloadsSeriesPage } from './pages/DownloadsSeriesPage';
 import { WatchlistPage } from './pages/WatchlistPage';
+import { CatalogPage } from './pages/CatalogPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { updateProvidersService } from './lib/services/UpdateProviders';
 import { init as initNavigation } from '@noriginmedia/norigin-spatial-navigation-core';
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<HomePage />} />
             <Route path="content/:url" element={<MetaPage />} />
+            <Route path="/catalog" element={<CatalogPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/watchlist" element={<WatchlistPage />} />
             <Route path="/downloads" element={<DownloadsPage />} />

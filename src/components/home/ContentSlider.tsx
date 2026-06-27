@@ -10,6 +10,7 @@ import {
 } from "@noriginmedia/norigin-spatial-navigation-react";
 import { settingsStorage } from "../../lib/storage";
 import { PostCardItem, Post } from "./PostCardItem";
+import { FocusableButton } from "../layout/FocusableButton";
 import "./ContentSlider.css";
 
 interface ContentSliderProps {
@@ -17,6 +18,8 @@ interface ContentSliderProps {
   posts: Post[];
   isLoading?: boolean;
   providerValue?: string;
+  filter?: string;
+  searchQuery?: string;
   onRemove?: (post: Post, e: React.MouseEvent) => void;
 }
 
@@ -25,6 +28,8 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
   posts,
   isLoading,
   providerValue,
+  filter,
+  searchQuery,
   onRemove,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -103,7 +108,24 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
         className={`slider-container ${hasFocusedChild ? "has-focused-child" : ""}`}
         ref={focusRef as any}
       >
-        <h2 className="slider-title headline-md">{title}</h2>
+        <div className="slider-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <h2 className="slider-title headline-md" style={{ marginBottom: 0 }}>{title}</h2>
+          {(typeof filter === 'string' || typeof searchQuery === 'string') && (
+            <FocusableButton 
+              className="text-primary body-md"
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 16px', outline: 'none' }}
+              onClick={() => {
+                if (typeof searchQuery === 'string') {
+                  navigate(`/catalog?title=${encodeURIComponent(title)}&searchQuery=${encodeURIComponent(searchQuery)}&provider=${encodeURIComponent(providerValue || '')}`);
+                } else {
+                  navigate(`/catalog?title=${encodeURIComponent(title)}&filter=${encodeURIComponent(filter || '')}&provider=${encodeURIComponent(providerValue || '')}`);
+                }
+              }}
+            >
+              More
+            </FocusableButton>
+          )}
+        </div>
 
         <div className="slider-wrapper">
           <button

@@ -173,6 +173,8 @@ export const HomePage: React.FC = () => {
             key={`category-${index}`}
             title={category.title}
             posts={category.Posts}
+            filter={category.filter}
+            providerValue={provider?.value}
           />
         ))}
       </div>
