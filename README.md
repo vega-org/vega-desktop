@@ -78,6 +78,101 @@ ___
      ```bash
      npm run tauri build
      ```
+# Linux Playback Architecture
+
+## Why this fork exists
+
+The upstream Vega Desktop uses embedded libmpv for playback.
+
+On Linux, especially inside Docker/X11 or lightweight desktop environments, embedded libmpv may initialize successfully but never render video (player remains at 00:00).
+
+This fork keeps the upstream UI and provider system unchanged while replacing only the Linux playback backend.
+
+---
+
+## Design Goals
+
+* Stay as close to upstream as possible.
+* Keep Linux-specific code isolated.
+* Make future upstream merges simple.
+* Do not modify Windows or macOS playback.
+
+---
+
+## Linux Playback Flow
+
+PlayerPage
+
+↓
+
+useMpvPlayer
+
+↓
+
+useExternalMpv (Linux only)
+
+↓
+
+Tauri invoke
+
+↓
+
+external_mpv.rs
+
+↓
+
+mpv (external process)
+
+---
+
+## Files Added
+
+```
+src/lib/hooks/useExternalMpv.ts
+src-tauri/src/external_mpv.rs
+```
+
+---
+
+## Files With Minimal Changes
+
+```
+src/lib/hooks/useMpvPlayer.ts
+src-tauri/src/lib.rs
+```
+
+These files should only contain routing logic.
+
+All Linux playback implementation belongs inside the new files.
+
+---
+
+## Updating From Upstream
+
+```
+git fetch upstream
+
+git merge upstream/main
+```
+
+Normally only these files need attention:
+
+```
+useMpvPlayer.ts
+lib.rs
+```
+
+The Linux backend files should remain reusable across releases.
+
+---
+
+## Philosophy
+
+The upstream project remains the source of truth.
+
+This fork only replaces the Linux playback backend.
+
+Everything else should stay upstream-compatible whenever possible.
 
 ---
 > [!IMPORTANT]

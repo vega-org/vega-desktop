@@ -85,7 +85,6 @@ jobs:
           releaseBody: 'Automated release of Vega.'
           releaseDraft: true
           prerelease: false
-          includeUpdaterJson: true
           args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
 
   release-android:

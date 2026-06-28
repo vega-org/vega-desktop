@@ -25,15 +25,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": true,
-    "macOS": {
-      "frameworks": []
-    },
-    "linux": {
-      "deb": {
-        "depends": ["libmpv2", "mpv"]
-      }
-    },
+    "createUpdaterArtifacts": false,
+    "resources": [
+      "lib/*.dll"
+    ],
     "android": {
       "versionCode": 4
     },

@@ -10,6 +10,7 @@ import {
   type MpvObservableProperty,
 } from 'tauri-plugin-libmpv-api';
 import { settingsStorage } from '../storage/SettingsStorage';
+import { useExternalMpv } from './useExternalMpv';
 
 const OBSERVED_PROPERTIES = [
   ['pause', 'flag'],
@@ -46,7 +47,7 @@ export interface UseMpvPlayerOptions {
   onFileLoaded?: () => void;
 }
 
-export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
+const useEmbeddedMpv = (opts?: UseMpvPlayerOptions) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isPaused, setIsPaused] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
@@ -501,3 +502,13 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     setProperty: async (prop: string, val: any) => { if (isInitialized) { try { await setProperty(prop, val); } catch (e) { } } },
   };
 };
+
+// Delegate to the external-mpv backend on Linux (Docker / X11) where the
+// embedded libmpv renderer cannot bind to the WebKitGTK compositor surface.
+// Windows and macOS continue to use the full embedded implementation above.
+const IS_LINUX =
+  typeof navigator !== 'undefined' &&
+  navigator.userAgent.includes('Linux') &&
+  !navigator.userAgent.includes('Android');
+
+export const useMpvPlayer = IS_LINUX ? useExternalMpv : useEmbeddedMpv;

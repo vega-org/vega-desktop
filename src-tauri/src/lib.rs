@@ -1,13 +1,6 @@
 mod cookie_manager;
 mod download_manager;
-mod stream_server;
-
-use std::sync::Mutex;
-use tauri::Manager;
-
-struct ProxyState {
-    port: Mutex<Option<u16>>,
-}
+mod external_mpv;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -15,39 +8,6 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
-#[tauri::command]
-fn get_stream_proxy_port(state: tauri::State<'_, ProxyState>) -> Option<u16> {
-    *state.port.lock().unwrap()
-}
-
-#[tauri::command]
-fn open_external_player(_url: String) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
-    {
-        if std::process::Command::new("mpv")
-            .arg("--player-operation-mode=pseudo-gui")
-            .arg("--fs")
-            .arg("--osc")
-            .arg(&_url)
-            .spawn().is_ok() {
-            return Ok(());
-        }
-        if std::process::Command::new("vlc")
-            .arg("--fullscreen")
-            .arg(&_url)
-            .spawn().is_ok() {
-            return Ok(());
-        }
-        if std::process::Command::new("xdg-open").arg(&_url).spawn().is_ok() {
-            return Ok(());
-        }
-        return Err("Failed to launch external player".into());
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        return Err("Not supported on this OS".into());
-    }
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -89,7 +49,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet,
-            get_stream_proxy_port,
+            external_mpv::launch_mpv,
             download_manager::start_download,
             download_manager::pause_download,
             download_manager::cancel_download,
