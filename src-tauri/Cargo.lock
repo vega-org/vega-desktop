@@ -4941,7 +4941,7 @@ dependencies = [
 
 [[package]]
 name = "vega-app"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "aes",
  "axum",
