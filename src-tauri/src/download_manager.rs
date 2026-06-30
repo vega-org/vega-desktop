@@ -344,6 +344,7 @@ pub async fn download_m3u8(
     let mut init_segment_written = false;
     let mut is_fmp4 = false;
     
+    #[allow(clippy::explicit_counter_loop)]
     for (i, segment) in media_playlist.segments.iter().enumerate() {
         if cancel_rx.try_recv().is_ok() {
             println!("M3U8 Download paused/cancelled: {}", id);

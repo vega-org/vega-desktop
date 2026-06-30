@@ -46,7 +46,7 @@ fn open_external_player(_url: String) -> Result<(), String> {
     }
     #[cfg(not(target_os = "linux"))]
     {
-        return Err("Not supported on this OS".into());
+        Err("Not supported on this OS".into())
     }
 }
 

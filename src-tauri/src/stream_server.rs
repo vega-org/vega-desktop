@@ -126,12 +126,11 @@ async fn fetch_with_retry(
                     "[stream_proxy] {} upstream returned {} for {} (attempt {}/{})",
                     label, status, url, attempt, max_attempts
                 );
-                if status.as_u16() == 403 || status.as_u16() == 429 || status.is_server_error() {
-                    if attempt < max_attempts {
+                if (status.as_u16() == 403 || status.as_u16() == 429 || status.is_server_error())
+                    && attempt < max_attempts {
                         tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
                         continue;
                     }
-                }
                 return Err(StatusCode::BAD_GATEWAY);
             }
             Err(e) => {
