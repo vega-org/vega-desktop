@@ -157,7 +157,10 @@ export const HomePage: React.FC = () => {
     <div className="home-page">
       {heroPost && <Hero post={heroPost} />}
 
-      <div className="sliders-section">
+      <div 
+        className="sliders-section"
+        style={!heroPost ? { marginTop: '100px' } : undefined}
+      >
         {continueWatchingPosts.length > 0 && (
           <ContentSlider
             title="Continue Watching"

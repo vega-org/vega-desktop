@@ -70,8 +70,19 @@ export const getRandomHeroPost = (
     return null;
   }
 
-  const lastCategory = homeData[homeData.length - 1];
-  if (!lastCategory.Posts || lastCategory.Posts.length === 0) {
+  // Find the last category that actually has posts
+  let lastCategory = null;
+  let categoryIndex = homeData.length - 1;
+  
+  for (let i = homeData.length - 1; i >= 0; i--) {
+    if (homeData[i].Posts && homeData[i].Posts.length > 0) {
+      lastCategory = homeData[i];
+      categoryIndex = i;
+      break;
+    }
+  }
+
+  if (!lastCategory || !lastCategory.Posts || lastCategory.Posts.length === 0) {
     return null;
   }
 
@@ -87,7 +98,7 @@ export const getRandomHeroPost = (
   const randomIndex = Math.floor(Math.random() * lastCategory.Posts.length);
   heroSelectionCache.set(cacheKey, {
     postIndex: randomIndex,
-    categoryIndex: homeData.length - 1,
+    categoryIndex: categoryIndex,
   });
 
   return lastCategory.Posts[randomIndex];

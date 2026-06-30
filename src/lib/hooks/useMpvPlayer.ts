@@ -282,13 +282,13 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     }
   }, []);
 
-  const loadFile = useCallback(async (url: string, headers?: Record<string, string>, subtitles?: any[]) => {
+  const loadFile = useCallback(async (url: string, headers?: Record<string, string>, subtitles?: any[], type?: string) => {
     if (!isInitialized) return;
     setIsBuffering(true);
     setTracks([]);
     pendingSubsRef.current = subtitles || [];
     try {
-      let ua = '';
+      let ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
       let referer = '';
 
       if (headers && Object.keys(headers).length > 0) {
@@ -319,7 +319,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
           const { invoke } = await import('@tauri-apps/api/core');
           const port = await invoke<number | null>('get_stream_proxy_port');
           console.log('[MPV proxy] port:', port);
-          if (port) {
+          if (port && (url.includes('.m3u8') || type === 'm3u8')) {
             let proxyUrl = `http://127.0.0.1:${port}/proxy?url=${encodeURIComponent(url)}`;
             if (referer) {
               proxyUrl += `&referer=${encodeURIComponent(referer)}`;

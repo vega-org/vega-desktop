@@ -282,6 +282,32 @@ export class SettingsStorage {
   setBool(key: string, value: boolean): void {
     mainStorage.setBool(key, value);
   }
+
+  // DNS over HTTPS (DoH) settings
+  isDohEnabled(): boolean {
+    // Default to true as in mobile app
+    return mainStorage.getBool('dohEnabled', true);
+  }
+
+  setDohEnabled(enabled: boolean): void {
+    mainStorage.setBool('dohEnabled', enabled);
+  }
+
+  getDohProvider(): string {
+    return mainStorage.getString('dohProvider') || 'cloudflare';
+  }
+
+  setDohProvider(provider: string): void {
+    mainStorage.setString('dohProvider', provider);
+  }
+
+  getDohCustomUrl(): string {
+    return mainStorage.getString('dohCustomUrl') || '';
+  }
+
+  setDohCustomUrl(url: string): void {
+    mainStorage.setString('dohCustomUrl', url);
+  }
 }
 
 // Export a singleton instance

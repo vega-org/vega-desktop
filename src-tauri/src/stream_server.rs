@@ -106,11 +106,27 @@ async fn handle_proxy(
     State(state): State<ProxyState>,
     Query(query): Query<ProxyQuery>,
 ) -> Result<Response, StatusCode> {
-    let req = build_request(&state.client, &query.url, &query.referer, &query.ua);
-    let response = req.send().await.map_err(|e| {
-        eprintln!("[stream_proxy] Failed to fetch playlist {}: {}", query.url, e);
-        StatusCode::BAD_GATEWAY
-    })?;
+    let mut attempt = 0;
+    let mut response = None;
+    while attempt < 3 {
+        let req = build_request(&state.client, &query.url, &query.referer, &query.ua);
+        match req.send().await {
+            Ok(res) => {
+                response = Some(res);
+                break;
+            }
+            Err(e) => {
+                eprintln!("[stream_proxy] Failed to fetch playlist {} (attempt {}): {}", query.url, attempt + 1, e);
+                attempt += 1;
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+        }
+    }
+
+    let response = match response {
+        Some(res) => res,
+        None => return Err(StatusCode::BAD_GATEWAY),
+    };
 
     let status = response.status();
     if !status.is_success() {
@@ -166,11 +182,27 @@ async fn handle_segment(
     State(state): State<ProxyState>,
     Query(query): Query<SegmentQuery>,
 ) -> Result<Response, StatusCode> {
-    let req = build_request(&state.client, &query.url, &query.referer, &query.ua);
-    let response = req.send().await.map_err(|e| {
-        eprintln!("[stream_proxy] Failed to fetch segment {}: {}", query.url, e);
-        StatusCode::BAD_GATEWAY
-    })?;
+    let mut attempt = 0;
+    let mut response = None;
+    while attempt < 3 {
+        let req = build_request(&state.client, &query.url, &query.referer, &query.ua);
+        match req.send().await {
+            Ok(res) => {
+                response = Some(res);
+                break;
+            }
+            Err(e) => {
+                eprintln!("[stream_proxy] Failed to fetch segment {} (attempt {}): {}", query.url, attempt + 1, e);
+                attempt += 1;
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+        }
+    }
+
+    let response = match response {
+        Some(res) => res,
+        None => return Err(StatusCode::BAD_GATEWAY),
+    };
 
     let status = response.status();
     if !status.is_success() {
@@ -187,13 +219,20 @@ async fn handle_segment(
     let bytes = response.bytes().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mut data = bytes.to_vec();
 
-    // Scan for the first valid MPEG-TS packet (starts with 0x47 and has another 0x47 188 bytes later)
-    for i in 0..data.len() {
-        if data[i] == 0x47 && i + 188 < data.len() && data[i + 188] == 0x47 {
-            if i > 0 {
-                data = data[i..].to_vec();
+    // Only attempt MPEG-TS sanitization if the file is not obviously an MP4/M4S file
+    // fMP4 segments do not use MPEG-TS packets, and scanning them could corrupt them.
+    let url_lower = query.url.to_lowercase();
+    let is_mp4 = url_lower.contains(".mp4") || url_lower.contains(".m4s") || url_lower.contains(".m4v") || url_lower.contains(".m4a");
+
+    if !is_mp4 {
+        // Scan for the first valid MPEG-TS packet (starts with 0x47 and has another 0x47 188 bytes later)
+        for i in 0..data.len() {
+            if data[i] == 0x47 && i + 188 < data.len() && data[i + 188] == 0x47 {
+                if i > 0 {
+                    data = data[i..].to_vec();
+                }
+                break;
             }
-            break;
         }
     }
     

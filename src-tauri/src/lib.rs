@@ -1,6 +1,7 @@
 mod cookie_manager;
 mod download_manager;
 mod stream_server;
+mod doh_client;
 
 use std::sync::Mutex;
 use tauri::Manager;
@@ -96,7 +97,8 @@ pub fn run() {
             download_manager::save_subtitle,
             cookie_manager::get_cookies_for_url,
             cookie_manager::clear_cookies_for_url,
-            open_external_player
+            open_external_player,
+            doh_client::doh_fetch
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

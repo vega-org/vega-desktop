@@ -375,7 +375,7 @@ const DesktopPlayer: React.FC<any> = ({
 
     (async () => {
       const subs = selectedStream.subtitles?.length ? selectedStream.subtitles : externalSubs;
-      await mpv.loadFile(selectedStream.link, selectedStream.headers, subs);
+      await mpv.loadFile(selectedStream.link, selectedStream.headers, subs, selectedStream.type);
     })();
   }, [mpv.isInitialized, selectedStream?.link, activeEpisode?.link, toast, externalSubs]);
 

@@ -13,6 +13,9 @@ export const PreferencesSettings: React.FC = () => {
   const [autoCheckUpdates, setAutoCheckUpdates] = useState<boolean>(true);
   const [tvModeEnabled, setTvModeEnabled] = useState<boolean>(false);
   const [hwAccelEnabled, setHwAccelEnabled] = useState<boolean>(false);
+  const [dohEnabled, setDohEnabled] = useState<boolean>(true);
+  const [dohProvider, setDohProvider] = useState<string>('cloudflare');
+  const [dohCustomUrl, setDohCustomUrl] = useState<string>('');
 
   useEffect(() => {
     setDownloadLocation(settingsStorage.getDownloadLocation());
@@ -21,6 +24,9 @@ export const PreferencesSettings: React.FC = () => {
     setAutoCheckUpdates(settingsStorage.isAutoCheckUpdateEnabled());
     setTvModeEnabled(settingsStorage.isTvModeEnabled());
     setHwAccelEnabled(settingsStorage.isHardwareAccelerationEnabled());
+    setDohEnabled(settingsStorage.isDohEnabled());
+    setDohProvider(settingsStorage.getDohProvider());
+    setDohCustomUrl(settingsStorage.getDohCustomUrl());
   }, []);
 
   const handleChangeDir = async () => {
@@ -74,6 +80,24 @@ export const PreferencesSettings: React.FC = () => {
     const nextState = !hwAccelEnabled;
     setHwAccelEnabled(nextState);
     settingsStorage.setHardwareAccelerationEnabled(nextState);
+  };
+
+  const handleToggleDoh = () => {
+    const nextState = !dohEnabled;
+    setDohEnabled(nextState);
+    settingsStorage.setDohEnabled(nextState);
+  };
+
+  const handleChangeDohProvider = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setDohProvider(val);
+    settingsStorage.setDohProvider(val);
+  };
+
+  const handleChangeDohCustomUrl = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setDohCustomUrl(val);
+    settingsStorage.setDohCustomUrl(val);
   };
 
   const isAndroid = navigator.userAgent.toLowerCase().includes('android');
@@ -173,6 +197,64 @@ export const PreferencesSettings: React.FC = () => {
         >
           {hwAccelEnabled ? 'ON' : 'OFF'}
         </FocusableButton>
+      </div>
+
+      <div className="settings-divider" />
+
+      {/* DNS over HTTPS */}
+      <div className="settings-row" style={{ alignItems: 'flex-start' }}>
+        <div className="settings-info">
+          <h3 className="label-lg">DNS over HTTPS</h3>
+          <p className="body-md text-muted">Bypass ISP DNS blocking for movie providers</p>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'flex-end' }}>
+          <FocusableButton 
+            className={`theme-toggle-btn ${dohEnabled ? 'active' : ''}`}
+            onClick={handleToggleDoh}
+          >
+            {dohEnabled ? 'ON' : 'OFF'}
+          </FocusableButton>
+          
+          {dohEnabled && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '200px' }}>
+              <select 
+                value={dohProvider} 
+                onChange={handleChangeDohProvider}
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '6px',
+                  padding: '8px',
+                  outline: 'none'
+                }}
+              >
+                <option value="cloudflare" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>Cloudflare (1.1.1.1)</option>
+                <option value="google" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>Google (8.8.8.8)</option>
+                <option value="adguard" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>AdGuard</option>
+                <option value="custom" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>Custom URL</option>
+              </select>
+
+              {dohProvider === 'custom' && (
+                <input
+                  type="text"
+                  placeholder="https://dns.example.com/dns-query"
+                  value={dohCustomUrl}
+                  onChange={handleChangeDohCustomUrl}
+                  style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    color: 'white',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '6px',
+                    padding: '8px',
+                    outline: 'none',
+                    fontSize: '12px'
+                  }}
+                />
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="settings-divider" />
