@@ -35,6 +35,10 @@ pub struct SegmentQuery {
 
 pub async fn start_server() -> Result<u16, String> {
     let client = Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .pool_idle_timeout(std::time::Duration::from_secs(20))
+        .pool_max_idle_per_host(4)
         .build()
         .map_err(|e| e.to_string())?;
     let listener = TcpListener::bind("127.0.0.1:0").await.map_err(|e| e.to_string())?;
@@ -47,8 +51,8 @@ pub async fn start_server() -> Result<u16, String> {
     };
 
     let app = Router::new()
-        .route("/proxy", get(handle_proxy))
-        .route("/segment", get(handle_segment))
+        .route("/playlist.m3u8", get(handle_proxy))
+        .route("/segment.ts", get(handle_segment))
         .with_state(state);
 
     tokio::spawn(async move {
@@ -91,7 +95,7 @@ fn resolve_url(base: &str, relative: &str) -> String {
 
 fn build_proxy_url(port: u16, target_url: &str, is_playlist: bool, referer: &Option<String>, ua: &Option<String>) -> String {
     let encoded = encode_url(target_url);
-    let route = if is_playlist { "proxy" } else { "segment" };
+    let route = if is_playlist { "playlist.m3u8" } else { "segment.ts" };
     let mut result = format!("http://127.0.0.1:{}/{}?url={}", port, route, encoded);
     if let Some(ref r) = referer {
         result.push_str(&format!("&referer={}", encode_url(r)));
@@ -102,39 +106,77 @@ fn build_proxy_url(port: u16, target_url: &str, is_playlist: bool, referer: &Opt
     result
 }
 
+async fn fetch_with_retry(
+    client: &Client,
+    url: &str,
+    referer: &Option<String>,
+    ua: &Option<String>,
+    label: &str,
+) -> Result<reqwest::Response, StatusCode> {
+    let max_attempts = 3;
+    for attempt in 1..=max_attempts {
+        let req = build_request(client, url, referer, ua);
+        match req.send().await {
+            Ok(res) => {
+                let status = res.status();
+                if status.is_success() {
+                    return Ok(res);
+                }
+                eprintln!(
+                    "[stream_proxy] {} upstream returned {} for {} (attempt {}/{})",
+                    label, status, url, attempt, max_attempts
+                );
+                if status.as_u16() == 403 || status.as_u16() == 429 || status.is_server_error() {
+                    if attempt < max_attempts {
+                        tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+                        continue;
+                    }
+                }
+                return Err(StatusCode::BAD_GATEWAY);
+            }
+            Err(e) => {
+                eprintln!(
+                    "[stream_proxy] {} network error for {} (attempt {}/{}): {}",
+                    label, url, attempt, max_attempts, e
+                );
+                if attempt < max_attempts {
+                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+                    continue;
+                }
+                return Err(StatusCode::BAD_GATEWAY);
+            }
+        }
+    }
+    Err(StatusCode::BAD_GATEWAY)
+}
+
 async fn handle_proxy(
     State(state): State<ProxyState>,
     Query(query): Query<ProxyQuery>,
 ) -> Result<Response, StatusCode> {
-    let mut attempt = 0;
-    let mut response = None;
-    while attempt < 3 {
-        let req = build_request(&state.client, &query.url, &query.referer, &query.ua);
-        match req.send().await {
-            Ok(res) => {
-                response = Some(res);
-                break;
-            }
-            Err(e) => {
-                eprintln!("[stream_proxy] Failed to fetch playlist {} (attempt {}): {}", query.url, attempt + 1, e);
-                attempt += 1;
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            }
-        }
+    println!("[stream_proxy] Received playlist request for: {}", query.url);
+    let response = fetch_with_retry(&state.client, &query.url, &query.referer, &query.ua, "playlist").await?;
+    
+    let content_type = response.headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+
+    if !content_type.contains("mpegurl") && !content_type.contains("m3u8") && !content_type.contains("application/x-mpegURL") {
+        // The CDN returned a direct video stream (e.g. MP4) instead of a playlist!
+        let stream = response.bytes_stream();
+        let body = axum::body::Body::from_stream(stream);
+        return Ok(axum::response::Response::builder()
+            .header(axum::http::header::CONTENT_TYPE, content_type)
+            .body(body)
+            .unwrap());
     }
 
-    let response = match response {
-        Some(res) => res,
-        None => return Err(StatusCode::BAD_GATEWAY),
-    };
-
-    let status = response.status();
-    if !status.is_success() {
-        eprintln!("[stream_proxy] Upstream returned {} for {}", status, query.url);
-        return Err(StatusCode::BAD_GATEWAY);
-    }
-
-    let text = response.text().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let text = response.text().await.map_err(|e| {
+        eprintln!("[stream_proxy] Failed to read playlist body: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let is_master = text.contains("#EXT-X-STREAM-INF");
 
@@ -182,33 +224,7 @@ async fn handle_segment(
     State(state): State<ProxyState>,
     Query(query): Query<SegmentQuery>,
 ) -> Result<Response, StatusCode> {
-    let mut attempt = 0;
-    let mut response = None;
-    while attempt < 3 {
-        let req = build_request(&state.client, &query.url, &query.referer, &query.ua);
-        match req.send().await {
-            Ok(res) => {
-                response = Some(res);
-                break;
-            }
-            Err(e) => {
-                eprintln!("[stream_proxy] Failed to fetch segment {} (attempt {}): {}", query.url, attempt + 1, e);
-                attempt += 1;
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            }
-        }
-    }
-
-    let response = match response {
-        Some(res) => res,
-        None => return Err(StatusCode::BAD_GATEWAY),
-    };
-
-    let status = response.status();
-    if !status.is_success() {
-        eprintln!("[stream_proxy] Segment upstream returned {} for {}", status, query.url);
-        return Err(StatusCode::BAD_GATEWAY);
-    }
+    let response = fetch_with_retry(&state.client, &query.url, &query.referer, &query.ua, "segment").await?;
 
     let content_type = response.headers()
         .get(axum::http::header::CONTENT_TYPE)
@@ -216,29 +232,32 @@ async fn handle_segment(
         .unwrap_or("video/MP2T")
         .to_string();
 
-    let bytes = response.bytes().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let url_lower = query.url.to_lowercase();
+    let is_fmp4 = url_lower.contains(".mp4") || url_lower.contains(".m4s") || url_lower.contains(".m4v") || url_lower.contains(".m4a");
+
+    if is_fmp4 {
+        let stream = response.bytes_stream();
+        let body = axum::body::Body::from_stream(stream);
+        return Ok(Response::builder()
+            .header(axum::http::header::CONTENT_TYPE, content_type)
+            .body(body)
+            .unwrap());
+    }
+
+    let bytes = response.bytes().await.map_err(|e| {
+        eprintln!("[stream_proxy] Failed to read segment body: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     let mut data = bytes.to_vec();
 
-    // Only attempt MPEG-TS sanitization if the file is not obviously an MP4/M4S file
-    // fMP4 segments do not use MPEG-TS packets, and scanning them could corrupt them.
-    let url_lower = query.url.to_lowercase();
-    let is_mp4 = url_lower.contains(".mp4") || url_lower.contains(".m4s") || url_lower.contains(".m4v") || url_lower.contains(".m4a");
-
-    if !is_mp4 {
-        // Scan for the first valid MPEG-TS packet (starts with 0x47 and has another 0x47 188 bytes later)
-        for i in 0..data.len() {
-            if data[i] == 0x47 && i + 188 < data.len() && data[i + 188] == 0x47 {
-                if i > 0 {
-                    data = data[i..].to_vec();
-                }
-                break;
+    for i in 0..data.len() {
+        if data[i] == 0x47 && i + 188 < data.len() && data[i + 188] == 0x47 {
+            if i > 0 {
+                data = data[i..].to_vec();
             }
+            break;
         }
     }
-    
-    // If not found, just return original (might not be MPEG-TS or might be too short)
-
-
 
     Ok((
         [(axum::http::header::CONTENT_TYPE, content_type)],

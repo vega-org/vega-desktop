@@ -198,6 +198,13 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
       unlistenPropsRef.current = unlisten;
 
       const unlistenEvt = await listenEvents((event) => {
+        if (event.event === 'log-message') {
+          const text = (event as any).text;
+          const level = (event as any).level;
+          if (level === 'error' || level === 'warn' || level === 'info' || (text && text.includes('http'))) {
+            console.log(`[MPV LOG] [${level}] ${text?.trim()}`);
+          }
+        }
         if (event.event === 'file-loaded') {
           console.log('mpv: file-loaded');
           setIsBuffering(false);
@@ -235,6 +242,8 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
         if (event.event === 'end-file') {
           console.log('mpv: end-file', event);
           setIsBuffering(false);
+          setCurrentTime(0);
+          setDuration(0);
         }
       });
       
@@ -284,6 +293,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
 
   const loadFile = useCallback(async (url: string, headers?: Record<string, string>, subtitles?: any[], type?: string) => {
     if (!isInitialized) return;
+
     setIsBuffering(true);
     setTracks([]);
     pendingSubsRef.current = subtitles || [];
@@ -314,34 +324,45 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
       }
 
       let finalUrl = url;
+      let isProxied = false;
       if (url.startsWith('http')) {
         try {
           const { invoke } = await import('@tauri-apps/api/core');
           const port = await invoke<number | null>('get_stream_proxy_port');
-          console.log('[MPV proxy] port:', port);
-          if (port && (url.includes('.m3u8') || type === 'm3u8')) {
-            let proxyUrl = `http://127.0.0.1:${port}/proxy?url=${encodeURIComponent(url)}`;
+          const shouldProxy = url.includes('.m3u8') || type === 'm3u8';
+          const proxyPort = port;
+          console.log('[MPV proxy] port:', proxyPort);
+          if (shouldProxy && proxyPort) {
+            let proxyUrl = `http://127.0.0.1:${proxyPort}/playlist.m3u8?url=${encodeURIComponent(url)}`;
             if (referer) {
               proxyUrl += `&referer=${encodeURIComponent(referer)}`;
             }
             if (ua) {
               proxyUrl += `&ua=${encodeURIComponent(ua)}`;
             }
+            proxyUrl += `&_t=${Date.now()}`;
             finalUrl = proxyUrl;
+            isProxied = true;
           }
         } catch (e) {
           console.error('Failed to get proxy port:', e);
         }
       }
 
-      await setProperty('user-agent', ua || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36').catch(console.error);
-      if (referer) {
-        await setProperty('referrer', referer).catch(console.error);
+      if (isProxied) {
+        await setProperty('http-header-fields', '').catch(() => {});
+        await setProperty('referrer', '').catch(() => {});
+        await setProperty('user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36').catch(() => {});
       } else {
-        await setProperty('referrer', '').catch(console.error);
+        await setProperty('user-agent', ua || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36').catch(console.error);
+        if (referer) {
+          await setProperty('referrer', referer).catch(console.error);
+        } else {
+          await setProperty('referrer', '').catch(console.error);
+        }
       }
-      console.log('[MPV loadFile] finalUrl:', finalUrl);
-      await command('loadfile', [finalUrl]);
+      console.log('[MPV loadFile] finalUrl:', finalUrl, 'proxied:', isProxied);
+      await command('loadfile', [finalUrl, 'replace']);
     } catch (err: any) {
       if (String(err).includes('instance not found')) return;
       console.error('Failed to load file:', err);
