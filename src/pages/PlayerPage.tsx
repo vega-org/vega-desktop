@@ -352,10 +352,11 @@ const DesktopPlayer: React.FC<any> = ({
     document.body.style.background = 'transparent';
     const root = document.getElementById('root');
     if (root) root.style.background = 'transparent';
-    return () => {
+      return () => {
       document.documentElement.style.background = '';
       document.body.style.background = '';
       if (root) root.style.background = '';
+      getCurrentWindow().setFullscreen(false).catch(() => {});
     };
   }, []);
 
