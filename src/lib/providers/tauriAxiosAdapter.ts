@@ -60,7 +60,7 @@ function decodeResponseData(rawBytes: Uint8Array, responseType: string): any {
   } else if (responseType === 'arraybuffer') {
     return rawBytes.buffer;
   } else if (responseType === 'blob') {
-    return new Blob([rawBytes]);
+    return new Blob([rawBytes as any]);
   }
   return new TextDecoder().decode(rawBytes);
 }
