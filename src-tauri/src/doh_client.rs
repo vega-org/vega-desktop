@@ -22,6 +22,7 @@ impl CustomDnsResolver {
     fn new(provider: &str, custom_url: Option<String>) -> Self {
         let mut opts = ResolverOpts::default();
         opts.use_hosts_file = false;
+        opts.ip_strategy = hickory_resolver::config::LookupIpStrategy::Ipv4Only;
 
         let config = if let Some(_url) = custom_url.filter(|u| !u.is_empty()) {
             // Very simplified setup for custom DoH: hickory requires name server groups
@@ -96,7 +97,7 @@ async fn get_client(provider: &str, custom_url: Option<String>) -> Result<Client
     
     let client = reqwest::Client::builder()
         .dns_resolver(Arc::new(resolver))
-        .danger_accept_invalid_certs(true) // For providers that might have bad certs
+        .http1_only()
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -126,6 +127,9 @@ pub struct FetchResponse {
 
 #[tauri::command]
 pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
+    let has_cookie = args.headers.keys().any(|k| k.eq_ignore_ascii_case("cookie"));
+    println!("[doh_fetch] {} {} | has_cookie_header: {}", args.method, args.url, has_cookie);
+
     let client = get_client(&args.doh_provider, args.doh_custom_url).await?;
 
     let method = Method::from_bytes(args.method.as_bytes()).unwrap_or(Method::GET);
@@ -136,7 +140,10 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
         if k.eq_ignore_ascii_case("user-agent") {
             has_user_agent = true;
         }
-        request = request.header(k, v);
+        if k.eq_ignore_ascii_case("accept-encoding") {
+            continue;
+        }
+        request = request.header(&k, &v);
     }
 
     if !has_user_agent {
@@ -147,10 +154,15 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
         request = request.body(body);
     }
 
-    let response = request.send().await.map_err(|e| format!("{:#?}", e))?;
+    let response = request.send().await.map_err(|e| format!("{:#?}", e));
+    if let Err(ref e) = response {
+        eprintln!("[doh_fetch] request error: {}", e);
+    }
+    let response = response?;
     
     let status = response.status().as_u16();
     let status_text = response.status().canonical_reason().unwrap_or("").to_string();
+    println!("[doh_fetch] response: {} {} for {}", status, status_text, args.url);
     
     let mut headers = HashMap::new();
     for (k, v) in response.headers() {
