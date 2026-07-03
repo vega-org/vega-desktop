@@ -122,7 +122,6 @@ export const useContentDetails = (link: string, providerValue: string) => {
     data: meta,
     isLoading: metaLoading,
     isFetching: metaFetching,
-    error: metaError,
     refetch: refetchMeta,
   } = useEnhancedMetadata(info?.imdbId || '', info?.type || '');
 

@@ -7,7 +7,7 @@ use librqbit::api::Api;
 use librqbit::http_api::{HttpApi, HttpApiOptions};
 
 pub struct TorrentState {
-    pub session: Arc<Session>,
+    pub _session: Arc<Session>,
     pub api_port: u16,
 }
 
@@ -41,6 +41,6 @@ impl TorrentState {
             }
         });
 
-        Ok(Self { session, api_port })
+        Ok(Self { _session: session, api_port })
     }
 }
