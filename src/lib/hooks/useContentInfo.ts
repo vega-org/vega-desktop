@@ -66,18 +66,17 @@ export const useEnhancedMetadata = (imdbId: string, type: string) => {
       try {
         // Validate imdbId and type
         if (!imdbId || !type) {
-          throw new Error('Invalid imdbId or type');
+          return undefined;
         }
+        const response = await axios.get(
+          `https://v3-cinemeta.strem.io/meta/${type}/${imdbId}.json`,
+          {timeout: 10000},
+        );
+        return response.data?.meta;
       } catch (error) {
-        console.log('Error validating imdbId or type:', error);
-        return {};
+        console.log('Error fetching enhanced metadata:', error);
+        return undefined; // Fallback to undefined instead of throwing
       }
-      const response = await axios.get(
-        `https://v3-cinemeta.strem.io/meta/${type}/${imdbId}.json`,
-        {timeout: 10000},
-      );
-
-      return response.data?.meta;
     },
     enabled: !!imdbId && !!type,
     staleTime: 30 * 60 * 1000, // 30 minutes - metadata changes rarely
@@ -132,7 +131,7 @@ export const useContentDetails = (link: string, providerValue: string) => {
     meta,
     isLoading: infoLoading || metaLoading,
     isRefetching: infoFetching || metaFetching,
-    error: infoError || metaError,
+    error: infoError,
     refetch: async () => {
       await Promise.all([refetchInfo(), refetchMeta()]);
     },
