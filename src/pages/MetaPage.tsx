@@ -187,10 +187,13 @@ export const MetaPage: React.FC = () => {
 
   const filteredLinkList = useMemo(() => {
     if (!info?.linkList) return [];
-    return info.linkList.filter((season: Link) => {
+    const filtered = info.linkList.filter((season: Link) => {
       // Exclude if the title contains any of the excluded qualities
       return !excludedQualities.some((q: string) => season.title.toLowerCase().includes(q.toLowerCase()));
     });
+    
+    // If filtering removes all streams, fallback to the original list so it's not empty
+    return filtered.length > 0 ? filtered : info.linkList;
   }, [info?.linkList, excludedQualities]);
 
   // Scroll to top on page load
