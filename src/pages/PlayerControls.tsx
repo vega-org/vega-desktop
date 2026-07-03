@@ -10,6 +10,7 @@ interface PlayerControlsProps {
   isBuffering: boolean;
   currentTime: number;
   duration: number;
+  cacheDuration?: number;
   primaryTitle: string;
   secondaryTitle?: string;
   showNextEpisode: boolean;
@@ -86,6 +87,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   isBuffering,
   currentTime,
   duration,
+  cacheDuration,
   primaryTitle,
   secondaryTitle,
   showNextEpisode,
@@ -155,6 +157,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   };
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const cachePercent = duration > 0 ? Math.min(((currentTime + (cacheDuration || 0)) / duration) * 100, 100) : 0;
 
   const seekFromMouse = useCallback((e: MouseEvent | React.MouseEvent) => {
     if (!trackRef.current || !duration) return;
@@ -268,6 +271,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
         <div className="player-timeline">
           <span className="timeline-time">{formatTime(currentTime)}</span>
           <div ref={trackRef} className="timeline-track" onMouseDown={handleTrackMouseDown}>
+            <div className="timeline-cache" style={{ width: `${cachePercent}%`, position: 'absolute', top: 0, left: 0, height: '100%', backgroundColor: 'rgba(255, 255, 255, 0.3)', borderRadius: '2px', pointerEvents: 'none' }} />
             <div className="timeline-progress" style={{ width: `${progressPercent}%` }}>
               <div className="timeline-thumb" />
             </div>

@@ -19,6 +19,7 @@ const OBSERVED_PROPERTIES = [
   ['speed', 'double'],
   ['eof-reached', 'flag'],
   ['paused-for-cache', 'flag'],
+  ['demuxer-cache-duration', 'double', 'none'],
   ['track-list/count', 'int64'],
   ['video-params/h', 'double'],
 ] as const satisfies MpvObservableProperty[];
@@ -40,6 +41,10 @@ let globalInitPromise: Promise<void> | null = null;
 let globalDestroyTimer: NodeJS.Timeout | null = null;
 let activeInstances = 0;
 let destroyPromise: Promise<void> | null = null;
+let currentActiveTorrentInfoHash: string | null = null;
+let currentActiveTorrentApiPort: number | null = null;
+let currentActiveTorrentUrl: string | null = null;
+let currentLoadFileAbortController: AbortController | null = null;
 
 export interface UseMpvPlayerOptions {
   onEof?: () => void;
@@ -54,6 +59,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
   const [volume, setVolume] = useState(100);
   const [speed, setSpeed] = useState(1.0);
   const [isBuffering, setIsBuffering] = useState(false);
+  const [cacheDuration, setCacheDuration] = useState(0);
   const [tracks, setTracks] = useState<MpvTrack[]>([]);
   const [videoHeight, setVideoHeight] = useState(0);
 
@@ -169,6 +175,9 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
             case 'duration':
               if (data !== null) setDuration(data as number);
               break;
+            case 'demuxer-cache-duration':
+              if (data !== null) setCacheDuration(data as number);
+              break;
             case 'volume':
               setVolume(data as number);
               break;
@@ -276,6 +285,12 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
           try {
             await destroy();
             console.log('mpv: destroyed');
+            if (currentActiveTorrentInfoHash && currentActiveTorrentApiPort) {
+              await fetch(`http://127.0.0.1:${currentActiveTorrentApiPort}/torrents/${currentActiveTorrentInfoHash}/delete`, { method: 'POST' }).catch(() => {});
+              currentActiveTorrentInfoHash = null;
+              currentActiveTorrentApiPort = null;
+              currentActiveTorrentUrl = null;
+            }
           } catch (err) {
             console.error('Failed to destroy mpv:', err);
           } finally {
@@ -293,6 +308,19 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
 
   const loadFile = useCallback(async (url: string, headers?: Record<string, string>, subtitles?: any[], type?: string) => {
     if (!isInitialized) return;
+
+    if (currentActiveTorrentUrl !== url && currentActiveTorrentInfoHash && currentActiveTorrentApiPort) {
+      fetch(`http://127.0.0.1:${currentActiveTorrentApiPort}/torrents/${currentActiveTorrentInfoHash}/delete`, { method: 'POST' }).catch(() => {});
+      currentActiveTorrentInfoHash = null;
+      currentActiveTorrentApiPort = null;
+      currentActiveTorrentUrl = null;
+    }
+
+    if (currentLoadFileAbortController) {
+      currentLoadFileAbortController.abort();
+    }
+    const abortController = new AbortController();
+    currentLoadFileAbortController = abortController;
 
     setIsBuffering(true);
     setTracks([]);
@@ -325,7 +353,102 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
 
       let finalUrl = url;
       let isProxied = false;
-      if (url.startsWith('http')) {
+      let isTorrent = false;
+      
+      console.log('[MPV debug] type:', type, 'url starts with magnet:', url.startsWith('magnet:'));
+      if (type === 'torrent' || url.startsWith('magnet:')) {
+        try {
+          console.log('[MPV debug] entering torrent block');
+          const { invoke } = await import('@tauri-apps/api/core');
+          const apiPort = await invoke<number>('get_torrent_api_port');
+          console.log('[MPV debug] get_torrent_api_port returned:', apiPort);
+          if (apiPort) {
+            currentActiveTorrentApiPort = apiPort;
+            console.log('[MPV torrent] api port:', apiPort);
+            
+            let infoHash = currentActiveTorrentInfoHash;
+            let torrentFiles: any[] = [];
+            if (currentActiveTorrentUrl !== url || !infoHash) {
+              console.log('[MPV debug] sending POST /torrents for:', url);
+              const addRes = await fetch(`http://127.0.0.1:${apiPort}/torrents`, {
+                method: 'POST',
+                body: url,
+                signal: abortController.signal,
+              });
+              
+              if (!addRes.ok) {
+                throw new Error(`Failed to add torrent: ${addRes.status} ${await addRes.text()}`);
+              }
+              
+              console.log('[MPV debug] POST /torrents resolved');
+              const addData = await addRes.json();
+              infoHash = addData.details.info_hash;
+              torrentFiles = addData.details.files || [];
+              currentActiveTorrentInfoHash = infoHash;
+              currentActiveTorrentUrl = url;
+            }
+            // Wait for torrent to leave "initializing" state
+            const liveDeadline = Date.now() + 120000;
+            while (Date.now() < liveDeadline) {
+              if (abortController.signal.aborted) throw new Error('Aborted');
+              try {
+                const statsRes = await fetch(`http://127.0.0.1:${apiPort}/torrents/${infoHash}/stats/v1`, { signal: abortController.signal });
+                if (statsRes.ok) {
+                  const stats = await statsRes.json();
+                  console.log('[MPV torrent] state:', stats.state);
+                  if (stats.state === 'live' || stats.state === 'paused') break;
+                  if (stats.state === 'error') throw new Error(`Torrent error: ${stats.error}`);
+                }
+              } catch (err: any) {
+                if (err.name === 'AbortError' || err.message === 'Aborted') throw err;
+              }
+              await new Promise(r => setTimeout(r, 500));
+            }
+
+            const fileId = 0;
+            const rawName = torrentFiles[0]?.name || '';
+            const fileName = rawName.substring(Math.max(rawName.lastIndexOf('/'), rawName.lastIndexOf('\\')) + 1);
+
+            const nameSuffix = fileName ? `/${encodeURIComponent(fileName)}` : '';
+            const streamUrl = `http://127.0.0.1:${apiPort}/torrents/${infoHash}/stream/${fileId}${nameSuffix}`;
+
+            // Warm up the stream — fetch the first chunk so librqbit
+            // prioritizes downloading the beginning of the file.
+            const dataDeadline = Date.now() + 60000;
+            while (Date.now() < dataDeadline) {
+              if (abortController.signal.aborted) throw new Error('Aborted');
+              try {
+                const probeRes = await fetch(streamUrl, {
+                  signal: abortController.signal,
+                  headers: { 'Range': 'bytes=0-1048575' },
+                });
+                if (probeRes.ok || probeRes.status === 206) {
+                  const buf = await probeRes.arrayBuffer();
+                  console.log('[MPV torrent] stream warmed up, got', buf.byteLength, 'bytes');
+                  break;
+                }
+              } catch (err: any) {
+                if (err.name === 'AbortError' || err.message === 'Aborted') throw err;
+              }
+              await new Promise(r => setTimeout(r, 1000));
+            }
+
+            finalUrl = streamUrl;
+            console.log('[MPV torrent] Streaming file', fileId, finalUrl);
+            isProxied = true;
+            isTorrent = true;
+          } else {
+             console.log('[MPV debug] apiPort is falsy!');
+          }
+        } catch(e: any) {
+          if (e.name === 'AbortError' || e.message === 'Aborted') {
+            console.log('[MPV torrent] Stream fetch aborted');
+            throw e; // rethrow to outer catch block
+          }
+          console.error('Failed torrent stream', e);
+          throw e;
+        }
+      } else if (url.startsWith('http')) {
         try {
           const { invoke } = await import('@tauri-apps/api/core');
           const port = await invoke<number | null>('get_stream_proxy_port');
@@ -361,9 +484,23 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
           await setProperty('referrer', '').catch(console.error);
         }
       }
-      console.log('[MPV loadFile] finalUrl:', finalUrl, 'proxied:', isProxied);
+      console.log('[MPV loadFile] finalUrl:', finalUrl, 'proxied:', isProxied, 'torrent:', isTorrent);
+
+      if (isTorrent) {
+        await setProperty('cache', 'yes').catch(() => {});
+        await setProperty('cache-pause-wait', 5).catch(() => {});
+        await setProperty('cache-secs', 120).catch(() => {});
+        await setProperty('demuxer-max-bytes', '150MiB').catch(() => {});
+        await setProperty('demuxer-readahead-secs', 60).catch(() => {});
+        await setProperty('stream-lavf-o', 'reconnect=1,reconnect_streamed=1,reconnect_delay_max=5').catch(() => {});
+      }
+
       await command('loadfile', [finalUrl, 'replace']);
     } catch (err: any) {
+      if (err.name === 'AbortError' || err.message === 'Aborted') {
+        console.log('[MPV loadFile] Aborted previous load');
+        return;
+      }
       if (String(err).includes('instance not found')) return;
       console.error('Failed to load file:', err);
       setIsBuffering(false);
@@ -394,7 +531,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     if (!isInitialized) return;
     try {
       const vol = Math.max(0, Math.min(150, level));
-      await setProperty('volume', vol.toString());
+      await setProperty('volume', vol);
     } catch (err) {
       console.error('Failed to set volume:', err);
     }
@@ -403,7 +540,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
   const setPlaybackSpeed = useCallback(async (rate: number) => {
     if (!isInitialized) return;
     try {
-      await setProperty('speed', rate.toString());
+      await setProperty('speed', rate);
     } catch (err) {
       console.error('Failed to set speed:', err);
     }
@@ -503,6 +640,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     volume,
     speed,
     isBuffering,
+    cacheDuration,
     tracks,
     videoHeight,
     videoTracks,

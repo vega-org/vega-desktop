@@ -584,6 +584,7 @@ const DesktopPlayer: React.FC<any> = ({
         isBuffering={mpv.isBuffering}
         currentTime={mpv.currentTime}
         duration={mpv.duration}
+        cacheDuration={mpv.cacheDuration}
         primaryTitle={state.primaryTitle}
         secondaryTitle={activeEpisode?.title || state.secondaryTitle}
         showNextEpisode={showNextBtn}

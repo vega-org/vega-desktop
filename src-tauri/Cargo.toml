@@ -39,6 +39,9 @@ cbc = "0.2.1"
 hex = "0.4.3"
 axum = { version = "0.8.9", features = ["tokio"] }
 urlencoding = "2.1.3"
+librqbit = { version = "9.0.0-rc.0", features = ["axum", "http-api", "tracing-subscriber-utils"] }
+anyhow = "1.0.103"
+librqbit-dualstack-sockets = "0.7.0"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

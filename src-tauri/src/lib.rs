@@ -2,6 +2,7 @@ mod cookie_manager;
 mod download_manager;
 mod stream_server;
 mod doh_client;
+mod torrent;
 
 use std::sync::Mutex;
 use tauri::Manager;
@@ -19,6 +20,11 @@ fn greet(name: &str) -> String {
 #[tauri::command]
 fn get_stream_proxy_port(state: tauri::State<'_, ProxyState>) -> Option<u16> {
     *state.port.lock().unwrap()
+}
+
+#[tauri::command]
+fn get_torrent_api_port(state: tauri::State<'_, torrent::TorrentState>) -> u16 {
+    state.api_port
 }
 
 #[tauri::command]
@@ -86,11 +92,19 @@ pub fn run() {
                     }
                 }
             });
+
+            // Initialize torrent state synchronously in setup (it takes little time without DHT blocking)
+            let torrent_state = tauri::async_runtime::block_on(async {
+                torrent::TorrentState::new(std::env::temp_dir().join("vega-torrents")).await.unwrap()
+            });
+            app.manage(torrent_state);
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             greet,
             get_stream_proxy_port,
+            get_torrent_api_port,
             download_manager::start_download,
             download_manager::pause_download,
             download_manager::cancel_download,
