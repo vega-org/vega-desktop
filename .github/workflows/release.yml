@@ -131,7 +131,9 @@ jobs:
         env:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           VITE_TV_MODE: 'true'
-        run: npm run tauri android build -- --apk
+        run: |
+          export PATH="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          npm run tauri android build -- --apk
 
       - name: Sign APK
         env:

@@ -44,6 +44,7 @@ anyhow = "1.0.103"
 librqbit-dualstack-sockets = "0.7.0"
 
 
+
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
 codegen-units = 1
