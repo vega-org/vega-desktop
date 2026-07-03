@@ -132,31 +132,44 @@ jobs:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+          BIN="$TOOLCHAIN/bin"
 
-          # Set CC and AR for each Android target
-          echo "CC_aarch64-linux-android=${TOOLCHAIN}/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
-          echo "AR_aarch64-linux-android=${TOOLCHAIN}/bin/llvm-ar" >> $GITHUB_ENV
-          echo "CC_armv7-linux-androideabi=${TOOLCHAIN}/bin/armv7a-linux-androideabi21-clang" >> $GITHUB_ENV
-          echo "AR_armv7-linux-androideabi=${TOOLCHAIN}/bin/llvm-ar" >> $GITHUB_ENV
-          echo "CC_i686-linux-android=${TOOLCHAIN}/bin/i686-linux-android21-clang" >> $GITHUB_ENV
-          echo "AR_i686-linux-android=${TOOLCHAIN}/bin/llvm-ar" >> $GITHUB_ENV
-          echo "CC_x86_64-linux-android=${TOOLCHAIN}/bin/x86_64-linux-android21-clang" >> $GITHUB_ENV
-          echo "AR_x86_64-linux-android=${TOOLCHAIN}/bin/llvm-ar" >> $GITHUB_ENV
+          # Add NDK toolchain to PATH
+          echo "$BIN" >> $GITHUB_PATH
+
+          # Create target-prefixed symlinks for tools OpenSSL expects
+          for target in aarch64-linux-android armv7a-linux-androideabi i686-linux-android x86_64-linux-android; do
+            ln -sf "$BIN/llvm-ranlib" "$BIN/${target}-ranlib"
+            ln -sf "$BIN/llvm-ar" "$BIN/${target}-ar"
+            ln -sf "$BIN/llvm-strip" "$BIN/${target}-strip"
+            ln -sf "$BIN/llvm-nm" "$BIN/${target}-nm"
+            ln -sf "$BIN/llvm-readelf" "$BIN/${target}-readelf"
+          done
+
+          # Set CC and AR for each Android target (for cc-rs / ring)
+          echo "CC_aarch64-linux-android=${BIN}/aarch64-linux-android21-clang" >> $GITHUB_ENV
+          echo "AR_aarch64-linux-android=${BIN}/llvm-ar" >> $GITHUB_ENV
+          echo "CC_armv7-linux-androideabi=${BIN}/armv7a-linux-androideabi21-clang" >> $GITHUB_ENV
+          echo "AR_armv7-linux-androideabi=${BIN}/llvm-ar" >> $GITHUB_ENV
+          echo "CC_i686-linux-android=${BIN}/i686-linux-android21-clang" >> $GITHUB_ENV
+          echo "AR_i686-linux-android=${BIN}/llvm-ar" >> $GITHUB_ENV
+          echo "CC_x86_64-linux-android=${BIN}/x86_64-linux-android21-clang" >> $GITHUB_ENV
+          echo "AR_x86_64-linux-android=${BIN}/llvm-ar" >> $GITHUB_ENV
 
           # Configure cargo linkers
           mkdir -p ~/.cargo
           cat >> ~/.cargo/config.toml << EOF
           [target.aarch64-linux-android]
-          linker = "${TOOLCHAIN}/bin/aarch64-linux-android21-clang"
+          linker = "${BIN}/aarch64-linux-android21-clang"
 
           [target.armv7-linux-androideabi]
-          linker = "${TOOLCHAIN}/bin/armv7a-linux-androideabi21-clang"
+          linker = "${BIN}/armv7a-linux-androideabi21-clang"
 
           [target.i686-linux-android]
-          linker = "${TOOLCHAIN}/bin/i686-linux-android21-clang"
+          linker = "${BIN}/i686-linux-android21-clang"
 
           [target.x86_64-linux-android]
-          linker = "${TOOLCHAIN}/bin/x86_64-linux-android21-clang"
+          linker = "${BIN}/x86_64-linux-android21-clang"
           EOF
 
       - name: Build Android APK
