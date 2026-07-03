@@ -66,8 +66,9 @@ const ExtensionInput: React.FC<{
       style={{
         flex: 1,
         display: "flex",
-        background: "transparent",
-        border: "none",
+        background: "rgba(255, 255, 255, 0.05)",
+        border: "1px solid rgba(255, 255, 255, 0.15)",
+        borderRadius: "8px",
         padding: 0,
         margin: 0,
         outline: "none",
@@ -116,6 +117,8 @@ const ExtensionInput: React.FC<{
           background: "transparent",
           border: "none",
           color: "inherit",
+          padding: "14px 20px",
+          borderRadius: "8px"
         }}
       />
     </div>
