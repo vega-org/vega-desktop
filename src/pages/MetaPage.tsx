@@ -1,51 +1,102 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import useWatchListStore from '../lib/zustand/watchListStore';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { LuArrowLeft as ArrowLeft, LuBookmarkPlus as BookmarkPlus, LuDownload as Download, LuLoaderCircle as Loader2, LuBookmarkCheck as BookmarkCheck, LuTrash2 as Trash2 } from 'react-icons/lu';
-import { useContentDetails } from '../lib/hooks/useContentInfo';
-import { useEpisodes } from '../lib/hooks/useEpisodes';
-import useContentStore from '../lib/zustand/contentStore';
-import { useDownloadStore } from '../lib/zustand/downloadStore';
-import { providerManager } from '../lib/services/ProviderManager';
-import { DownloadServerDialog } from '../components/DownloadServerDialog';
-import { CustomSelect } from '../components/CustomSelect';
-import { Link, Stream } from '../lib/providers/types';
-import { settingsStorage } from '../lib/storage/SettingsStorage';
-import { useFocusable, FocusContext } from '@noriginmedia/norigin-spatial-navigation-react';
-import './MetaPage.css';
+import React, { useMemo, useState, useEffect } from "react";
+import useWatchListStore from "../lib/zustand/watchListStore";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  LuArrowLeft as ArrowLeft,
+  LuBookmarkPlus as BookmarkPlus,
+  LuDownload as Download,
+  LuLoaderCircle as Loader2,
+  LuBookmarkCheck as BookmarkCheck,
+  LuTrash2 as Trash2,
+} from "react-icons/lu";
+import { useContentDetails } from "../lib/hooks/useContentInfo";
+import { useEpisodes } from "../lib/hooks/useEpisodes";
+import useContentStore from "../lib/zustand/contentStore";
+import { useDownloadStore } from "../lib/zustand/downloadStore";
+import { providerManager } from "../lib/services/ProviderManager";
+import { DownloadServerDialog } from "../components/DownloadServerDialog";
+import { CustomSelect } from "../components/CustomSelect";
+import { Link, Stream } from "../lib/providers/types";
+import { settingsStorage } from "../lib/storage/SettingsStorage";
+import { cacheStorage } from "../lib/storage";
+import {
+  useFocusable,
+  FocusContext,
+} from "@noriginmedia/norigin-spatial-navigation-react";
+import "./MetaPage.css";
 
-import { FocusableButton } from '../components/layout/FocusableButton';
+import { FocusableButton } from "../components/layout/FocusableButton";
 import { IoPlayOutline as FaPlay } from "react-icons/io5";
 
 const FocusableEpisodeCard: React.FC<{
   onClick: () => void;
+  isWatched?: boolean;
+  progressPercent?: number;
   children: React.ReactNode[];
-}> = ({ onClick, children }) => {
+}> = ({ onClick, isWatched, progressPercent, children }) => {
   return (
-    <div className={`episode-card glass-overlay`} style={{ padding: 0, display: 'flex' }}>
+    <div
+      className={`episode-card glass-overlay`}
+      style={{
+        padding: 0,
+        display: "flex",
+        position: "relative",
+        overflow: "hidden",
+        opacity: isWatched ? 0.7 : 1,
+      }}
+    >
       <FocusableButton
         onClick={onClick}
         className="episode-main-clickable"
         style={{
           flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          padding: '16px',
-          gap: '16px',
-          background: 'transparent',
-          border: 'none',
-          textAlign: 'left',
-          color: 'inherit',
-          borderRadius: 'var(--rounded-lg)',
-          minWidth: 0
+          display: "flex",
+          alignItems: "center",
+          padding: "16px",
+          gap: "16px",
+          background: "transparent",
+          border: "none",
+          textAlign: "left",
+          color: "inherit",
+          borderRadius: "var(--rounded-lg)",
+          minWidth: 0,
         }}
       >
         {children[0]}
         {children[1]}
       </FocusableButton>
-      <div style={{ display: 'flex', alignItems: 'center', paddingRight: '16px' }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          paddingRight: "16px",
+          opacity: isWatched ? 0.4 : 1,
+        }}
+      >
         {children[2]}
       </div>
+      {progressPercent !== undefined && progressPercent > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: "1px",
+            opacity: 0.2,
+            background: "var(--surface-variant)",
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.min(progressPercent > 80 ? 100 : progressPercent, 100)}%`,
+              height: "100%",
+              background: "var(--primary)",
+              borderRadius: "0 2px 2px 0",
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 };
@@ -59,7 +110,7 @@ const DownloadActionButton = ({
   downloads,
   downloadingId,
   onDownloadClick,
-  onDeleteClick
+  onDeleteClick,
 }: any) => {
   const isExtracting = downloadingId === id;
   const downloadState = downloads[id];
@@ -78,13 +129,15 @@ const DownloadActionButton = ({
   }
 
   if (downloadState) {
-    if (downloadState.status === 'completed') {
+    if (downloadState.status === "completed") {
       return (
         <FocusableButton
           className="icon-btn"
           onClick={(e: any) => {
             e.stopPropagation?.();
-            if (window.confirm('Are you sure you want to delete this download?')) {
+            if (
+              window.confirm("Are you sure you want to delete this download?")
+            ) {
               onDeleteClick(id);
             }
           }}
@@ -93,28 +146,35 @@ const DownloadActionButton = ({
           <Trash2 size={20} className="text-primary" />
         </FocusableButton>
       );
-    } else if (['downloading', 'queued', 'paused'].includes(downloadState.status)) {
-      const progress = downloadState.totalBytes > 0
-        ? Math.round((downloadState.downloadedBytes / downloadState.totalBytes) * 100)
-        : 0;
+    } else if (
+      ["downloading", "queued", "paused"].includes(downloadState.status)
+    ) {
+      const progress =
+        downloadState.totalBytes > 0
+          ? Math.round(
+              (downloadState.downloadedBytes / downloadState.totalBytes) * 100,
+            )
+          : 0;
       return (
         <FocusableButton
           className="icon-btn"
           title={`Downloading: ${progress}%`}
           onClick={(e: any) => e.stopPropagation?.()}
-          style={{ cursor: 'default' }}
+          style={{ cursor: "default" }}
         >
-          <div style={{
-            width: 20,
-            height: 20,
-            borderRadius: '50%',
-            background: `conic-gradient(var(--primary) ${progress}%, transparent ${progress}%)`,
-            border: '2px solid var(--surface-variant)',
-            display: 'inline-block'
-          }} />
+          <div
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: "50%",
+              background: `conic-gradient(var(--primary) ${progress}%, transparent ${progress}%)`,
+              border: "2px solid var(--surface-variant)",
+              display: "inline-block",
+            }}
+          />
         </FocusableButton>
       );
-    } else if (downloadState.status === 'error') {
+    } else if (downloadState.status === "error") {
       return (
         <FocusableButton
           className="icon-btn"
@@ -144,7 +204,6 @@ const DownloadActionButton = ({
   );
 };
 
-
 export const MetaPage: React.FC = () => {
   const { url } = useParams<{ url: string }>();
   const [searchParams] = useSearchParams();
@@ -159,39 +218,48 @@ export const MetaPage: React.FC = () => {
     trackChildren: true,
   });
 
-  const link = decodeURIComponent(url || '');
-  const urlProvider = searchParams.get('provider');
-  const activeProviderValue = urlProvider || provider?.value || '';
+  const link = decodeURIComponent(url || "");
+  const urlProvider = searchParams.get("provider");
+  const activeProviderValue = urlProvider || provider?.value || "";
 
   const { info, meta, isLoading, error } = useContentDetails(
     link,
-    activeProviderValue
+    activeProviderValue,
   );
 
   const [activeSeason, setActiveSeason] = useState<Link | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [dialogStreams, setDialogStreams] = useState<Stream[]>([]);
-  const [dialogEpisodeTitle, setDialogEpisodeTitle] = useState('');
+  const [dialogEpisodeTitle, setDialogEpisodeTitle] = useState("");
   const [dialogContext, setDialogContext] = useState<{
-    id: string,
-    title: string,
-    poster: string,
-    showName?: string,
-    episodeName?: string,
-    seasonTitle?: string,
-    type: 'movie' | 'series',
-    imdbId?: string
+    id: string;
+    title: string;
+    poster: string;
+    showName?: string;
+    episodeName?: string;
+    seasonTitle?: string;
+    type: "movie" | "series";
+    imdbId?: string;
   } | null>(null);
 
-  const excludedQualities = useMemo(() => settingsStorage.getExcludedQualities() || [], []);
+  const [episodesProgress, setEpisodesProgress] = useState<
+    Record<string, { position: number; duration: number }>
+  >({});
+
+  const excludedQualities = useMemo(
+    () => settingsStorage.getExcludedQualities() || [],
+    [],
+  );
 
   const filteredLinkList = useMemo(() => {
     if (!info?.linkList) return [];
     const filtered = info.linkList.filter((season: Link) => {
       // Exclude if the title contains any of the excluded qualities
-      return !excludedQualities.some((q: string) => season.title.toLowerCase().includes(q.toLowerCase()));
+      return !excludedQualities.some((q: string) =>
+        season.title.toLowerCase().includes(q.toLowerCase()),
+      );
     });
-    
+
     // If filtering removes all streams, fallback to the original list so it's not empty
     return filtered.length > 0 ? filtered : info.linkList;
   }, [info?.linkList, excludedQualities]);
@@ -207,7 +275,9 @@ export const MetaPage: React.FC = () => {
       const savedTitle = localStorage.getItem(`vega_season_${link}`);
       let defaultSeason = filteredLinkList[0];
       if (savedTitle) {
-        const found = filteredLinkList.find((l: Link) => l.title === savedTitle);
+        const found = filteredLinkList.find(
+          (l: Link) => l.title === savedTitle,
+        );
         if (found) defaultSeason = found;
       }
       setActiveSeason(defaultSeason);
@@ -215,21 +285,65 @@ export const MetaPage: React.FC = () => {
   }, [filteredLinkList, activeSeason, link]);
 
   // Fetch episodes if the active season uses episodesLink
-  const { data: episodeList, isLoading: episodeLoading, error: episodeError } = useEpisodes(
+  const {
+    data: episodeList,
+    isLoading: episodeLoading,
+    error: episodeError,
+  } = useEpisodes(
     activeSeason?.episodesLink,
     activeProviderValue,
-    !!activeSeason?.episodesLink
+    !!activeSeason?.episodesLink,
   );
 
+  // Fetch watch progress for episodes
+  useEffect(() => {
+    const primaryTitle = meta?.name || meta?.title || info?.title || "";
+    const secondaryTitle = activeSeason?.title || "";
+    const progressMap: Record<string, { position: number; duration: number }> =
+      {};
+
+    if (episodeList && episodeList.length > 0) {
+      episodeList.forEach((_, idx) => {
+        const uniqueEpisodeKey = `resume_${primaryTitle}_${secondaryTitle}_${idx}`;
+        const stored = cacheStorage.getString(uniqueEpisodeKey);
+        if (stored) {
+          try {
+            progressMap[idx] = JSON.parse(stored);
+          } catch (e) {}
+        }
+      });
+    }
+
+    if (activeSeason?.directLinks && activeSeason.directLinks.length > 0) {
+      activeSeason.directLinks.forEach((_, idx) => {
+        const uniqueEpisodeKey = `resume_${primaryTitle}_${secondaryTitle}_${idx}`;
+        const stored = cacheStorage.getString(uniqueEpisodeKey);
+        if (stored) {
+          try {
+            progressMap[`direct_${idx}`] = JSON.parse(stored);
+          } catch (e) {}
+        }
+      });
+    }
+
+    setEpisodesProgress(progressMap);
+  }, [episodeList, activeSeason, meta, info]);
+
   const bgImage = useMemo(() => meta?.background || info?.image, [meta, info]);
-  const urlPoster = searchParams.get('poster');
-  const posterImage = useMemo(() => meta?.poster || info?.image || urlPoster, [meta, info, urlPoster]);
+  const urlPoster = searchParams.get("poster");
+  const posterImage = useMemo(
+    () => meta?.poster || info?.image || urlPoster,
+    [meta, info, urlPoster],
+  );
   const title = useMemo(() => meta?.name || info?.title, [meta, info]);
-  const description = useMemo(() => meta?.description || info?.synopsis || info?.description, [meta, info]);
+  const description = useMemo(
+    () => meta?.description || info?.synopsis || info?.description,
+    [meta, info],
+  );
   const year = useMemo(() => meta?.year || info?.year, [meta, info]);
 
   const isInWatchList = useMemo(() => {
-    return watchList.some(item => item.link === link);
+    return watchList.some((item) => item.link === link);
   }, [watchList, link]);
 
   const toggleWatchList = () => {
@@ -237,8 +351,8 @@ export const MetaPage: React.FC = () => {
       removeItem(link);
     } else {
       addItem({
-        title: title || info?.title || '',
-        poster: posterImage || '',
+        title: title || info?.title || "",
+        poster: posterImage || "",
         link: link,
         provider: activeProviderValue,
       });
@@ -248,8 +362,18 @@ export const MetaPage: React.FC = () => {
   if (isLoading) {
     return (
       <div className="meta-page skeleton-page">
-        <div className="meta-header" style={{ width: 'calc(100% - 32px)', display: 'flex', justifyContent: 'space-between' }}>
-          <FocusableButton className="icon-btn back-btn glass-overlay" onClick={() => navigate(-1)}>
+        <div
+          className="meta-header"
+          style={{
+            width: "calc(100% - 32px)",
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
+          <FocusableButton
+            className="icon-btn back-btn glass-overlay"
+            onClick={() => navigate(-1)}
+          >
             <ArrowLeft size={24} />
           </FocusableButton>
         </div>
@@ -285,7 +409,9 @@ export const MetaPage: React.FC = () => {
     return (
       <div className="error-state">
         <h2 className="headline-md">Failed to load details</h2>
-        <p className="body-md text-muted">{error?.message || 'Content not found'}</p>
+        <p className="body-md text-muted">
+          {error?.message || "Content not found"}
+        </p>
         <button className="btn-secondary" onClick={() => navigate(-1)}>
           Go Back
         </button>
@@ -293,13 +419,17 @@ export const MetaPage: React.FC = () => {
     );
   }
 
-  const handlePlayClick = (episodeData: any[], linkIndex: number, type: string) => {
-    navigate('/player', {
+  const handlePlayClick = (
+    episodeData: any[],
+    linkIndex: number,
+    type: string,
+  ) => {
+    navigate("/player", {
       state: {
         episodeList: episodeData,
         linkIndex,
-        primaryTitle: meta?.name || meta?.title || info?.title || '',
-        secondaryTitle: activeSeason?.title || '',
+        primaryTitle: meta?.name || meta?.title || info?.title || "",
+        secondaryTitle: activeSeason?.title || "",
         type,
         poster: {
           poster: posterImage,
@@ -312,13 +442,22 @@ export const MetaPage: React.FC = () => {
     });
   };
 
-  const handleDownloadClick = async (ep: { title: string, link: string }, idx: number, type: string, seasonTitle?: string, exactId?: string) => {
+  const handleDownloadClick = async (
+    ep: { title: string; link: string },
+    idx: number,
+    type: string,
+    seasonTitle?: string,
+    exactId?: string,
+  ) => {
     try {
-      const baseTitle = meta?.name || meta?.title || info?.title || 'Unknown Title';
+      const baseTitle =
+        meta?.name || meta?.title || info?.title || "Unknown Title";
 
-      const id = exactId || (seasonTitle
-        ? `${baseTitle}_S${seasonTitle}_E${idx + 1}`
-        : `${baseTitle}_direct_${idx}`);
+      const id =
+        exactId ||
+        (seasonTitle
+          ? `${baseTitle}_S${seasonTitle}_E${idx + 1}`
+          : `${baseTitle}_direct_${idx}`);
 
       setDownloadingId(id);
 
@@ -327,24 +466,26 @@ export const MetaPage: React.FC = () => {
         link: ep.link,
         type: type,
         signal: controller.signal,
-        providerValue: activeProviderValue
+        providerValue: activeProviderValue,
       });
 
       if (streams && streams.length > 0) {
         setDialogStreams(streams);
 
-        const finalTitle = seasonTitle ? `${baseTitle} S${seasonTitle} E${idx + 1}` : (ep.title || baseTitle || 'Download');
+        const finalTitle = seasonTitle
+          ? `${baseTitle} S${seasonTitle} E${idx + 1}`
+          : ep.title || baseTitle || "Download";
 
         setDialogEpisodeTitle(finalTitle);
         setDialogContext({
           id,
           title: finalTitle,
-          poster: meta?.poster || info?.poster || posterImage || '',
+          poster: meta?.poster || info?.poster || posterImage || "",
           showName: baseTitle,
           episodeName: ep.title,
           seasonTitle: seasonTitle,
-          type: (type as 'movie' | 'series') || 'movie',
-          imdbId: meta?.imdbId
+          type: (type as "movie" | "series") || "movie",
+          imdbId: meta?.imdbId,
         });
       } else {
         console.error("No streams found to download");
@@ -364,19 +505,20 @@ export const MetaPage: React.FC = () => {
       title: dialogContext.title,
       url: stream.link,
       poster: dialogContext.poster,
-      provider: activeProviderValue || 'unknown',
+      provider: activeProviderValue || "unknown",
       showName: dialogContext.showName,
       episodeName: dialogContext.episodeName,
       seasonTitle: dialogContext.seasonTitle,
       type: dialogContext.type,
       imdbId: dialogContext.imdbId,
       headers: stream.headers,
-      subtitles: stream.subtitles?.map(s => ({
+      subtitles: stream.subtitles?.map((s) => ({
         url: s.uri || (s as any).url,
-        language: s.language || 'Unknown',
-        format: s.type === 'text/vtt' ? 'vtt' : 'srt'
+        language: s.language || "Unknown",
+        format: s.type === "text/vtt" ? "vtt" : "srt",
       })),
-      videoType: stream.type === 'm3u8' || stream.type === 'hls' ? 'm3u8' : undefined
+      videoType:
+        stream.type === "m3u8" || stream.type === "hls" ? "m3u8" : undefined,
     } as any);
 
     // Clear context
@@ -384,12 +526,21 @@ export const MetaPage: React.FC = () => {
     setDialogStreams([]);
   };
 
-
   return (
     <FocusContext.Provider value={focusKey}>
       <div className="meta-page" ref={focusRef as any}>
-        <div className="meta-header" style={{ width: 'calc(100% - 32px)', display: 'flex', justifyContent: 'space-between' }}>
-          <FocusableButton className="icon-btn back-btn glass-overlay" onClick={() => navigate(-1)}>
+        <div
+          className="meta-header"
+          style={{
+            width: "calc(100% - 32px)",
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
+          <FocusableButton
+            className="icon-btn back-btn glass-overlay"
+            onClick={() => navigate(-1)}
+          >
             <ArrowLeft size={24} />
           </FocusableButton>
         </div>
@@ -405,7 +556,15 @@ export const MetaPage: React.FC = () => {
         {/* Scrolling Header with Logo */}
         <div className="meta-hero-content-wrapper">
           <div className="meta-hero-vignette">
-            <div className="meta-hero-content" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '16px' }}>
+            <div
+              className="meta-hero-content"
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-end",
+                gap: "16px",
+              }}
+            >
               <div>
                 {meta?.logo ? (
                   <img src={meta.logo} alt={title} className="meta-logo" />
@@ -415,29 +574,43 @@ export const MetaPage: React.FC = () => {
 
                 <div className="meta-tags">
                   {year && <span className="meta-tag">{year}</span>}
-                  {meta?.runtime && <span className="meta-tag">{meta.runtime}</span>}
-                  {meta?.imdbRating && <span className="meta-tag">⭐ {meta.imdbRating}</span>}
-                  {info?.type && <span className="meta-tag capitalize">{info.type}</span>}
+                  {meta?.runtime && (
+                    <span className="meta-tag">{meta.runtime}</span>
+                  )}
+                  {meta?.imdbRating && (
+                    <span className="meta-tag">⭐ {meta.imdbRating}</span>
+                  )}
+                  {info?.type && (
+                    <span className="meta-tag capitalize">{info.type}</span>
+                  )}
                 </div>
               </div>
 
-              <div className="meta-actions" style={{ marginBottom: '16px' }}>
+              <div className="meta-actions" style={{ marginBottom: "16px" }}>
                 <FocusableButton
                   className="icon-btn glass-overlay"
                   onClick={toggleWatchList}
-                  title={isInWatchList ? "Remove from Watchlist" : "Add to Watchlist"}
+                  title={
+                    isInWatchList ? "Remove from Watchlist" : "Add to Watchlist"
+                  }
                   style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: isInWatchList ? 'var(--primary)' : 'inherit',
-                    border: isInWatchList ? '1px solid var(--primary)' : '1px solid var(--surface-variant)'
+                    width: "48px",
+                    height: "48px",
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: isInWatchList ? "var(--primary)" : "inherit",
+                    border: isInWatchList
+                      ? "1px solid var(--primary)"
+                      : "1px solid var(--surface-variant)",
                   }}
                 >
-                  {isInWatchList ? <BookmarkCheck size={24} /> : <BookmarkPlus size={24} />}
+                  {isInWatchList ? (
+                    <BookmarkCheck size={24} />
+                  ) : (
+                    <BookmarkPlus size={24} />
+                  )}
                 </FocusableButton>
               </div>
             </div>
@@ -447,25 +620,39 @@ export const MetaPage: React.FC = () => {
         <div className="meta-content-wrapper">
           <div className="meta-content-inner">
             <div className="meta-details">
-
               {description && (
                 <div className="meta-synopsis">
-                  <h3 className="title-md text-primary" style={{ marginBottom: '4px' }}>Synopsis</h3>
+                  <h3
+                    className="title-md text-primary"
+                    style={{ marginBottom: "4px" }}
+                  >
+                    Synopsis
+                  </h3>
                   <p className="body-md text-muted">{description}</p>
                 </div>
               )}
 
               {meta?.cast && meta.cast.length > 0 && (
                 <div className="meta-cast">
-                  <h3 className="title-md text-primary" style={{ marginBottom: '4px' }}>Cast</h3>
-                  <p className="body-md text-muted">{meta.cast.join(', ')}</p>
+                  <h3
+                    className="title-md text-primary"
+                    style={{ marginBottom: "4px" }}
+                  >
+                    Cast
+                  </h3>
+                  <p className="body-md text-muted">{meta.cast.join(", ")}</p>
                 </div>
               )}
 
               {meta?.genre && meta.genre.length > 0 && (
                 <div className="meta-genre">
-                  <h3 className="title-md text-primary" style={{ marginBottom: '4px' }}>Genres</h3>
-                  <p className="body-md text-muted">{meta.genre.join(', ')}</p>
+                  <h3
+                    className="title-md text-primary"
+                    style={{ marginBottom: "4px" }}
+                  >
+                    Genres
+                  </h3>
+                  <p className="body-md text-muted">{meta.genre.join(", ")}</p>
                 </div>
               )}
             </div>
@@ -478,21 +665,29 @@ export const MetaPage: React.FC = () => {
                     <CustomSelect
                       options={filteredLinkList.map((season: Link) => ({
                         value: season.title,
-                        label: season.title
+                        label: season.title,
                       }))}
-                      value={activeSeason?.title || ''}
+                      value={activeSeason?.title || ""}
                       onChange={(val) => {
-                        const season = filteredLinkList.find((l: Link) => l.title === val);
+                        const season = filteredLinkList.find(
+                          (l: Link) => l.title === val,
+                        );
                         if (season) {
                           setActiveSeason(season);
-                          localStorage.setItem(`vega_season_${link}`, season.title);
+                          localStorage.setItem(
+                            `vega_season_${link}`,
+                            season.title,
+                          );
                         }
                       }}
                       className="season-selector-custom"
                     />
                   ) : (
-                    <h3 className="title-md text-primary" style={{ marginBottom: '16px' }}>
-                      {activeSeason?.title || 'Episodes'}
+                    <h3
+                      className="title-md text-primary"
+                      style={{ marginBottom: "16px" }}
+                    >
+                      {activeSeason?.title || "Episodes"}
                     </h3>
                   )}
                 </div>
@@ -508,76 +703,123 @@ export const MetaPage: React.FC = () => {
 
                 {/* Error for episodes */}
                 {episodeError && !episodeLoading && (
-                  <p className="text-red-500">Failed to load episodes. Please try again.</p>
+                  <p className="text-red-500">
+                    Failed to load episodes. Please try again.
+                  </p>
                 )}
 
                 {/* Render Episodes */}
-                {activeSeason?.episodesLink && !episodeLoading && episodeList && episodeList.length > 0 && (
-                  <div className="episodes-list">
-                    {episodeList.map((ep, idx) => (
-                      <FocusableEpisodeCard
-                        key={ep.link || idx}
-                        onClick={() => handlePlayClick(episodeList, idx, 'series')}
-                      >
-                        <div className="episode-number"><FaPlay size={24} /></div>
-                        <div className="episode-info">
-                          <h4 className="label-lg" title={ep.title}>{ep.title}</h4>
-                        </div>
-                        <div className="episode-actions">
-                          <DownloadActionButton
-                            id={`${meta?.name || meta?.title || info?.title || 'Unknown Title'}_S${activeSeason?.title}_E${idx + 1}`}
-                            ep={ep}
-                            idx={idx}
-                            type="series"
-                            seasonTitle={activeSeason?.title}
-                            downloads={downloads}
-                            downloadingId={downloadingId}
-                            onDownloadClick={handleDownloadClick}
-                            onDeleteClick={cancelDownload}
-                          />
-                        </div>
-                      </FocusableEpisodeCard>
-                    ))}
-                  </div>
-                )}
+                {activeSeason?.episodesLink &&
+                  !episodeLoading &&
+                  episodeList &&
+                  episodeList.length > 0 && (
+                    <div className="episodes-list">
+                      {episodeList.map((ep, idx) => {
+                        const progressData = episodesProgress[idx];
+                        const progressPercent =
+                          progressData && progressData.duration > 0
+                            ? (progressData.position / progressData.duration) *
+                              100
+                            : 0;
+                        const isWatched = progressPercent > 80;
+
+                        return (
+                          <FocusableEpisodeCard
+                            key={ep.link || idx}
+                            onClick={() =>
+                              handlePlayClick(episodeList, idx, "series")
+                            }
+                            isWatched={isWatched}
+                            progressPercent={progressPercent}
+                          >
+                            <div className="episode-number">
+                              <FaPlay size={24} />
+                            </div>
+                            <div className="episode-info">
+                              <h4 className="label-lg" title={ep.title}>
+                                {ep.title}
+                              </h4>
+                            </div>
+                            <div className="episode-actions">
+                              <DownloadActionButton
+                                id={`${meta?.name || meta?.title || info?.title || "Unknown Title"}_S${activeSeason?.title}_E${idx + 1}`}
+                                ep={ep}
+                                idx={idx}
+                                type="series"
+                                seasonTitle={activeSeason?.title}
+                                downloads={downloads}
+                                downloadingId={downloadingId}
+                                onDownloadClick={handleDownloadClick}
+                                onDeleteClick={cancelDownload}
+                              />
+                            </div>
+                          </FocusableEpisodeCard>
+                        );
+                      })}
+                    </div>
+                  )}
 
                 {/* Render Direct Links (for movies or direct server links) */}
-                {activeSeason?.directLinks && activeSeason.directLinks.length > 0 && (
-                  <div className="episodes-list">
-                    {activeSeason.directLinks.map((link, idx) => (
-                      <FocusableEpisodeCard
-                        key={link.link || idx}
-                        onClick={() => handlePlayClick(activeSeason.directLinks!, idx, link.type || 'movie')}
-                      >
-                        <div className="episode-number">
-                          <FaPlay size={24} />
-                        </div>
-                        <div className="episode-info">
-                          <h4 className="label-lg" title={link.title}>{link.title}</h4>
-                        </div>
-                        <div className="episode-actions">
-                          <DownloadActionButton
-                            id={`${meta?.name || meta?.title || info?.title || 'Unknown Title'}_direct_${idx}`}
-                            ep={link}
-                            idx={idx}
-                            type={link.type || 'movie'}
-                            seasonTitle={activeSeason?.title}
-                            downloads={downloads}
-                            downloadingId={downloadingId}
-                            onDownloadClick={handleDownloadClick}
-                            onDeleteClick={cancelDownload}
-                          />
-                        </div>
-                      </FocusableEpisodeCard>
-                    ))}
-                  </div>
-                )}
+                {activeSeason?.directLinks &&
+                  activeSeason.directLinks.length > 0 && (
+                    <div className="episodes-list">
+                      {activeSeason.directLinks.map((link, idx) => {
+                        const progressData = episodesProgress[`direct_${idx}`];
+                        const progressPercent =
+                          progressData && progressData.duration > 0
+                            ? (progressData.position / progressData.duration) *
+                              100
+                            : 0;
+                        const isWatched = progressPercent > 80;
+
+                        return (
+                          <FocusableEpisodeCard
+                            key={link.link || idx}
+                            onClick={() =>
+                              handlePlayClick(
+                                activeSeason.directLinks!,
+                                idx,
+                                link.type || "movie",
+                              )
+                            }
+                            isWatched={isWatched}
+                            progressPercent={progressPercent}
+                          >
+                            <div className="episode-number">
+                              <FaPlay size={24} />
+                            </div>
+                            <div className="episode-info">
+                              <h4 className="label-lg" title={link.title}>
+                                {link.title}
+                              </h4>
+                            </div>
+                            <div className="episode-actions">
+                              <DownloadActionButton
+                                id={`${meta?.name || meta?.title || info?.title || "Unknown Title"}_direct_${idx}`}
+                                ep={link}
+                                idx={idx}
+                                type={link.type || "movie"}
+                                seasonTitle={activeSeason?.title}
+                                downloads={downloads}
+                                downloadingId={downloadingId}
+                                onDownloadClick={handleDownloadClick}
+                                onDeleteClick={cancelDownload}
+                              />
+                            </div>
+                          </FocusableEpisodeCard>
+                        );
+                      })}
+                    </div>
+                  )}
 
                 {/* No content state */}
-                {!episodeLoading && activeSeason?.episodesLink && (!episodeList || episodeList.length === 0) && (
-                  <p className="text-muted">No episodes found for this season.</p>
-                )}
-
+                {!episodeLoading &&
+                  activeSeason?.episodesLink &&
+                  (!episodeList || episodeList.length === 0) && (
+                    <p className="text-muted">
+                      No episodes found for this season.
+                    </p>
+                  )}
               </div>
             )}
           </div>
