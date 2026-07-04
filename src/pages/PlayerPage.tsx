@@ -164,14 +164,49 @@ const TvPlayer: React.FC<any> = ({
     if (!stream?.link) return;
     setIsLaunching(true);
     try {
+      let playUrl = stream.link;
+
+      if (playUrl.startsWith('magnet:')) {
+        try {
+          const { invoke } = await import('@tauri-apps/api/core');
+          const apiPort = await invoke<number>('get_torrent_api_port');
+          const addRes = await fetch(`http://127.0.0.1:${apiPort}/torrents`, {
+            method: 'POST',
+            body: playUrl
+          });
+          if (!addRes.ok) throw new Error('Failed to add torrent');
+          const data = await addRes.json();
+          const infoHash = data.details.info_hash;
+          
+          // Wait for torrent to become live
+          const deadline = Date.now() + 60000;
+          while (Date.now() < deadline) {
+            const statsRes = await fetch(`http://127.0.0.1:${apiPort}/torrents/${infoHash}/stats/v1`);
+            if (statsRes.ok) {
+              const stats = await statsRes.json();
+              if (stats.state === 'live' || stats.state === 'paused') break;
+            }
+            await new Promise(r => setTimeout(r, 500));
+          }
+
+          const torrentFiles = data.details.files || [];
+          const rawName = torrentFiles[0]?.name || '';
+          const fileName = rawName.substring(Math.max(rawName.lastIndexOf('/'), rawName.lastIndexOf('\\')) + 1);
+          const nameSuffix = fileName ? `/${encodeURIComponent(fileName)}` : '';
+          playUrl = `http://127.0.0.1:${apiPort}/torrents/${infoHash}/stream/0${nameSuffix}`;
+        } catch (e) {
+          console.error("Failed to resolve torrent stream for external player", e);
+        }
+      }
+
       if (isAndroid) {
         const { openUrl } = await import('@tauri-apps/plugin-opener');
         const headers = stream.headers ? JSON.stringify(stream.headers) : '';
-        const intentUrl = `vega://play?url=${encodeURIComponent(stream.link)}&headers=${encodeURIComponent(headers)}`;
+        const intentUrl = `vega://play?url=${encodeURIComponent(playUrl)}&headers=${encodeURIComponent(headers)}`;
         await openUrl(intentUrl);
       } else if (isLinux) {
         const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('open_external_player', { url: stream.link }).catch(console.error);
+        await invoke('open_external_player', { url: playUrl }).catch(console.error);
       }
     } catch (e) {
       console.error("Failed to open player", e);
