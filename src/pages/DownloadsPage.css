@@ -143,8 +143,8 @@
 /* Completed Grid */
 .completed-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px;
 }
 
 .completed-card {
@@ -165,7 +165,7 @@
 
 .completed-card .card-poster {
   width: 100%;
-  aspect-ratio: 2/3;
+  aspect-ratio: 2/2.7;
   border-radius: 0;
 }
 
