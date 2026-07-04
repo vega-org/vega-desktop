@@ -17,6 +17,9 @@ impl TorrentState {
         let _ = std::fs::remove_dir_all(&download_dir);
         std::fs::create_dir_all(&download_dir)?;
 
+        // Allow all CORS origins. Windows Tauri v2 uses http://tauri.localhost which isn't in librqbit's default allowlist
+        std::env::set_var("CORS_ALLOW_REGEXP", ".*");
+
         let session = Session::new(download_dir).await?;
         let api = Api::new(session.clone(), None, None);
 
