@@ -284,7 +284,12 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
             <div className="inline-menu-container">
               <button className={`action-btn text-btn ${openMenu === 'audio' ? 'active' : ''}`} onClick={(e) => toggleMenu(e, 'audio')}>
                 <LuAudioLines size={20} />
-                <span>{audioTracks.find(t => t.selected)?.lang?.toUpperCase().slice(0, 2) || 'EN'}</span>
+                <span>{(() => {
+                  const sel = audioTracks.find(t => t.selected);
+                  if (sel?.lang) return sel.lang.toUpperCase().slice(0, 2);
+                  if (sel) return `A${sel.id}`;
+                  return 'AUD';
+                })()}</span>
               </button>
               {openMenu === 'audio' && (
                 <div className="inline-menu left wide" onClick={stop}>
