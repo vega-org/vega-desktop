@@ -137,24 +137,29 @@ jobs:
           # Add NDK toolchain to PATH
           echo "$BIN" >> $GITHUB_PATH
 
-          # Create target-prefixed symlinks for tools OpenSSL expects
+          # Create target-prefixed symlinks just in case
           for target in aarch64-linux-android armv7a-linux-androideabi i686-linux-android x86_64-linux-android; do
             ln -sf "$BIN/llvm-ranlib" "$BIN/${target}-ranlib"
             ln -sf "$BIN/llvm-ar" "$BIN/${target}-ar"
             ln -sf "$BIN/llvm-strip" "$BIN/${target}-strip"
-            ln -sf "$BIN/llvm-nm" "$BIN/${target}-nm"
-            ln -sf "$BIN/llvm-readelf" "$BIN/${target}-readelf"
           done
 
-          # Set CC and AR for each Android target (for cc-rs / ring)
-          echo "CC_aarch64-linux-android=${BIN}/aarch64-linux-android21-clang" >> $GITHUB_ENV
-          echo "AR_aarch64-linux-android=${BIN}/llvm-ar" >> $GITHUB_ENV
-          echo "CC_armv7-linux-androideabi=${BIN}/armv7a-linux-androideabi21-clang" >> $GITHUB_ENV
-          echo "AR_armv7-linux-androideabi=${BIN}/llvm-ar" >> $GITHUB_ENV
-          echo "CC_i686-linux-android=${BIN}/i686-linux-android21-clang" >> $GITHUB_ENV
-          echo "AR_i686-linux-android=${BIN}/llvm-ar" >> $GITHUB_ENV
-          echo "CC_x86_64-linux-android=${BIN}/x86_64-linux-android21-clang" >> $GITHUB_ENV
-          echo "AR_x86_64-linux-android=${BIN}/llvm-ar" >> $GITHUB_ENV
+          # Set CC, AR, and RANLIB for each Android target (using underscores for cc-rs)
+          echo "CC_aarch64_linux_android=${BIN}/aarch64-linux-android21-clang" >> $GITHUB_ENV
+          echo "AR_aarch64_linux_android=${BIN}/llvm-ar" >> $GITHUB_ENV
+          echo "RANLIB_aarch64_linux_android=${BIN}/llvm-ranlib" >> $GITHUB_ENV
+
+          echo "CC_armv7_linux_androideabi=${BIN}/armv7a-linux-androideabi21-clang" >> $GITHUB_ENV
+          echo "AR_armv7_linux_androideabi=${BIN}/llvm-ar" >> $GITHUB_ENV
+          echo "RANLIB_armv7_linux_androideabi=${BIN}/llvm-ranlib" >> $GITHUB_ENV
+
+          echo "CC_i686_linux_android=${BIN}/i686-linux-android21-clang" >> $GITHUB_ENV
+          echo "AR_i686_linux_android=${BIN}/llvm-ar" >> $GITHUB_ENV
+          echo "RANLIB_i686_linux_android=${BIN}/llvm-ranlib" >> $GITHUB_ENV
+
+          echo "CC_x86_64_linux_android=${BIN}/x86_64-linux-android21-clang" >> $GITHUB_ENV
+          echo "AR_x86_64_linux_android=${BIN}/llvm-ar" >> $GITHUB_ENV
+          echo "RANLIB_x86_64_linux_android=${BIN}/llvm-ranlib" >> $GITHUB_ENV
 
           # Configure cargo linkers
           mkdir -p ~/.cargo
@@ -176,7 +181,7 @@ jobs:
         env:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           VITE_TV_MODE: 'true'
-        run: npm run tauri android build -- --apk
+        run: npm run tauri android build -- --apk --target aarch64-linux-android --target armv7-linux-androideabi
 
       - name: Sign APK
         env:
