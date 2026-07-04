@@ -181,7 +181,7 @@ jobs:
         env:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           VITE_TV_MODE: 'true'
-        run: npm run tauri android build -- --apk --target aarch64-linux-android --target armv7-linux-androideabi
+        run: npm run tauri android build -- --apk --target aarch64 --target armv7
 
       - name: Sign APK
         env:
