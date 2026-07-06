@@ -11,7 +11,6 @@ struct ProxyState {
     port: Mutex<Option<u16>>,
 }
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -23,8 +22,12 @@ fn get_stream_proxy_port(state: tauri::State<'_, ProxyState>) -> Option<u16> {
 }
 
 #[tauri::command]
-fn get_torrent_api_port(state: tauri::State<'_, torrent::TorrentState>) -> u16 {
-    state.api_port
+fn get_torrent_api_port(state: tauri::State<'_, Option<torrent::TorrentState>>) -> Result<u16, String> {
+    if let Some(ref torrent_state) = *state {
+        Ok(torrent_state.api_port)
+    } else {
+        Err("Torrent service is not available".into())
+    }
 }
 
 #[tauri::command]
@@ -93,9 +96,15 @@ pub fn run() {
                 }
             });
 
-            // Initialize torrent state synchronously in setup (it takes little time without DHT blocking)
+            let torrent_cache_dir = app.path().app_cache_dir().unwrap_or_else(|_| std::env::temp_dir()).join("vega-torrents");
             let torrent_state = tauri::async_runtime::block_on(async {
-                torrent::TorrentState::new(std::env::temp_dir().join("vega-torrents")).await.unwrap()
+                match torrent::TorrentState::new(torrent_cache_dir).await {
+                    Ok(state) => Some(state),
+                    Err(e) => {
+                        eprintln!("[torrent] Failed to initialize torrent engine: {}", e);
+                        None
+                    }
+                }
             });
             app.manage(torrent_state);
 

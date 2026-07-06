@@ -44,7 +44,6 @@ anyhow = "1.0.103"
 librqbit-dualstack-sockets = "0.7.0"
 
 
-
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
 codegen-units = 1
@@ -60,3 +59,4 @@ tauri-plugin-updater = "2"
 
 [target.'cfg(target_os = "android")'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
+
