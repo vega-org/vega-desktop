@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "postinstall": "tauri-plugin-libmpv-api setup-lib"
+    "postinstall": "node scripts/setup-libmpv.mjs"
   },
   "dependencies": {
     "@noriginmedia/norigin-spatial-navigation-core": "^3.2.0",
