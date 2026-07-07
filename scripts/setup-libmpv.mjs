@@ -4,7 +4,8 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const cliPath = join(__dirname, 'node_modules', 'tauri-plugin-libmpv-api', 'dist-js', 'cli.js');
+const rootDir = join(__dirname, '..');
+const cliPath = join(rootDir, 'node_modules', 'tauri-plugin-libmpv-api', 'dist-js', 'cli.js');
 
 if (!existsSync(cliPath)) {
   console.log('tauri-plugin-libmpv-api not installed yet, skipping setup-lib');
@@ -22,4 +23,4 @@ if (content.includes(originalUrl)) {
   console.log(`[setup-lib] Pinned mpv-winbuild to release: ${PINNED_MPV_TAG}`);
 }
 
-execSync('npx tauri-plugin-libmpv-api setup-lib', { stdio: 'inherit', cwd: __dirname });
+execSync('npx tauri-plugin-libmpv-api setup-lib', { stdio: 'inherit', cwd: rootDir });
