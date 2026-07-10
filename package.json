@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "postinstall": "node scripts/setup-libmpv.mjs",
-    "build:msix": "npx -y cross-env VITE_IS_MS_STORE=true tauri-windows-bundle build --arch x64"
+    "build:msix": "npx -y cross-env VITE_IS_MS_STORE=true tauri-windows-bundle build --arch x64 --runner npm"
   },
   "dependencies": {
     "@noriginmedia/norigin-spatial-navigation-core": "^3.2.0",
