@@ -1,4 +1,5 @@
 {
+  "identifier": "Zenda-X.VegaApp",
   "bundle": {
     "resources": [
       "lib/*.dll"

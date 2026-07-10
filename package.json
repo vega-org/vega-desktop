@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "postinstall": "node scripts/setup-libmpv.mjs"
+    "postinstall": "node scripts/setup-libmpv.mjs",
+    "build:msix": "npx -y cross-env VITE_IS_MS_STORE=true tauri-windows-bundle build --arch x64"
   },
   "dependencies": {
     "@noriginmedia/norigin-spatial-navigation-core": "^3.2.0",
@@ -33,6 +34,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@choochmeque/tauri-windows-bundle": "^0.1.28",
     "@tauri-apps/cli": "^2",
     "@types/node": "^26.0.0",
     "@types/react": "^19.1.8",

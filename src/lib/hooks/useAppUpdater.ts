@@ -23,6 +23,13 @@ export const checkAppUpdates = async (manual = false) => {
   try {
     const userAgent = navigator.userAgent.toLowerCase();
 
+    // 0. Disable updater for Microsoft Store builds
+    if (import.meta.env.VITE_IS_MS_STORE === 'true') {
+      if (manual) {
+        message('Updates are managed automatically by the Microsoft Store.', { title: 'Microsoft Store', kind: 'info' });
+      }
+      return;
+    }
     // 1. Custom fallback for Android
     if (userAgent.includes('android')) {
       const { data: release } = await axios.get(

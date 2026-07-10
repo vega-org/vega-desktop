@@ -88,6 +88,23 @@ jobs:
           includeUpdaterJson: true
           args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
 
+      - name: Build MSIX (Windows only)
+        if: matrix.platform == 'windows-latest'
+        run: npm run build:msix
+
+      - name: Get version
+        if: matrix.platform == 'windows-latest'
+        run: echo "APP_VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Upload MSIX to Release
+        if: matrix.platform == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: app-v${{ env.APP_VERSION }}
+          files: src-tauri/target/msix/*.msix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   release-android:
     permissions:
       contents: write

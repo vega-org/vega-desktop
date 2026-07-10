@@ -1,0 +1,22 @@
+{
+  "publisher": "CN=CFB127B2-E8CE-4785-99C2-9536E662A4DE",
+  "publisherDisplayName": "Zenda-X",
+  "capabilities": {
+    "general": [
+      "internetClient"
+    ]
+  },
+  "extensions": {
+    "shareTarget": false,
+    "fileAssociations": [],
+    "protocolHandlers": []
+  },
+  "signing": {
+    "pfx": null,
+    "pfxPassword": null
+  },
+  "resourceIndex": {
+    "enabled": false,
+    "keepConfig": false
+  }
+}
