@@ -84,7 +84,6 @@ jobs:
           releaseName: "Vega v__VERSION__"
           releaseBody: "Automated release of Vega."
           releaseDraft: true
-          prerelease: false
           includeUpdaterJson: true
           args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || matrix.platform == 'windows-latest' && '--bundles nsis' || '' }}
 
@@ -100,18 +99,20 @@ jobs:
 
       - name: Upload Windows installers to Release
         if: matrix.platform == 'windows-latest'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: app-v${{ steps.version.outputs.app_version }}
-          files: |
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          installers=(
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/msix/*.msix
-          fail_on_unmatched_files: true
-          draft: true
-          prerelease: false
-          make_latest: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          )
+          if [ ${#installers[@]} -eq 0 ]; then
+            echo "No Windows installers found"
+            exit 1
+          fi
+          gh release upload "app-v${{ steps.version.outputs.app_version }}" "${installers[@]}" --clobber
   release-android:
     permissions:
       contents: write
@@ -234,12 +235,6 @@ jobs:
         run: echo "app_version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
       - name: Upload APK to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: app-v${{ steps.version.outputs.app_version }}
-          files: vega-tv-android.apk
-          draft: true
-          prerelease: false
-          make_latest: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "app-v${{ steps.version.outputs.app_version }}" vega-tv-android.apk --clobber
