@@ -1,8 +1,7 @@
 {
   "identifier": "Zenda-X.VegaApp",
   "bundle": {
-    "resources": [
-      "lib/*.dll"
-    ]
+    "targets": ["nsis"],
+    "resources": ["lib/*.dll"]
   }
 }
