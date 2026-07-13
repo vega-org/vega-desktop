@@ -1,11 +1,15 @@
 import React from "react";
 import useThemeStore from "../lib/zustand/themeStore";
 import { themes, socialLinks } from "../lib/constants";
-import { LuMonitor as Monitor, LuCheck as Check, LuCode as Code } from 'react-icons/lu';
+import {
+  LuMonitor as Monitor,
+  LuCheck as Check,
+  LuCode as Code,
+} from "react-icons/lu";
 import { SubtitleSettings } from "../components/settings/SubtitleSettings";
 import { PreferencesSettings } from "../components/settings/PreferencesSettings";
-import { checkAppUpdates } from '../lib/hooks/useAppUpdater';
-import { FocusableButton } from '../components/layout/FocusableButton';
+import { checkAppUpdates } from "../lib/hooks/useAppUpdater";
+import { FocusableButton } from "../components/layout/FocusableButton";
 
 import "./SettingsPage.css";
 
@@ -13,8 +17,6 @@ export const SettingsPage: React.FC = () => {
   const { primary, themeBackground, setPrimary, setThemeBackground } =
     useThemeStore();
   const [appVersion, setAppVersion] = React.useState("Loading...");
-
-
 
   React.useEffect(() => {
     import("@tauri-apps/api/app")
@@ -32,7 +34,10 @@ export const SettingsPage: React.FC = () => {
       <div className="settings-content">
         {/* Appearance Group */}
         <section className="settings-group">
-          <h2 className="title-md flex items-center gap-2" style={{ marginBottom: '8px' }}>
+          <h2
+            className="title-md flex items-center gap-2"
+            style={{ marginBottom: "8px" }}
+          >
             <Monitor size={20} /> Appearance
           </h2>
           <div className="settings-card">
@@ -99,7 +104,10 @@ export const SettingsPage: React.FC = () => {
 
         {/* Preferences Group */}
         <section className="settings-group">
-          <h2 className="title-md flex items-center gap-2" style={{ marginBottom: '8px' }}>
+          <h2
+            className="title-md flex items-center gap-2"
+            style={{ marginBottom: "8px" }}
+          >
             Preferences
           </h2>
           <div className="settings-card">
@@ -109,7 +117,12 @@ export const SettingsPage: React.FC = () => {
 
         {/* Subtitles Group */}
         <section className="settings-group">
-          <h2 className="title-md flex items-center gap-2" style={{ marginBottom: '8px' }}>Subtitles</h2>
+          <h2
+            className="title-md flex items-center gap-2"
+            style={{ marginBottom: "8px" }}
+          >
+            Subtitles
+          </h2>
           <div className="settings-card">
             <SubtitleSettings />
           </div>
@@ -117,7 +130,9 @@ export const SettingsPage: React.FC = () => {
 
         {/* About Group */}
         <section className="settings-group">
-          <h2 className="title-md" style={{ marginBottom: '8px' }}>About</h2>
+          <h2 className="title-md" style={{ marginBottom: "8px" }}>
+            About
+          </h2>
           <div className="settings-card">
             <div className="settings-row">
               <div className="settings-info">
@@ -126,12 +141,16 @@ export const SettingsPage: React.FC = () => {
                 <FocusableButton
                   className="theme-toggle-btn active"
                   onClick={() => checkAppUpdates(true)}
-                  style={{ width: 'fit-content', padding: '6px 12px', marginTop: '8px' }}
+                  style={{
+                    width: "fit-content",
+                    padding: "6px 12px",
+                    marginTop: "8px",
+                  }}
                 >
                   Check for Updates
                 </FocusableButton>
               </div>
-              <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ display: "flex", gap: "12px" }}>
                 <a
                   href={socialLinks.github}
                   target="_blank"

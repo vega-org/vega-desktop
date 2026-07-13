@@ -1,11 +1,11 @@
-import {useQuery} from '@tanstack/react-query';
-import {useState, useEffect, useMemo} from 'react';
+import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useMemo } from "react";
 
-import {providerManager} from '../services/ProviderManager';
-import {settingsStorage} from '../storage';
+import { providerManager } from "../services/ProviderManager";
+import { settingsStorage } from "../storage";
 
-import {Stream} from '../providers/types';
-import {useDownloadStore} from '../zustand/downloadStore';
+import { Stream } from "../providers/types";
+import { useDownloadStore } from "../zustand/downloadStore";
 
 interface UseStreamOptions {
   activeEpisode: any;
@@ -14,6 +14,81 @@ interface UseStreamOptions {
   enabled?: boolean;
 }
 
+const getCompletedDownload = (activeEpisode: any, routeParams: any) => {
+  const downloads = useDownloadStore.getState().downloads;
+  if (activeEpisode?.localFile) {
+    return Object.values(downloads).find(
+      (item) =>
+        item.status === "completed" && item.filePath === activeEpisode.link,
+    );
+  }
+  const sourceMatch = Object.values(downloads).find(
+    (item) =>
+      item.status === "completed" &&
+      item.sourceLink &&
+      item.sourceLink === activeEpisode?.link,
+  );
+  if (sourceMatch) {
+    return sourceMatch;
+  }
+  const baseTitle = routeParams?.primaryTitle || "Unknown Title";
+  const id =
+    routeParams?.type === "series"
+      ? `${baseTitle}_S${routeParams?.secondaryTitle}_E${(routeParams?.linkIndex || 0) + 1}`
+      : `${baseTitle}_direct_${routeParams?.linkIndex || 0}`;
+  const item = downloads[id];
+  return item?.status === "completed" ? item : undefined;
+};
+
+const createLocalStream = (
+  filePath: string,
+  subtitles: any[] = [],
+): Stream => ({
+  server: "Local File",
+  link: filePath,
+  type: "mp4",
+  subtitles,
+});
+
+const loadLocalStream = async (filePath: string): Promise<Stream> => {
+  const subtitles: any[] = [];
+  try {
+    const { readDir } = await import("@tauri-apps/plugin-fs");
+    const slashIndex = Math.max(
+      filePath.lastIndexOf("\\"),
+      filePath.lastIndexOf("/"),
+    );
+    const directoryPath = filePath.substring(0, slashIndex);
+    const baseName = filePath.substring(
+      slashIndex + 1,
+      filePath.lastIndexOf("."),
+    );
+    const files = await readDir(directoryPath);
+    for (const file of files) {
+      if (
+        file.name?.startsWith(`${baseName}.`) &&
+        (file.name.endsWith(".vtt") || file.name.endsWith(".srt"))
+      ) {
+        const language = file.name.substring(
+          baseName.length + 1,
+          file.name.lastIndexOf("."),
+        );
+        const separator =
+          directoryPath.endsWith("\\") || directoryPath.endsWith("/")
+            ? ""
+            : "/";
+        subtitles.push({
+          url: `${directoryPath}${separator}${file.name}`,
+          language,
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Failed to load local subtitles:", error);
+  }
+  return createLocalStream(filePath, subtitles);
+};
+
 export const useStream = ({
   activeEpisode,
   routeParams,
@@ -21,11 +96,18 @@ export const useStream = ({
   enabled = true,
 }: UseStreamOptions) => {
   const [selectedStream, setSelectedStream] = useState<Stream>({
-    server: '',
-    link: '',
-    type: '',
+    server: "",
+    link: "",
+    type: "",
   });
   const [externalSubs, setExternalSubs] = useState<any[]>([]);
+  const downloadedItem = getCompletedDownload(activeEpisode, routeParams);
+  const localFilePath = activeEpisode?.localFile
+    ? activeEpisode.link
+    : downloadedItem?.filePath;
+  const localPlaceholder = localFilePath
+    ? [createLocalStream(localFilePath)]
+    : undefined;
 
   const {
     data: streamData = [],
@@ -33,85 +115,73 @@ export const useStream = ({
     error,
     refetch,
   } = useQuery<Stream[], Error>({
-    queryKey: ['stream', activeEpisode?.link, routeParams?.type, provider],
+    queryKey: [
+      "stream",
+      activeEpisode?.link,
+      activeEpisode?.sourceLink,
+      localFilePath,
+      routeParams?.type,
+      provider,
+    ],
     queryFn: async () => {
       if (!activeEpisode?.link) {
         return [];
       }
 
-      console.log('Fetching stream for:', activeEpisode);
-
-      // Handle direct URL (downloaded content via provider='local')
-      if (routeParams?.providerValue === 'local' || provider === 'local') {
-        return [
-          {server: 'Local File', link: activeEpisode.link, type: 'mp4'},
-        ];
-      }
-
-      // Check Zustand store for completed download
-      const downloads = useDownloadStore.getState().downloads;
-      const baseTitle = routeParams?.primaryTitle || 'Unknown Title';
-      let id = '';
-      if (routeParams?.type === 'series') {
-        id = `${baseTitle}_S${routeParams?.secondaryTitle}_E${(routeParams?.linkIndex || 0) + 1}`;
-      } else {
-        id = `${baseTitle}_direct_${routeParams?.linkIndex || 0}`;
-      }
-      
-      const downloadedItem = downloads[id];
-      let localStream: Stream | null = null;
-      if (downloadedItem && downloadedItem.status === 'completed') {
-        let subtitles: any[] = [];
-        try {
-          const { readDir } = await import('@tauri-apps/plugin-fs');
-          const filePath = downloadedItem.filePath;
-          const slashIdx = filePath.lastIndexOf('\\') !== -1 ? filePath.lastIndexOf('\\') : filePath.lastIndexOf('/');
-          const dirPath = filePath.substring(0, slashIdx);
-          const baseName = filePath.substring(slashIdx + 1, filePath.lastIndexOf('.'));
-          
-          const files = await readDir(dirPath);
-          for (const f of files) {
-            if (f.name && f.name.startsWith(baseName + '.') && (f.name.endsWith('.vtt') || f.name.endsWith('.srt'))) {
-              const langPart = f.name.substring(baseName.length + 1, f.name.lastIndexOf('.'));
-              const fullPath = (dirPath.endsWith('\\') || dirPath.endsWith('/')) ? dirPath + f.name : dirPath + '/' + f.name;
-              subtitles.push({ url: fullPath, language: langPart });
-            }
-          }
-        } catch (e) {
-          console.error('Failed to load local subtitles:', e);
-        }
-
-        localStream = { server: 'Local File', link: downloadedItem.filePath, type: 'mp4', subtitles };
+      console.log("Fetching stream for:", activeEpisode);
+      const localStream = localFilePath
+        ? await loadLocalStream(localFilePath)
+        : null;
+      const remoteLink = activeEpisode?.localFile
+        ? activeEpisode.sourceLink || downloadedItem?.sourceLink
+        : activeEpisode.link;
+      if (!remoteLink) {
+        return localStream ? [localStream] : [];
       }
 
       // Fetch streams from provider
-      const controller = new AbortController();
-      const data = await providerManager.getStream({
-        link: activeEpisode.link,
-        type: routeParams?.type,
-        signal: controller.signal,
-        providerValue: routeParams?.providerValue || provider,
-      });
+      let data: Stream[] = [];
+      try {
+        const controller = new AbortController();
+        data =
+          (await providerManager.getStream({
+            link: remoteLink,
+            type: routeParams?.type,
+            signal: controller.signal,
+            providerValue: routeParams?.providerValue || provider,
+          })) || [];
+      } catch (error) {
+        if (localStream) {
+          console.warn(
+            "Remote stream refresh failed; using local file:",
+            error,
+          );
+          return [localStream];
+        }
+        throw error;
+      }
 
       // Filter out excluded qualities
       const excludedQualities = settingsStorage.getExcludedQualities() || [];
       const filteredQualities = data?.filter(
-        streamItem => !excludedQualities.includes(streamItem?.quality + 'p'),
+        (streamItem) => !excludedQualities.includes(streamItem?.quality + "p"),
       );
 
-      let finalStreams = filteredQualities?.length > 0 ? filteredQualities : (data || []);
-      
+      let finalStreams =
+        filteredQualities?.length > 0 ? filteredQualities : data;
+
       if (localStream) {
         finalStreams = [localStream, ...finalStreams];
       }
 
       if (!finalStreams || finalStreams.length === 0) {
-        throw new Error('No streams available');
+        throw new Error("No streams available");
       }
 
       return finalStreams;
     },
     enabled: enabled && !!activeEpisode?.link,
+    placeholderData: localPlaceholder,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
     retry: (failureCount, _error) => {
@@ -120,7 +190,7 @@ export const useStream = ({
       }
       return true;
     },
-    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 10000),
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     refetchOnMount: true,
     refetchOnWindowFocus: false,
   });
@@ -132,7 +202,7 @@ export const useStream = ({
 
       // Extract external subtitles
       const subs: any[] = [];
-      streamData.forEach(track => {
+      streamData.forEach((track) => {
         if (track?.subtitles?.length && track.subtitles.length > 0) {
           subs.push(...track.subtitles);
         }
@@ -144,8 +214,8 @@ export const useStream = ({
   // Handle errors
   useEffect(() => {
     if (error) {
-      console.error('Stream fetch error:', error);
-      const errorMessage = error?.message || 'No stream found, try again later';
+      console.error("Stream fetch error:", error);
+      const errorMessage = error?.message || "No stream found, try again later";
       console.warn(errorMessage);
     }
   }, [error]);
@@ -155,7 +225,7 @@ export const useStream = ({
       const currentIndex = streamData.indexOf(selectedStream);
       if (currentIndex < streamData.length - 1) {
         setSelectedStream(streamData[currentIndex + 1]);
-        console.warn('Network error: No network connection available');
+        console.warn("Network error: No network connection available");
         return true;
       }
     }
@@ -192,7 +262,7 @@ export const useVideoSettings = () => {
 
   const processAudioTracks = (tracks: any[]) => {
     const uniqueMap = new Map();
-    tracks.forEach(track => {
+    tracks.forEach((track) => {
       const key = `${track.type}-${track.title}-${track.language}`;
       const existingTrack = uniqueMap.get(key);
 
@@ -202,12 +272,12 @@ export const useVideoSettings = () => {
       }
 
       if (track.selected && !existingTrack.selected) {
-        uniqueMap.set(key, {...existingTrack, ...track, selected: true});
+        uniqueMap.set(key, { ...existingTrack, ...track, selected: true });
       }
     });
 
     const uniqueTracks = Array.from(uniqueMap.values());
-    const selectedIndex = uniqueTracks.findIndex(track => track.selected);
+    const selectedIndex = uniqueTracks.findIndex((track) => track.selected);
 
     setAudioTracks(uniqueTracks);
     if (selectedIndex !== -1) {
@@ -216,12 +286,11 @@ export const useVideoSettings = () => {
   };
 
   const processVideoTracks = (tracks: any[]) => {
-
     if (!tracks || tracks.length === 0) {
       return;
     }
     const uniqueMap = new Map();
-    const uniqueTracks = tracks.filter(track => {
+    const uniqueTracks = tracks.filter((track) => {
       const key = `bitrate-${track.bitrate}-quality ${track.height}`;
       if (!uniqueMap.has(key)) {
         uniqueMap.set(key, true);
@@ -229,12 +298,14 @@ export const useVideoSettings = () => {
       }
       return false;
     });
-        console.log('Processing video tracks:', uniqueTracks);
+    console.log("Processing video tracks:", uniqueTracks);
     setVideoTracks(uniqueTracks);
   };
 
-
-  const handleVideoLoad = (naturalSize?: {width?: number; height?: number}) => {
+  const handleVideoLoad = (naturalSize?: {
+    width?: number;
+    height?: number;
+  }) => {
     if (!naturalSize?.height) {
       return;
     }
@@ -250,7 +321,6 @@ export const useVideoSettings = () => {
     setLoadedVideoSize(null);
   };
 
-
   const effectiveVideoTracks = useMemo(() => {
     if (videoTracks.length > 0) {
       return videoTracks;
@@ -261,8 +331,8 @@ export const useVideoSettings = () => {
           width: loadedVideoSize.width,
           height: loadedVideoSize.height,
           bitrate: 0,
-          codecs: '',
-          trackId: '0',
+          codecs: "",
+          trackId: "0",
           index: 0,
           rotation: 0,
           selected: true,

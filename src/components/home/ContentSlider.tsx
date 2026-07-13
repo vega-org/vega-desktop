@@ -61,15 +61,6 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
   const handlePostClick = (post: Post) => {
     const finalProvider = post.providerValue || providerValue;
 
-    if (finalProvider === "local") {
-      if (post.type === "series") {
-        navigate(`/downloads/series/${encodeURIComponent(post.title)}`);
-      } else {
-        navigate("/downloads");
-      }
-      return;
-    }
-
     let url = `/content/${encodeURIComponent(post.link)}`;
     const params = new URLSearchParams();
     if (finalProvider) params.append("provider", finalProvider);
@@ -108,17 +99,37 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
         className={`slider-container ${hasFocusedChild ? "has-focused-child" : ""}`}
         ref={focusRef as any}
       >
-        <div className="slider-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <h2 className="slider-title headline-md" style={{ marginBottom: 0 }}>{title}</h2>
-          {(typeof filter === 'string' || typeof searchQuery === 'string') && (
-            <FocusableButton 
+        <div
+          className="slider-header"
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "8px",
+          }}
+        >
+          <h2 className="slider-title headline-md" style={{ marginBottom: 0 }}>
+            {title}
+          </h2>
+          {(typeof filter === "string" || typeof searchQuery === "string") && (
+            <FocusableButton
               className="text-primary body-md"
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 16px', outline: 'none' }}
+              style={{
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                padding: "0 16px",
+                outline: "none",
+              }}
               onClick={() => {
-                if (typeof searchQuery === 'string') {
-                  navigate(`/catalog?title=${encodeURIComponent(title)}&searchQuery=${encodeURIComponent(searchQuery)}&provider=${encodeURIComponent(providerValue || '')}`);
+                if (typeof searchQuery === "string") {
+                  navigate(
+                    `/catalog?title=${encodeURIComponent(title)}&searchQuery=${encodeURIComponent(searchQuery)}&provider=${encodeURIComponent(providerValue || "")}`,
+                  );
                 } else {
-                  navigate(`/catalog?title=${encodeURIComponent(title)}&filter=${encodeURIComponent(filter || '')}&provider=${encodeURIComponent(providerValue || '')}`);
+                  navigate(
+                    `/catalog?title=${encodeURIComponent(title)}&filter=${encodeURIComponent(filter || "")}&provider=${encodeURIComponent(providerValue || "")}`,
+                  );
                 }
               }}
             >

@@ -1,52 +1,51 @@
-import {mainStorage} from './StorageService';
-
+import { mainStorage } from "./StorageService";
 
 /**
  * Storage keys for settings
  */
 export enum SettingsKeys {
   // UI preferences
-  PRIMARY_COLOR = 'primaryColor',
-  IS_CUSTOM_THEME = 'isCustomTheme',
-  THEME_BACKGROUND = 'themeBackground',
-  SHOW_TAB_BAR_LABELS = 'showTabBarLabels',
-  CUSTOM_COLOR = 'customColor',
-  TV_MODE_ENABLED = 'tvModeEnabled',
+  PRIMARY_COLOR = "primaryColor",
+  IS_CUSTOM_THEME = "isCustomTheme",
+  THEME_BACKGROUND = "themeBackground",
+  SHOW_TAB_BAR_LABELS = "showTabBarLabels",
+  CUSTOM_COLOR = "customColor",
+  TV_MODE_ENABLED = "tvModeEnabled",
   // Feedback settings
-  HAPTIC_FEEDBACK = 'hapticFeedback',
-  NOTIFICATIONS_ENABLED = 'notificationsEnabled',
+  HAPTIC_FEEDBACK = "hapticFeedback",
+  NOTIFICATIONS_ENABLED = "notificationsEnabled",
 
   // Update settings
-  AUTO_CHECK_UPDATE = 'autoCheckUpdate',
-  AUTO_DOWNLOAD = 'autoDownload',
+  AUTO_CHECK_UPDATE = "autoCheckUpdate",
+  AUTO_DOWNLOAD = "autoDownload",
 
   // Player settings
-  SHOW_MEDIA_CONTROLS = 'showMediaControls',
-  SHOW_HAMBURGER_MENU = 'showHamburgerMenu',
-  HIDE_SEEK_BUTTONS = 'hideSeekButtons',
-  ENABLE_2X_GESTURE = 'enable2xGesture',
-  ENABLE_SWIPE_GESTURE = 'enableSwipeGesture',
+  SHOW_MEDIA_CONTROLS = "showMediaControls",
+  SHOW_HAMBURGER_MENU = "showHamburgerMenu",
+  HIDE_SEEK_BUTTONS = "hideSeekButtons",
+  ENABLE_2X_GESTURE = "enable2xGesture",
+  ENABLE_SWIPE_GESTURE = "enableSwipeGesture",
 
   // Quality settings
-  EXCLUDED_QUALITIES = 'excludedQualities',
+  EXCLUDED_QUALITIES = "excludedQualities",
 
   // Download settings
-  DOWNLOAD_LOCATION = 'downloadLocation',
+  DOWNLOAD_LOCATION = "downloadLocation",
 
   // Subtitle settings
-  SUBTITLE_FONT_SIZE = 'subtitleFontSize',
-  SUBTITLE_FONT_FAMILY = 'subtitleFontFamily',
-  SUBTITLE_FONT_WEIGHT = 'subtitleFontWeight',
-  SUBTITLE_OUTLINE_SIZE = 'subtitleOutlineSize',
-  SUBTITLE_BOTTOM_PADDING = 'subtitleBottomPadding',
+  SUBTITLE_FONT_SIZE = "subtitleFontSize",
+  SUBTITLE_FONT_FAMILY = "subtitleFontFamily",
+  SUBTITLE_FONT_WEIGHT = "subtitleFontWeight",
+  SUBTITLE_OUTLINE_SIZE = "subtitleOutlineSize",
+  SUBTITLE_BOTTOM_PADDING = "subtitleBottomPadding",
 
-  LIST_VIEW_TYPE = 'viewType',
+  LIST_VIEW_TYPE = "viewType",
 
   // Telemetry (privacy)
-  TELEMETRY_OPT_IN = 'telemetryOptIn',
+  TELEMETRY_OPT_IN = "telemetryOptIn",
 
   // Advanced settings
-  HARDWARE_ACCELERATION = 'hardwareAcceleration',
+  HARDWARE_ACCELERATION = "hardwareAcceleration",
 }
 
 /**
@@ -55,7 +54,7 @@ export enum SettingsKeys {
 export class SettingsStorage {
   // Theme settings
   getThemeBackground(): string {
-    return mainStorage.getString(SettingsKeys.THEME_BACKGROUND) || 'oled';
+    return mainStorage.getString(SettingsKeys.THEME_BACKGROUND) || "oled";
   }
 
   setThemeBackground(theme: string): void {
@@ -63,7 +62,7 @@ export class SettingsStorage {
   }
 
   getPrimaryColor(): string {
-    return mainStorage.getString(SettingsKeys.PRIMARY_COLOR) || '#FF6347';
+    return mainStorage.getString(SettingsKeys.PRIMARY_COLOR) || "#FF6347";
   }
 
   setPrimaryColor(color: string): void {
@@ -79,7 +78,7 @@ export class SettingsStorage {
   }
 
   getCustomColor(): string {
-    return mainStorage.getString(SettingsKeys.CUSTOM_COLOR) || '#FF6347';
+    return mainStorage.getString(SettingsKeys.CUSTOM_COLOR) || "#FF6347";
   }
 
   setCustomColor(color: string): void {
@@ -96,7 +95,7 @@ export class SettingsStorage {
   }
 
   isTvModeEnabled(): boolean {
-    const defaultTvMode = import.meta.env.VITE_TV_MODE === 'true';
+    const defaultTvMode = import.meta.env.VITE_TV_MODE === "true";
     return mainStorage.getBool(SettingsKeys.TV_MODE_ENABLED, defaultTvMode);
   }
 
@@ -191,7 +190,7 @@ export class SettingsStorage {
   }
 
   getDownloadLocation(): string {
-    return mainStorage.getString(SettingsKeys.DOWNLOAD_LOCATION) || 'vega';
+    return mainStorage.getString(SettingsKeys.DOWNLOAD_LOCATION) || "vega";
   }
 
   setDownloadLocation(location: string): void {
@@ -199,7 +198,7 @@ export class SettingsStorage {
   }
 
   resetDownloadLocation(): void {
-    mainStorage.setString(SettingsKeys.DOWNLOAD_LOCATION, 'vega');
+    mainStorage.setString(SettingsKeys.DOWNLOAD_LOCATION, "vega");
   }
 
   // Subtitle settings
@@ -212,7 +211,9 @@ export class SettingsStorage {
   }
 
   getSubtitleFontFamily(): string {
-    return mainStorage.getString(SettingsKeys.SUBTITLE_FONT_FAMILY) || 'sans-serif';
+    return (
+      mainStorage.getString(SettingsKeys.SUBTITLE_FONT_FAMILY) || "sans-serif"
+    );
   }
 
   setSubtitleFontFamily(family: string): void {
@@ -245,7 +246,7 @@ export class SettingsStorage {
 
   getListViewType(): number {
     return parseInt(
-      mainStorage.getString(SettingsKeys.LIST_VIEW_TYPE) || '1',
+      mainStorage.getString(SettingsKeys.LIST_VIEW_TYPE) || "1",
       10,
     );
   }
@@ -286,27 +287,27 @@ export class SettingsStorage {
   // DNS over HTTPS (DoH) settings
   isDohEnabled(): boolean {
     // Default to true as in mobile app
-    return mainStorage.getBool('dohEnabled', true);
+    return mainStorage.getBool("dohEnabled", true);
   }
 
   setDohEnabled(enabled: boolean): void {
-    mainStorage.setBool('dohEnabled', enabled);
+    mainStorage.setBool("dohEnabled", enabled);
   }
 
   getDohProvider(): string {
-    return mainStorage.getString('dohProvider') || 'cloudflare';
+    return mainStorage.getString("dohProvider") || "cloudflare";
   }
 
   setDohProvider(provider: string): void {
-    mainStorage.setString('dohProvider', provider);
+    mainStorage.setString("dohProvider", provider);
   }
 
   getDohCustomUrl(): string {
-    return mainStorage.getString('dohCustomUrl') || '';
+    return mainStorage.getString("dohCustomUrl") || "";
   }
 
   setDohCustomUrl(url: string): void {
-    mainStorage.setString('dohCustomUrl', url);
+    mainStorage.setString("dohCustomUrl", url);
   }
 }
 

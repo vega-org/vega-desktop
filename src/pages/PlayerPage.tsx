@@ -1,19 +1,28 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { useMpvPlayer } from '../lib/hooks/useMpvPlayer';
-import { useStream } from '../lib/hooks/useStream';
-import { usePlayerProgress } from '../lib/hooks/usePlayerSettings';
-import useContentStore from '../lib/zustand/contentStore';
-import useWatchHistoryStore from '../lib/zustand/watchHistrory';
-import { cacheStorage } from '../lib/storage';
-import { PlayerControls } from './PlayerControls';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { LogicalSize } from '@tauri-apps/api/dpi';
-import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation-react';
-import { FocusableButton } from '../components/layout/FocusableButton';
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useMpvPlayer } from "../lib/hooks/useMpvPlayer";
+import { useStream } from "../lib/hooks/useStream";
+import { usePlayerProgress } from "../lib/hooks/usePlayerSettings";
+import useContentStore from "../lib/zustand/contentStore";
+import useWatchHistoryStore from "../lib/zustand/watchHistrory";
+import { cacheStorage } from "../lib/storage";
+import { PlayerControls } from "./PlayerControls";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { LogicalSize } from "@tauri-apps/api/dpi";
+import {
+  FocusContext,
+  useFocusable,
+} from "@noriginmedia/norigin-spatial-navigation-react";
+import { FocusableButton } from "../components/layout/FocusableButton";
 
-import { LuPlay as Play } from 'react-icons/lu';
-import './PlayerPage.css';
+import { LuPlay as Play } from "react-icons/lu";
+import "./PlayerPage.css";
 
 interface PlayerLocationState {
   episodeList: any[];
@@ -24,6 +33,7 @@ interface PlayerLocationState {
   poster?: { poster?: string; logo?: string; background?: string };
   providerValue: string;
   infoUrl: string;
+  doNotTrack?: boolean;
 }
 
 export const PlayerPage: React.FC = () => {
@@ -54,16 +64,20 @@ const PlayerInner: React.FC<PlayerInnerProps> = ({ state }) => {
   const [activeEpisodeIndex, setActiveEpisodeIndex] = useState(state.linkIndex);
   const activeEpisode = state.episodeList[activeEpisodeIndex];
 
-  const routeParams = useMemo(() => ({
-    episodeList: state.episodeList,
-    linkIndex: activeEpisodeIndex,
-    type: state.type,
-    primaryTitle: state.primaryTitle,
-    secondaryTitle: state.secondaryTitle,
-    providerValue: state.providerValue,
-    infoUrl: state.infoUrl,
-    poster: state.poster,
-  }), [state, activeEpisodeIndex]);
+  const routeParams = useMemo(
+    () => ({
+      episodeList: state.episodeList,
+      linkIndex: activeEpisodeIndex,
+      type: state.type,
+      primaryTitle: state.primaryTitle,
+      secondaryTitle: state.secondaryTitle,
+      providerValue: state.providerValue,
+      infoUrl: state.infoUrl,
+      doNotTrack: state.doNotTrack,
+      poster: state.poster,
+    }),
+    [state, activeEpisodeIndex],
+  );
 
   const {
     streamData,
@@ -75,11 +89,12 @@ const PlayerInner: React.FC<PlayerInnerProps> = ({ state }) => {
   } = useStream({
     activeEpisode,
     routeParams,
-    provider: state.providerValue || provider?.value || '',
+    provider: state.providerValue || provider?.value || "",
   });
 
-  const isAndroid = navigator.userAgent.toLowerCase().includes('android');
-  const isLinux = navigator.userAgent.toLowerCase().includes('linux') && !isAndroid;
+  const isAndroid = navigator.userAgent.toLowerCase().includes("android");
+  const isLinux =
+    navigator.userAgent.toLowerCase().includes("linux") && !isAndroid;
 
   if (isAndroid || isLinux) {
     return (
@@ -123,17 +138,21 @@ const TvPlayer: React.FC<any> = ({
   selectedStream,
   setSelectedStream,
   isAndroid,
-  isLinux
+  isLinux,
 }) => {
   const navigate = useNavigate();
   const { addItem } = useWatchHistoryStore();
   const [isLaunching, setIsLaunching] = useState(false);
 
-  const { ref: focusRef, focusKey, focusSelf } = useFocusable({
+  const {
+    ref: focusRef,
+    focusKey,
+    focusSelf,
+  } = useFocusable({
     focusable: true,
     trackChildren: true,
     isFocusBoundary: true,
-    preferredChildFocusKey: 'TV_SERVER_0',
+    preferredChildFocusKey: "TV_SERVER_0",
   });
 
   useEffect(() => {
@@ -146,81 +165,110 @@ const TvPlayer: React.FC<any> = ({
 
   useEffect(() => {
     // Save to watch history when opened
-    if (state.primaryTitle) {
+    if (state.primaryTitle && !state.doNotTrack) {
       addItem({
         id: state.infoUrl || activeEpisode?.link,
         title: state.primaryTitle,
-        poster: state.poster?.poster || state.poster?.background || '',
-        link: state.infoUrl || '',
-        provider: state.providerValue || '',
+        poster: state.poster?.poster || state.poster?.background || "",
+        link: state.infoUrl || "",
+        provider: state.providerValue || "",
         lastPlayed: Date.now(),
         playbackRate: 1,
         episodeTitle: state.secondaryTitle,
       });
     }
-  }, [state.primaryTitle, activeEpisode?.link, addItem]);
+  }, [state, activeEpisode?.link, addItem]);
 
-  const handlePlayNative = useCallback(async (stream: any) => {
-    if (!stream?.link) return;
-    setIsLaunching(true);
-    try {
-      let playUrl = stream.link;
+  const handlePlayNative = useCallback(
+    async (stream: any) => {
+      if (!stream?.link) return;
+      setIsLaunching(true);
+      try {
+        let playUrl = stream.link;
 
-      if (playUrl.startsWith('magnet:')) {
-        try {
-          const { invoke } = await import('@tauri-apps/api/core');
-          const apiPort = await invoke<number>('get_torrent_api_port');
-          const addRes = await fetch(`http://127.0.0.1:${apiPort}/torrents`, {
-            method: 'POST',
-            body: playUrl
-          });
-          if (!addRes.ok) throw new Error('Failed to add torrent');
-          const data = await addRes.json();
-          const infoHash = data.details.info_hash;
-          
-          // Wait for torrent to become live
-          const deadline = Date.now() + 60000;
-          while (Date.now() < deadline) {
-            const statsRes = await fetch(`http://127.0.0.1:${apiPort}/torrents/${infoHash}/stats/v1`);
-            if (statsRes.ok) {
-              const stats = await statsRes.json();
-              if (stats.state === 'live' || stats.state === 'paused') break;
+        if (playUrl.startsWith("magnet:")) {
+          try {
+            const { invoke } = await import("@tauri-apps/api/core");
+            const apiPort = await invoke<number>("get_torrent_api_port");
+            const addRes = await fetch(`http://127.0.0.1:${apiPort}/torrents`, {
+              method: "POST",
+              body: playUrl,
+            });
+            if (!addRes.ok) throw new Error("Failed to add torrent");
+            const data = await addRes.json();
+            const infoHash = data.details.info_hash;
+
+            // Wait for torrent to become live
+            const deadline = Date.now() + 60000;
+            while (Date.now() < deadline) {
+              const statsRes = await fetch(
+                `http://127.0.0.1:${apiPort}/torrents/${infoHash}/stats/v1`,
+              );
+              if (statsRes.ok) {
+                const stats = await statsRes.json();
+                if (stats.state === "live" || stats.state === "paused") break;
+              }
+              await new Promise((r) => setTimeout(r, 500));
             }
-            await new Promise(r => setTimeout(r, 500));
+
+            const torrentFiles = data.details.files || [];
+            const rawName = torrentFiles[0]?.name || "";
+            const fileName = rawName.substring(
+              Math.max(rawName.lastIndexOf("/"), rawName.lastIndexOf("\\")) + 1,
+            );
+            const nameSuffix = fileName
+              ? `/${encodeURIComponent(fileName)}`
+              : "";
+            playUrl = `http://127.0.0.1:${apiPort}/torrents/${infoHash}/stream/0${nameSuffix}`;
+          } catch (e) {
+            console.error(
+              "Failed to resolve torrent stream for external player",
+              e,
+            );
           }
-
-          const torrentFiles = data.details.files || [];
-          const rawName = torrentFiles[0]?.name || '';
-          const fileName = rawName.substring(Math.max(rawName.lastIndexOf('/'), rawName.lastIndexOf('\\')) + 1);
-          const nameSuffix = fileName ? `/${encodeURIComponent(fileName)}` : '';
-          playUrl = `http://127.0.0.1:${apiPort}/torrents/${infoHash}/stream/0${nameSuffix}`;
-        } catch (e) {
-          console.error("Failed to resolve torrent stream for external player", e);
         }
-      }
 
-      if (isAndroid) {
-        const { openUrl } = await import('@tauri-apps/plugin-opener');
-        const headers = stream.headers ? JSON.stringify(stream.headers) : '';
-        const intentUrl = `vega://play?url=${encodeURIComponent(playUrl)}&headers=${encodeURIComponent(headers)}`;
-        await openUrl(intentUrl);
-      } else if (isLinux) {
-        const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('open_external_player', { url: playUrl }).catch(console.error);
+        if (isAndroid) {
+          const { openUrl } = await import("@tauri-apps/plugin-opener");
+          const headers = stream.headers ? JSON.stringify(stream.headers) : "";
+          const intentUrl = `vega://play?url=${encodeURIComponent(playUrl)}&headers=${encodeURIComponent(headers)}`;
+          await openUrl(intentUrl);
+        } else if (isLinux) {
+          const { invoke } = await import("@tauri-apps/api/core");
+          await invoke("open_external_player", { url: playUrl }).catch(
+            console.error,
+          );
+        }
+      } catch (e) {
+        console.error("Failed to open player", e);
+      } finally {
+        // Keep loader visible for a couple seconds to cover the external player's startup time
+        setTimeout(() => setIsLaunching(false), 2000);
       }
-    } catch (e) {
-      console.error("Failed to open player", e);
-    } finally {
-      // Keep loader visible for a couple seconds to cover the external player's startup time
-      setTimeout(() => setIsLaunching(false), 2000);
-    }
-  }, [isAndroid, isLinux]);
+    },
+    [isAndroid, isLinux],
+  );
 
   if (streamLoading) {
     return (
-      <div className="player-page" style={{ backgroundImage: `url(${state.poster?.background})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
-        <div className="player-page-overlay" style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(20px)' }} />
-        <div className="player-loading" style={{ background: 'transparent' }}>
+      <div
+        className="player-page"
+        style={{
+          backgroundImage: `url(${state.poster?.background})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
+        <div
+          className="player-page-overlay"
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.85)",
+            backdropFilter: "blur(20px)",
+          }}
+        />
+        <div className="player-loading" style={{ background: "transparent" }}>
           <div className="loading-spinner" />
           <span className="loading-text">Fetching Stream...</span>
         </div>
@@ -231,11 +279,34 @@ const TvPlayer: React.FC<any> = ({
   if (streamError) {
     const bgUrl = state.poster?.background || state.poster?.poster;
     return (
-      <div className="player-page controls-visible" style={{ backgroundImage: bgUrl ? `url(${bgUrl})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }}>
-        {bgUrl && <div className="player-page-overlay" style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(20px)' }} />}
-        <div className="player-error" style={{ background: bgUrl ? 'transparent' : '#000', zIndex: 1 }}>
-          <p>{streamError.message || 'Failed to load stream'}</p>
-          <FocusableButton className="action-btn primary-btn" onClick={() => navigate(-1)}>
+      <div
+        className="player-page controls-visible"
+        style={{
+          backgroundImage: bgUrl ? `url(${bgUrl})` : "none",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
+        {bgUrl && (
+          <div
+            className="player-page-overlay"
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.85)",
+              backdropFilter: "blur(20px)",
+            }}
+          />
+        )}
+        <div
+          className="player-error"
+          style={{ background: bgUrl ? "transparent" : "#000", zIndex: 1 }}
+        >
+          <p>{streamError.message || "Failed to load stream"}</p>
+          <FocusableButton
+            className="action-btn primary-btn"
+            onClick={() => navigate(-1)}
+          >
             Go Back
           </FocusableButton>
         </div>
@@ -249,46 +320,120 @@ const TvPlayer: React.FC<any> = ({
         ref={focusRef}
         className="tv-server-selection"
         style={{
-          height: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
+          height: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
           backgroundImage: `url(${state.poster?.background || state.poster?.poster})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          color: 'white'
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          color: "white",
         }}
       >
-        <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(20px)' }} />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.85)",
+            backdropFilter: "blur(20px)",
+          }}
+        />
 
-        <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', maxWidth: '800px', width: '100%', padding: '40px' }}>
-
-          <h2 style={{ fontSize: '3rem', fontWeight: 800, marginBottom: '8px', textAlign: 'center', textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>{state.primaryTitle}</h2>
-          {activeEpisode?.title && <h3 style={{ fontSize: '1.5rem', color: '#ccc', marginBottom: '40px', fontWeight: 500 }}>{activeEpisode.title}</h3>}
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            maxWidth: "800px",
+            width: "100%",
+            padding: "40px",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: "3rem",
+              fontWeight: 800,
+              marginBottom: "8px",
+              textAlign: "center",
+              textShadow: "0 2px 10px rgba(0,0,0,0.5)",
+            }}
+          >
+            {state.primaryTitle}
+          </h2>
+          {activeEpisode?.title && (
+            <h3
+              style={{
+                fontSize: "1.5rem",
+                color: "#ccc",
+                marginBottom: "40px",
+                fontWeight: 500,
+              }}
+            >
+              {activeEpisode.title}
+            </h3>
+          )}
 
           {isLaunching ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '40px' }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                marginTop: "40px",
+              }}
+            >
               <div className="loading-spinner" />
-              <span style={{ marginTop: '16px', fontSize: '1.2rem', color: '#ccc' }}>Opening External Player...</span>
+              <span
+                style={{ marginTop: "16px", fontSize: "1.2rem", color: "#ccc" }}
+              >
+                Opening External Player...
+              </span>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '400px' }}>
-              <h4 style={{ fontSize: '1.1rem', color: '#aaa', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Select Server</h4>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "16px",
+                width: "100%",
+                maxWidth: "400px",
+              }}
+            >
+              <h4
+                style={{
+                  fontSize: "1.1rem",
+                  color: "#aaa",
+                  textTransform: "uppercase",
+                  letterSpacing: "1px",
+                  marginBottom: "8px",
+                }}
+              >
+                Select Server
+              </h4>
 
               {streamData?.map((stream: any, idx: number) => (
                 <FocusableButton
                   key={idx}
                   focusKey={`TV_SERVER_${idx}`}
-                  className={`action-btn ${selectedStream?.link === stream.link ? 'primary-btn' : 'secondary-btn'}`}
-                  style={{ width: '100%', justifyContent: 'center', padding: '16px', fontSize: '1.2rem', borderRadius: '12px' }}
+                  className={`action-btn ${selectedStream?.link === stream.link ? "primary-btn" : "secondary-btn"}`}
+                  style={{
+                    width: "100%",
+                    justifyContent: "center",
+                    padding: "16px",
+                    fontSize: "1.2rem",
+                    borderRadius: "12px",
+                  }}
                   onClick={() => {
                     setSelectedStream(stream);
                     handlePlayNative(stream);
                   }}
                 >
-                  <Play size={20} style={{ marginRight: '10px' }} />
-                  {stream.server || `Server ${idx + 1}`} {stream.quality ? `(${stream.quality})` : ''}
+                  <Play size={20} style={{ marginRight: "10px" }} />
+                  {stream.server || `Server ${idx + 1}`}{" "}
+                  {stream.quality ? `(${stream.quality})` : ""}
                 </FocusableButton>
               ))}
             </div>
@@ -297,12 +442,11 @@ const TvPlayer: React.FC<any> = ({
           <FocusableButton
             focusKey="TV_SERVER_BACK"
             className="action-btn text-btn"
-            style={{ marginTop: '50px', fontSize: '1.2rem', opacity: 0.8 }}
+            style={{ marginTop: "50px", fontSize: "1.2rem", opacity: 0.8 }}
             onClick={() => navigate(-1)}
           >
             Go Back
           </FocusableButton>
-
         </div>
       </div>
     </FocusContext.Provider>
@@ -320,7 +464,7 @@ const DesktopPlayer: React.FC<any> = ({
   selectedStream,
   setSelectedStream,
   externalSubs,
-  routeParams
+  routeParams,
 }) => {
   const navigate = useNavigate();
   const { addItem, updatePlaybackInfo } = useWatchHistoryStore();
@@ -339,40 +483,47 @@ const DesktopPlayer: React.FC<any> = ({
 
   const toast = useCallback((msg: string) => {
     const id = ++toastIdRef.current;
-    setToasts(prev => [...prev, { id, msg }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 2200);
+    setToasts((prev) => [...prev, { id, msg }]);
+    setTimeout(
+      () => setToasts((prev) => prev.filter((t) => t.id !== id)),
+      2200,
+    );
   }, []);
 
   const handleNextEpisode = useCallback(() => {
     if (activeEpisodeIndex < state.episodeList.length - 1) {
       prevStreamLinkRef.current = null;
       setActiveEpisodeIndex((prev: number) => prev + 1);
-      toast('Playing next episode');
+      toast("Playing next episode");
     }
-  }, [activeEpisodeIndex, state.episodeList.length, toast, setActiveEpisodeIndex]);
+  }, [
+    activeEpisodeIndex,
+    state.episodeList.length,
+    toast,
+    setActiveEpisodeIndex,
+  ]);
 
   const handlePrevEpisode = useCallback(() => {
     if (activeEpisodeIndex > 0) {
       prevStreamLinkRef.current = null;
       setActiveEpisodeIndex((prev: number) => prev - 1);
-      toast('Playing previous episode');
+      toast("Playing previous episode");
     }
   }, [activeEpisodeIndex, toast, setActiveEpisodeIndex]);
 
   const mpv = useMpvPlayer({
-
     onFileLoaded: () => {
       const uniqueEpisodeKey = `resume_${routeParams?.primaryTitle}_${routeParams?.secondaryTitle}_${activeEpisodeIndex}`;
-      console.log('uniqueEpisodeKey', uniqueEpisodeKey);
+      console.log("uniqueEpisodeKey", uniqueEpisodeKey);
       const cached = cacheStorage.getString(uniqueEpisodeKey);
-      console.log('cached', cached);
+      console.log("cached", cached);
       if (cached) {
         try {
           const { position } = JSON.parse(cached);
           if (position > 5) mpv.seek(position);
-        } catch { }
+        } catch {}
       }
-    }
+    },
   });
 
   const { handleProgress } = usePlayerProgress({
@@ -383,21 +534,25 @@ const DesktopPlayer: React.FC<any> = ({
   });
 
   useEffect(() => {
-    document.documentElement.style.background = 'transparent';
-    document.body.style.background = 'transparent';
-    const root = document.getElementById('root');
-    if (root) root.style.background = 'transparent';
-      return () => {
-      document.documentElement.style.background = '';
-      document.body.style.background = '';
-      if (root) root.style.background = '';
-      getCurrentWindow().setFullscreen(false).catch(() => {});
+    document.documentElement.style.background = "transparent";
+    document.body.style.background = "transparent";
+    const root = document.getElementById("root");
+    if (root) root.style.background = "transparent";
+    return () => {
+      document.documentElement.style.background = "";
+      document.body.style.background = "";
+      if (root) root.style.background = "";
+      getCurrentWindow()
+        .setFullscreen(false)
+        .catch(() => {});
     };
   }, []);
 
   useEffect(() => {
     mpv.initPlayer();
-    return () => { mpv.destroyPlayer(); };
+    return () => {
+      mpv.destroyPlayer();
+    };
   }, []);
 
   useEffect(() => {
@@ -410,30 +565,46 @@ const DesktopPlayer: React.FC<any> = ({
     prevStreamLinkRef.current = selectedStream.link;
 
     (async () => {
-      const subs = selectedStream.subtitles?.length ? selectedStream.subtitles : externalSubs;
-      await mpv.loadFile(selectedStream.link, selectedStream.headers, subs, selectedStream.type);
+      const subs = selectedStream.subtitles?.length
+        ? selectedStream.subtitles
+        : externalSubs;
+      await mpv.loadFile(
+        selectedStream.link,
+        selectedStream.headers,
+        subs,
+        selectedStream.type,
+      );
     })();
-  }, [mpv.isInitialized, selectedStream?.link, activeEpisode?.link, toast, externalSubs]);
+  }, [
+    mpv.isInitialized,
+    selectedStream?.link,
+    activeEpisode?.link,
+    toast,
+    externalSubs,
+  ]);
 
   useEffect(() => {
     if (mpv.currentTime > 0 && mpv.duration > 0) {
-      handleProgress({ currentTime: mpv.currentTime, seekableDuration: mpv.duration });
+      handleProgress({
+        currentTime: mpv.currentTime,
+        seekableDuration: mpv.duration,
+      });
     }
   }, [Math.floor(mpv.currentTime)]);
 
   useEffect(() => {
-    if (!state.primaryTitle) return;
+    if (!state.primaryTitle || state.doNotTrack) return;
     addItem({
       id: state.infoUrl || activeEpisode?.link,
       title: state.primaryTitle,
-      poster: state.poster?.poster || state.poster?.background || '',
-      link: state.infoUrl || '',
-      provider: state.providerValue || provider?.value || '',
+      poster: state.poster?.poster || state.poster?.background || "",
+      link: state.infoUrl || "",
+      provider: state.providerValue || provider?.value || "",
       lastPlayed: Date.now(),
       playbackRate: 1,
       episodeTitle: state.secondaryTitle,
     });
-  }, [activeEpisode?.link]);
+  }, [state, activeEpisode?.link, addItem, provider?.value]);
 
   const hideControls = useCallback(() => setShowControls(false), []);
   const scheduleHide = useCallback(() => {
@@ -446,7 +617,9 @@ const DesktopPlayer: React.FC<any> = ({
     scheduleHide();
   }, [scheduleHide]);
 
-  useEffect(() => { if (showControls) scheduleHide(); }, [showControls, scheduleHide]);
+  useEffect(() => {
+    if (showControls) scheduleHide();
+  }, [showControls, scheduleHide]);
 
   const handleMouseMove = useCallback(() => revealControls(), [revealControls]);
   const handleBackgroundClick = useCallback(() => {
@@ -459,14 +632,19 @@ const DesktopPlayer: React.FC<any> = ({
   }, [showControls, revealControls]);
 
   useEffect(() => {
-    import('@noriginmedia/norigin-spatial-navigation-core').then(({ pause, resume }) => {
-      pause();
-      return () => resume();
-    }).catch(() => { });
+    import("@noriginmedia/norigin-spatial-navigation-core")
+      .then(({ pause, resume }) => {
+        pause();
+        return () => resume();
+      })
+      .catch(() => {});
 
     const handleWheel = (e: WheelEvent) => {
       revealControls();
-      const newVol = e.deltaY < 0 ? Math.min(150, mpv.volume + 5) : Math.max(0, mpv.volume - 5);
+      const newVol =
+        e.deltaY < 0
+          ? Math.min(150, mpv.volume + 5)
+          : Math.max(0, mpv.volume - 5);
       mpv.setVolumeLevel(newVol);
     };
 
@@ -475,46 +653,58 @@ const DesktopPlayer: React.FC<any> = ({
     const onKey = (e: KeyboardEvent) => {
       revealControls();
       switch (e.key) {
-        case ' ': case 'k': case 'Enter':
-          e.preventDefault(); mpv.togglePause(); break;
-        case 'ArrowLeft':
-          e.preventDefault(); mpv.seek(-10, 'relative'); break;
-        case 'ArrowRight':
-          e.preventDefault(); mpv.seek(10, 'relative'); break;
-        case 'ArrowUp':
+        case " ":
+        case "k":
+        case "Enter":
+          e.preventDefault();
+          mpv.togglePause();
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          mpv.seek(-10, "relative");
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          mpv.seek(10, "relative");
+          break;
+        case "ArrowUp":
           e.preventDefault();
           mpv.setVolumeLevel(Math.min(150, mpv.volume + 5));
           toast(`Volume: ${Math.min(150, Math.round(mpv.volume + 5))}%`);
           break;
-        case 'ArrowDown':
+        case "ArrowDown":
           e.preventDefault();
           mpv.setVolumeLevel(Math.max(0, mpv.volume - 5));
           toast(`Volume: ${Math.max(0, Math.round(mpv.volume - 5))}%`);
           break;
-        case 'f':
-          toggleFullscreen(); break;
-        case 'Escape':
+        case "f":
+          toggleFullscreen();
+          break;
+        case "Escape":
           if (isFullscreen) toggleFullscreen();
           else navigate(-1);
           break;
-        case 'm':
+        case "m":
           mpv.setVolumeLevel(mpv.volume > 0 ? 0 : 100);
-          toast(mpv.volume > 0 ? 'Muted' : 'Unmuted');
+          toast(mpv.volume > 0 ? "Muted" : "Unmuted");
           break;
-        case 'n':
-          handleNextEpisode(); break;
+        case "n":
+          handleNextEpisode();
+          break;
       }
     };
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('wheel', handleWheel);
-    window.addEventListener('mousemove', onMouseMoveEvent);
-    window.addEventListener('touchstart', onTouch);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("wheel", handleWheel);
+    window.addEventListener("mousemove", onMouseMoveEvent);
+    window.addEventListener("touchstart", onTouch);
     return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('wheel', handleWheel);
-      window.removeEventListener('mousemove', onMouseMoveEvent);
-      window.removeEventListener('touchstart', onTouch);
-      import('@noriginmedia/norigin-spatial-navigation-core').then(({ resume }) => resume()).catch(() => { });
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("mousemove", onMouseMoveEvent);
+      window.removeEventListener("touchstart", onTouch);
+      import("@noriginmedia/norigin-spatial-navigation-core")
+        .then(({ resume }) => resume())
+        .catch(() => {});
     };
   }, [mpv, isFullscreen, handleNextEpisode, revealControls, toast]);
 
@@ -524,7 +714,9 @@ const DesktopPlayer: React.FC<any> = ({
       const isFull = await win.isFullscreen();
       await win.setFullscreen(!isFull);
       setIsFullscreen(!isFull);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const togglePip = async () => {
@@ -550,25 +742,35 @@ const DesktopPlayer: React.FC<any> = ({
           await win.setSize(new LogicalSize(1280, 720));
         }
       }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const toggleCrop = () => {
     const nextCrop = !isCropped;
     setIsCropped(nextCrop);
-    mpv.setProperty('panscan', nextCrop ? 1.0 : 0.0);
+    mpv.setProperty("panscan", nextCrop ? 1.0 : 0.0);
   };
 
-  const handleStreamSelect = useCallback((stream: any) => {
-    prevStreamLinkRef.current = null;
-    setSelectedStream(stream);
-  }, [setSelectedStream]);
+  const handleStreamSelect = useCallback(
+    (stream: any) => {
+      prevStreamLinkRef.current = null;
+      setSelectedStream(stream);
+    },
+    [setSelectedStream],
+  );
 
   const showNextBtn = useMemo(() => {
     if (activeEpisodeIndex >= state.episodeList.length - 1) return false;
     if (mpv.duration <= 0) return false;
-    return (mpv.currentTime / mpv.duration) > 0.8;
-  }, [activeEpisodeIndex, mpv.currentTime, mpv.duration, state.episodeList.length]);
+    return mpv.currentTime / mpv.duration > 0.8;
+  }, [
+    activeEpisodeIndex,
+    mpv.currentTime,
+    mpv.duration,
+    state.episodeList.length,
+  ]);
 
   if (streamLoading) {
     const bgUrl = state.poster?.background || state.poster?.poster;
@@ -576,11 +778,31 @@ const DesktopPlayer: React.FC<any> = ({
       <div className="player-page controls-visible">
         {bgUrl && (
           <>
-            <div style={{ position: 'absolute', inset: 0, backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', zIndex: -2 }} />
-            <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(20px)', zIndex: -1 }} />
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                backgroundImage: `url(${bgUrl})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+                zIndex: -2,
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                backgroundColor: "rgba(0,0,0,0.85)",
+                backdropFilter: "blur(20px)",
+                zIndex: -1,
+              }}
+            />
           </>
         )}
-        <div className="player-loading" style={{ background: bgUrl ? 'transparent' : '#000' }}>
+        <div
+          className="player-loading"
+          style={{ background: bgUrl ? "transparent" : "#000" }}
+        >
           <div className="loading-spinner" />
           <span className="loading-text">Fetching stream...</span>
         </div>
@@ -594,12 +816,32 @@ const DesktopPlayer: React.FC<any> = ({
       <div className="player-page controls-visible">
         {bgUrl && (
           <>
-            <div style={{ position: 'absolute', inset: 0, backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', zIndex: -2 }} />
-            <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(20px)', zIndex: -1 }} />
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                backgroundImage: `url(${bgUrl})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+                zIndex: -2,
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                backgroundColor: "rgba(0,0,0,0.85)",
+                backdropFilter: "blur(20px)",
+                zIndex: -1,
+              }}
+            />
           </>
         )}
-        <div className="player-error" style={{ background: bgUrl ? 'transparent' : '#000' }}>
-          <p>{streamError.message || 'Failed to load stream'}</p>
+        <div
+          className="player-error"
+          style={{ background: bgUrl ? "transparent" : "#000" }}
+        >
+          <p>{streamError.message || "Failed to load stream"}</p>
           <button onClick={() => navigate(-1)}>Go Back</button>
         </div>
       </div>
@@ -608,10 +850,10 @@ const DesktopPlayer: React.FC<any> = ({
 
   return (
     <div
-      className={`player-page ${showControls ? 'controls-visible' : ''}`}
+      className={`player-page ${showControls ? "controls-visible" : ""}`}
       onMouseMove={handleMouseMove}
-      style={{ backgroundColor: mpv.currentTime > 0 ? 'transparent' : '#000' }}
-      {...(isPip ? { 'data-tauri-drag-region': true } : {})}
+      style={{ backgroundColor: mpv.currentTime > 0 ? "transparent" : "#000" }}
+      {...(isPip ? { "data-tauri-drag-region": true } : {})}
     >
       <PlayerControls
         visible={showControls}
@@ -624,9 +866,18 @@ const DesktopPlayer: React.FC<any> = ({
         secondaryTitle={activeEpisode?.title || state.secondaryTitle}
         showNextEpisode={showNextBtn}
         onBack={() => navigate(-1)}
-        onTogglePause={() => { mpv.togglePause(); revealControls(); }}
-        onSeek={(t) => { mpv.seek(t); revealControls(); }}
-        onSeekRelative={(d) => { mpv.seek(d, 'relative'); revealControls(); }}
+        onTogglePause={() => {
+          mpv.togglePause();
+          revealControls();
+        }}
+        onSeek={(t) => {
+          mpv.seek(t);
+          revealControls();
+        }}
+        onSeekRelative={(d) => {
+          mpv.seek(d, "relative");
+          revealControls();
+        }}
         onNextEpisode={handleNextEpisode}
         onPrevEpisode={handlePrevEpisode}
         hasNextEpisode={activeEpisodeIndex < state.episodeList.length - 1}
@@ -646,14 +897,25 @@ const DesktopPlayer: React.FC<any> = ({
         streamData={streamData}
         selectedStream={selectedStream}
         onSelectStream={handleStreamSelect}
-        onSelectAudioTrack={(id) => { mpv.selectTrack('aid', id); }}
-        onSelectSubtitleTrack={(id) => { mpv.selectTrack('sid', id); }}
-        onSelectVideoTrack={(id) => { mpv.selectTrack('vid', id); }}
+        onSelectAudioTrack={(id) => {
+          mpv.selectTrack("aid", id);
+        }}
+        onSelectSubtitleTrack={(id) => {
+          mpv.selectTrack("sid", id);
+        }}
+        onSelectVideoTrack={(id) => {
+          mpv.selectTrack("vid", id);
+        }}
         onAddSubtitleFile={(path) => mpv.addSubtitleFile(path)}
-        onPlaybackRateChange={(rate) => { setPlaybackRate(rate); mpv.setPlaybackSpeed(rate); }}
+        onPlaybackRateChange={(rate) => {
+          setPlaybackRate(rate);
+          mpv.setPlaybackSpeed(rate);
+        }}
       />
-      {toasts.map(t => (
-        <div key={t.id} className="player-toast">{t.msg}</div>
+      {toasts.map((t) => (
+        <div key={t.id} className="player-toast">
+          {t.msg}
+        </div>
       ))}
     </div>
   );

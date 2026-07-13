@@ -240,6 +240,7 @@ export const MetaPage: React.FC = () => {
     seasonTitle?: string;
     type: "movie" | "series";
     imdbId?: string;
+    sourceLink: string;
   } | null>(null);
 
   const [episodesProgress, setEpisodesProgress] = useState<
@@ -486,6 +487,7 @@ export const MetaPage: React.FC = () => {
           seasonTitle: seasonTitle,
           type: (type as "movie" | "series") || "movie",
           imdbId: meta?.imdbId,
+          sourceLink: ep.link,
         });
       } else {
         console.error("No streams found to download");
@@ -506,6 +508,8 @@ export const MetaPage: React.FC = () => {
       url: stream.link,
       poster: dialogContext.poster,
       provider: activeProviderValue || "unknown",
+      infoUrl: link,
+      sourceLink: dialogContext.sourceLink,
       showName: dialogContext.showName,
       episodeName: dialogContext.episodeName,
       seasonTitle: dialogContext.seasonTitle,

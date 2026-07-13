@@ -206,6 +206,7 @@ pub async fn cancel_download(
     state: State<'_, DownloadState>,
     id: String,
     file_path: String,
+    base_dir: String,
 ) -> Result<(), String> {
     // First pause it
     let mut active = state.active_downloads.lock().await;
@@ -236,12 +237,19 @@ pub async fn cancel_download(
             }
         }
         
-        // After deleting files, check if parent directory is empty
-        if let Ok(mut entries) = std::fs::read_dir(parent) {
-            if entries.next().is_none() {
-                // Directory is empty, safe to remove
-                let _ = std::fs::remove_dir(parent);
+        let base_path = std::path::Path::new(&base_dir);
+        let mut directory = Some(parent);
+        while let Some(current) = directory {
+            if current == base_path || !current.starts_with(base_path) {
+                break;
             }
+            let is_empty = std::fs::read_dir(current)
+                .map(|mut entries| entries.next().is_none())
+                .unwrap_or(false);
+            if !is_empty || std::fs::remove_dir(current).is_err() {
+                break;
+            }
+            directory = current.parent();
         }
     }
 

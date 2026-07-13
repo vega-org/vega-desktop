@@ -1,22 +1,25 @@
-import React, { useEffect } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
-import { Sidebar } from './Sidebar';
-import { Topbar } from './Topbar';
-import { useFocusable, FocusContext } from '@noriginmedia/norigin-spatial-navigation-react';
-import { settingsStorage } from '../../lib/storage';
-import './Layout.css';
+import React, { useEffect } from "react";
+import { Outlet, useLocation } from "react-router-dom";
+import { Sidebar } from "./Sidebar";
+import { Topbar } from "./Topbar";
+import {
+  useFocusable,
+  FocusContext,
+} from "@noriginmedia/norigin-spatial-navigation-react";
+import { settingsStorage } from "../../lib/storage";
+import "./Layout.css";
 
 export const Layout: React.FC = () => {
   const location = useLocation();
-  const isHomePage = location.pathname === '/';
-  const isContentPage = location.pathname.startsWith('/content/');
+  const isHomePage = location.pathname === "/";
+  const isContentPage = location.pathname.startsWith("/content/");
   const tvMode = settingsStorage.isTvModeEnabled();
 
   const { ref, focusKey, focusSelf } = useFocusable({
     focusable: tvMode,
     trackChildren: true,
     saveLastFocusedChild: true,
-    preferredChildFocusKey: 'SIDEBAR_HOME',
+    preferredChildFocusKey: "SIDEBAR_HOME",
   });
 
   useEffect(() => {
@@ -37,9 +40,9 @@ export const Layout: React.FC = () => {
         <Sidebar />
         <div className="layout-main">
           <Topbar />
-          <main 
-            className="layout-content" 
-            style={{ paddingTop: needsTopPadding ? '72px' : '0' }}
+          <main
+            className="layout-content"
+            style={{ paddingTop: needsTopPadding ? "72px" : "0" }}
           >
             <Outlet />
           </main>
@@ -48,4 +51,3 @@ export const Layout: React.FC = () => {
     </FocusContext.Provider>
   );
 };
-
