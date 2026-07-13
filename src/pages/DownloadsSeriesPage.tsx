@@ -8,6 +8,7 @@ import {
 } from "react-icons/lu";
 import { CustomSelect } from "../components/CustomSelect";
 import { FocusableButton } from "../components/layout/FocusableButton";
+import { sortDownloadedEpisodes } from "../lib/downloadLibrary";
 import "./DownloadsPage.css";
 
 export const DownloadsSeriesPage = () => {
@@ -47,8 +48,10 @@ export const DownloadsSeriesPage = () => {
 
   const poster = showDownloads[0]?.poster;
 
-  const currentSeasonDownloads = showDownloads.filter(
-    (d) => (d.seasonTitle || "Extras") === activeSeason,
+  const currentSeasonDownloads = sortDownloadedEpisodes(
+    showDownloads.filter(
+      (d) => (d.seasonTitle || "Extras") === activeSeason,
+    ),
   );
 
   const formatBytes = (bytes: number) => {
