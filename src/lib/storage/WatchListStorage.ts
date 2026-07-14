@@ -1,10 +1,10 @@
-import {mainStorage} from './StorageService';
+import { mainStorage } from "./StorageService";
 
 /**
  * Storage key for watchlist
  */
 export enum WatchListKeys {
-  WATCH_LIST = 'watchlist',
+  WATCH_LIST = "watchlist",
 }
 
 /**
@@ -15,6 +15,7 @@ export interface WatchListItem {
   poster: string;
   link: string;
   provider: string;
+  updatedAt?: number;
 }
 
 /**
@@ -35,10 +36,10 @@ export class WatchListStorage {
     const watchList = this.getWatchList();
 
     // Filter out any existing item with the same link
-    const newWatchList = watchList.filter(i => i.link !== item.link);
+    const newWatchList = watchList.filter((i) => i.link !== item.link);
 
     // Add the new item to the end
-    newWatchList.push(item);
+    newWatchList.push({ ...item, updatedAt: Date.now() });
 
     // Save the updated watchlist
     mainStorage.setArray(WatchListKeys.WATCH_LIST, newWatchList);
@@ -51,7 +52,7 @@ export class WatchListStorage {
    */
   removeFromWatchList(link: string): WatchListItem[] {
     const watchList = this.getWatchList();
-    const newWatchList = watchList.filter(item => item.link !== link);
+    const newWatchList = watchList.filter((item) => item.link !== link);
 
     mainStorage.setArray(WatchListKeys.WATCH_LIST, newWatchList);
 
@@ -72,7 +73,7 @@ export class WatchListStorage {
    */
   isInWatchList(link: string): boolean {
     const watchList = this.getWatchList();
-    return watchList.some(item => item.link === link);
+    return watchList.some((item) => item.link === link);
   }
 }
 

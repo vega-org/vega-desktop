@@ -1,7 +1,7 @@
 export const VEGA_SYNC_SCHEMA_VERSION = 1;
 export const VEGA_SYNC_DIRECTORY = ".vega-sync";
 
-export type SyncRecordKind = "download" | "history";
+export type SyncRecordKind = "download" | "history" | "watchlist";
 
 export interface SyncedDownload {
   id: string;
@@ -41,6 +41,14 @@ export interface SyncedHistory {
   updatedAt: number;
 }
 
+export interface SyncedWatchListItem {
+  title: string;
+  poster: string;
+  link: string;
+  provider: string;
+  updatedAt: number;
+}
+
 export interface SyncTombstone {
   kind: SyncRecordKind;
   id: string;
@@ -55,12 +63,14 @@ export interface VegaSyncManifest {
   generatedAt: number;
   downloads: Record<string, SyncedDownload>;
   history: Record<string, SyncedHistory>;
+  watchlist?: Record<string, SyncedWatchListItem>;
   tombstones: Record<string, SyncTombstone>;
 }
 
 export interface MergedSyncState {
   downloads: Record<string, SyncedDownload>;
   history: Record<string, SyncedHistory>;
+  watchlist: Record<string, SyncedWatchListItem>;
   tombstones: Record<string, SyncTombstone>;
 }
 
@@ -169,6 +179,7 @@ export const mergeSyncManifests = (
 ): MergedSyncState => {
   const downloads: Record<string, SyncedDownload> = {};
   const history: Record<string, SyncedHistory> = {};
+  const watchlist: Record<string, SyncedWatchListItem> = {};
   const tombstones: Record<string, SyncTombstone> = {};
 
   for (const manifest of manifests) {
@@ -185,6 +196,11 @@ export const mergeSyncManifests = (
     for (const [id, item] of Object.entries(manifest.history)) {
       if (!history[id] || item.updatedAt > history[id].updatedAt) {
         history[id] = item;
+      }
+    }
+    for (const [link, item] of Object.entries(manifest.watchlist || {})) {
+      if (!watchlist[link] || item.updatedAt > watchlist[link].updatedAt) {
+        watchlist[link] = item;
       }
     }
     for (const [key, tombstone] of Object.entries(manifest.tombstones)) {
@@ -206,13 +222,18 @@ export const mergeSyncManifests = (
       if (item && tombstone.deletedAt >= item.updatedAt) {
         delete downloads[itemKey!];
       }
-    } else {
+    } else if (tombstone.kind === "history") {
       const item = history[tombstone.id];
       if (item && tombstone.deletedAt >= item.updatedAt) {
         delete history[tombstone.id];
       }
+    } else {
+      const item = watchlist[tombstone.id];
+      if (item && tombstone.deletedAt >= item.updatedAt) {
+        delete watchlist[tombstone.id];
+      }
     }
   }
 
-  return { downloads, history, tombstones };
+  return { downloads, history, watchlist, tombstones };
 };
