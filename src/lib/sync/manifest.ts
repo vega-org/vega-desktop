@@ -194,8 +194,16 @@ export const mergeSyncManifests = (
       }
     }
     for (const [id, item] of Object.entries(manifest.history)) {
-      if (!history[id] || item.updatedAt > history[id].updatedAt) {
+      const existing = history[id];
+      if (!existing) {
         history[id] = item;
+      } else if (item.updatedAt > existing.updatedAt) {
+        history[id] = {
+          ...item,
+          progress: item.progress ?? existing.progress,
+          duration: item.duration ?? existing.duration,
+          currentTime: item.currentTime ?? existing.currentTime,
+        };
       }
     }
     for (const [link, item] of Object.entries(manifest.watchlist || {})) {

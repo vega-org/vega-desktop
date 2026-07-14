@@ -58,8 +58,17 @@ export default function App() {
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () =>
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        syncFromSharedFolder().catch((error) =>
+          console.warn("[VegaSync] Periodic sync failed:", error),
+        );
+      }
+    }, 30000);
+    return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {

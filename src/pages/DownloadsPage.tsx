@@ -86,6 +86,7 @@ export const DownloadsPage = () => {
       state: {
         episodeList: [
           {
+            id: item.id,
             title: item.title,
             link: item.filePath,
             localFile: true,

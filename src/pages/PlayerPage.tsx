@@ -20,6 +20,7 @@ import {
   useFocusable,
 } from "@noriginmedia/norigin-spatial-navigation-react";
 import { FocusableButton } from "../components/layout/FocusableButton";
+import { syncFromSharedFolder } from "../lib/sync/syncService";
 
 import { LuPlay as Play } from "react-icons/lu";
 import "./PlayerPage.css";
@@ -40,6 +41,12 @@ export const PlayerPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const state = location.state as PlayerLocationState | undefined;
+
+  useEffect(() => {
+    syncFromSharedFolder().catch((error) =>
+      console.warn("[VegaSync] Player sync failed:", error),
+    );
+  }, []);
 
   if (!state) {
     return (
@@ -515,7 +522,7 @@ const DesktopPlayer: React.FC<any> = ({
   const mpv = useMpvPlayer({
     onFileLoaded: () => {
       const historyKey =
-        activeEpisode?.id || activeEpisode?.sourceLink || activeEpisode?.link;
+        activeEpisode?.sourceLink || activeEpisode?.id || activeEpisode?.link;
       const syncedProgress = history.find(
         (item) => item.id === historyKey,
       )?.progress;
@@ -605,7 +612,7 @@ const DesktopPlayer: React.FC<any> = ({
   useEffect(() => {
     if (!state.primaryTitle || state.doNotTrack) return;
     addItem({
-      id: activeEpisode?.id || activeEpisode?.sourceLink || activeEpisode?.link,
+      id: activeEpisode?.sourceLink || activeEpisode?.id || activeEpisode?.link,
       title: state.primaryTitle,
       poster: state.poster?.poster || state.poster?.background || "",
       link: state.infoUrl || "",
