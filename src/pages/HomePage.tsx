@@ -52,29 +52,32 @@ export const HomePage: React.FC = () => {
   }, [homeData, provider?.value]);
 
   const continueWatchingPosts = useMemo(() => {
-    return (
-      history
-        .filter((item) => item.provider !== "local")
-        .filter(
-          (item) =>
-            item.progress !== undefined &&
-            item.duration !== undefined &&
-            item.progress > 0,
-        )
-        // Hide if essentially completed (e.g., watched 95%)
-        .filter((item) => item.progress! / item.duration! < 0.95)
-        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-        .slice(0, 10)
-        .map((item) => ({
-          title: item.title,
-          link: item.link,
-          image: item.poster || "", // Fallback to empty string if no poster
-          progress: item.progress! / item.duration!,
-          providerValue: item.provider,
-          type: item.isSeries ? "series" : "movie",
-          episodeTitle: item.episodeTitle,
-        }))
-    );
+    const latestByLink = new Map<string, (typeof history)[number]>();
+    history
+      .filter((item) => item.provider !== "local")
+      .filter(
+        (item) =>
+          item.progress !== undefined &&
+          item.duration !== undefined &&
+          item.progress > 0,
+      )
+      .filter((item) => item.progress! / item.duration! < 0.95)
+      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+      .forEach((item) => {
+        if (!latestByLink.has(item.link)) {
+          latestByLink.set(item.link, item);
+        }
+      });
+
+    return [...latestByLink.values()].slice(0, 10).map((item) => ({
+      title: item.title,
+      link: item.link,
+      image: item.poster || "",
+      progress: item.progress! / item.duration!,
+      providerValue: item.provider,
+      type: item.isSeries ? "series" : "movie",
+      episodeTitle: item.episodeTitle,
+    }));
   }, [history]);
 
   if (!installedProviders || installedProviders.length === 0) {

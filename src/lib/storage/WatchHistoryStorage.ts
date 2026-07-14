@@ -1,11 +1,11 @@
-import {mainStorage} from './StorageService';
+import { mainStorage } from "./StorageService";
 
 /**
  * Storage keys for watch history
  */
 export enum WatchHistoryKeys {
-  WATCH_HISTORY = 'watchHistory',
-  SERIES_EPISODES = 'seriesEpisodes',
+  WATCH_HISTORY = "watchHistory",
+  SERIES_EPISODES = "seriesEpisodes",
 }
 
 /**
@@ -58,7 +58,7 @@ export class WatchHistoryStorage {
     const history = this.getWatchHistory();
 
     // Check if the item already exists
-    const existingIndex = history.findIndex(i => i.id === item.id);
+    const existingIndex = history.findIndex((i) => i.id === item.id);
 
     if (existingIndex !== -1) {
       // Update existing item
@@ -84,9 +84,11 @@ export class WatchHistoryStorage {
   /**
    * Remove an item from watch history
    */
-  removeFromWatchHistory(id: string): void {
+  removeFromWatchHistory(identity: string): void {
     const history = this.getWatchHistory();
-    const filteredHistory = history.filter(item => item.id !== id);
+    const filteredHistory = history.filter(
+      (item) => item.id !== identity && item.link !== identity,
+    );
     mainStorage.setArray(WatchHistoryKeys.WATCH_HISTORY, filteredHistory);
   }
 
@@ -102,7 +104,7 @@ export class WatchHistoryStorage {
    */
   updateProgress(id: string, progress: number, duration?: number): void {
     const history = this.getWatchHistory();
-    const existingIndex = history.findIndex(i => i.id === id);
+    const existingIndex = history.findIndex((i) => i.id === id);
 
     if (existingIndex !== -1) {
       history[existingIndex] = {
