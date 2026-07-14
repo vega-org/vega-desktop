@@ -143,13 +143,11 @@ export const publishSyncManifest = async (): Promise<void> => {
 };
 
 const schedulePublish = () => {
-  if (applyingRemoteState) {
+  if (applyingRemoteState || publishTimer) {
     return;
   }
-  if (publishTimer) {
-    clearTimeout(publishTimer);
-  }
   publishTimer = setTimeout(() => {
+    publishTimer = undefined;
     publishSyncManifest().catch((error) =>
       console.warn("[VegaSync] Failed to publish manifest:", error),
     );

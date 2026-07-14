@@ -22,6 +22,7 @@ import { updateProvidersService } from "./lib/services/UpdateProviders";
 import { init as initNavigation } from "@noriginmedia/norigin-spatial-navigation-core";
 import {
   initializeSyncService,
+  publishSyncManifest,
   syncFromSharedFolder,
 } from "./lib/sync/syncService";
 
@@ -49,6 +50,10 @@ export default function App() {
       if (document.visibilityState === "visible") {
         syncFromSharedFolder().catch((error) =>
           console.warn("[VegaSync] Foreground sync failed:", error),
+        );
+      } else {
+        publishSyncManifest().catch((error) =>
+          console.warn("[VegaSync] Background publish failed:", error),
         );
       }
     };

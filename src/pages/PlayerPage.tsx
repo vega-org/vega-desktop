@@ -167,7 +167,8 @@ const TvPlayer: React.FC<any> = ({
     // Save to watch history when opened
     if (state.primaryTitle && !state.doNotTrack) {
       addItem({
-        id: state.infoUrl || activeEpisode?.link,
+        id:
+          activeEpisode?.id || activeEpisode?.sourceLink || activeEpisode?.link,
         title: state.primaryTitle,
         poster: state.poster?.poster || state.poster?.background || "",
         link: state.infoUrl || "",
@@ -467,7 +468,7 @@ const DesktopPlayer: React.FC<any> = ({
   routeParams,
 }) => {
   const navigate = useNavigate();
-  const { addItem, updatePlaybackInfo } = useWatchHistoryStore();
+  const { history, addItem, updatePlaybackInfo } = useWatchHistoryStore();
   const { provider } = useContentStore();
 
   const [showControls, setShowControls] = useState(true);
@@ -513,10 +514,19 @@ const DesktopPlayer: React.FC<any> = ({
 
   const mpv = useMpvPlayer({
     onFileLoaded: () => {
-      const uniqueEpisodeKey = `resume_${routeParams?.primaryTitle}_${routeParams?.secondaryTitle}_${activeEpisodeIndex}`;
-      console.log("uniqueEpisodeKey", uniqueEpisodeKey);
+      const historyKey =
+        activeEpisode?.id || activeEpisode?.sourceLink || activeEpisode?.link;
+      const syncedProgress = history.find(
+        (item) => item.id === historyKey,
+      )?.progress;
+      if (syncedProgress !== undefined) {
+        if (syncedProgress > 5) mpv.seek(syncedProgress);
+        return;
+      }
+      const uniqueEpisodeKey =
+        activeEpisode?.id ||
+        `resume_${routeParams?.primaryTitle}_${routeParams?.secondaryTitle}_${activeEpisodeIndex}`;
       const cached = cacheStorage.getString(uniqueEpisodeKey);
-      console.log("cached", cached);
       if (cached) {
         try {
           const { position } = JSON.parse(cached);
@@ -595,16 +605,23 @@ const DesktopPlayer: React.FC<any> = ({
   useEffect(() => {
     if (!state.primaryTitle || state.doNotTrack) return;
     addItem({
-      id: state.infoUrl || activeEpisode?.link,
+      id: activeEpisode?.id || activeEpisode?.sourceLink || activeEpisode?.link,
       title: state.primaryTitle,
       poster: state.poster?.poster || state.poster?.background || "",
       link: state.infoUrl || "",
       provider: state.providerValue || provider?.value || "",
       lastPlayed: Date.now(),
       playbackRate: 1,
-      episodeTitle: state.secondaryTitle,
+      episodeTitle: activeEpisode?.title || state.secondaryTitle,
     });
-  }, [state, activeEpisode?.link, addItem, provider?.value]);
+  }, [
+    state,
+    activeEpisode?.id,
+    activeEpisode?.link,
+    activeEpisode?.title,
+    addItem,
+    provider?.value,
+  ]);
 
   const hideControls = useCallback(() => setShowControls(false), []);
   const scheduleHide = useCallback(() => {

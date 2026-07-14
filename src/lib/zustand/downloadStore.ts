@@ -94,6 +94,9 @@ export const useDownloadStore = create<DownloadState>()(
               ? await join(safeDir, safeSeason)
               : safeDir;
             filePath = await join(episodeDir, `${epFile}.mp4`);
+          } else if (item.episodeName) {
+            const itemFile = item.episodeName.replace(/[^a-z0-9]/gi, "_");
+            filePath = await join(safeDir, `${itemFile}.mp4`);
           } else {
             filePath = await join(safeDir, `${safeTitle}.mp4`);
           }

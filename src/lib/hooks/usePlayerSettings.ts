@@ -1,5 +1,5 @@
-import {useCallback, useRef, useState} from 'react';
-import {cacheStorage, mainStorage} from '../storage';
+import { useCallback, useRef, useState } from "react";
+import { cacheStorage, mainStorage } from "../storage";
 
 interface UsePlayerProgressOptions {
   activeEpisode: any;
@@ -14,13 +14,13 @@ export const usePlayerProgress = ({
   playbackRate,
   updatePlaybackInfo,
 }: UsePlayerProgressOptions) => {
-  const videoPositionRef = useRef({position: 0, duration: 0});
+  const videoPositionRef = useRef({ position: 0, duration: 0 });
   const lastSavedPositionRef = useRef(0);
 
   // Memoized progress handler
   const handleProgress = useCallback(
-    (e: {currentTime: number; seekableDuration: number}) => {
-      const {currentTime, seekableDuration} = e;
+    (e: { currentTime: number; seekableDuration: number }) => {
+      const { currentTime, seekableDuration } = e;
 
       videoPositionRef.current = {
         position: currentTime,
@@ -34,7 +34,9 @@ export const usePlayerProgress = ({
         !routeParams?.doNotTrack
       ) {
         updatePlaybackInfo(
-          routeParams.infoUrl || routeParams.episodeList[routeParams.linkIndex].link,
+          activeEpisode.id ||
+            activeEpisode.sourceLink ||
+            routeParams.episodeList[routeParams.linkIndex].link,
           {
             currentTime,
             duration: seekableDuration,
@@ -57,7 +59,9 @@ export const usePlayerProgress = ({
         Math.abs(currentTime - lastSavedPositionRef.current) > 5 ||
         currentTime - lastSavedPositionRef.current > 5
       ) {
-        const uniqueEpisodeKey = `resume_${routeParams?.primaryTitle}_${routeParams?.secondaryTitle}_${routeParams?.linkIndex}`;
+        const uniqueEpisodeKey =
+          activeEpisode.id ||
+          `resume_${routeParams?.primaryTitle}_${routeParams?.secondaryTitle}_${routeParams?.linkIndex}`;
         cacheStorage.setString(
           uniqueEpisodeKey,
           JSON.stringify({
@@ -69,6 +73,7 @@ export const usePlayerProgress = ({
       }
     },
     [
+      activeEpisode.id,
       activeEpisode.link,
       routeParams.episodeList,
       routeParams.linkIndex,
@@ -93,9 +98,9 @@ export const usePlayerProgress = ({
             currentTime,
             duration,
             percentage: percentage,
-            infoUrl: routeParams.infoUrl || '',
-            title: routeParams?.primaryTitle || '',
-            episodeTitle: routeParams?.secondaryTitle || '',
+            infoUrl: routeParams.infoUrl || "",
+            title: routeParams?.primaryTitle || "",
+            episodeTitle: routeParams?.secondaryTitle || "",
             updatedAt: Date.now(),
           };
 
@@ -108,13 +113,13 @@ export const usePlayerProgress = ({
           if (routeParams?.secondaryTitle) {
             const episodeKey = `watch_history_progress_${historyKey}_${routeParams.secondaryTitle.replace(
               /\s+/g,
-              '_',
+              "_",
             )}`;
             mainStorage.setString(episodeKey, JSON.stringify(progressData));
           }
         }
       } catch (error) {
-        console.error('Error storing watch progress for history:', error);
+        console.error("Error storing watch progress for history:", error);
       }
     },
     [routeParams],
@@ -131,31 +136,33 @@ export const usePlayerSettings = () => {
   const [showControls, setShowControls] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    'audio' | 'subtitle' | 'server' | 'quality' | 'speed'
-  >('audio');
-  const [resizeMode, setResizeMode] = useState<any>('none');
+    "audio" | "subtitle" | "server" | "quality" | "speed"
+  >("audio");
+  const [resizeMode, setResizeMode] = useState<any>("none");
   const [playbackRate, setPlaybackRate] = useState(1.0);
   const [isPlayerLocked, setIsPlayerLocked] = useState(false);
   const [showUnlockButton, setShowUnlockButton] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string>('');
+  const [toastMessage, setToastMessage] = useState<string>("");
   const [showToast, setShowToast] = useState(false);
   const [isTextVisible, setIsTextVisible] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(true);
 
-  const unlockButtonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unlockButtonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   // Memoized resize mode handler
   const handleResizeMode = useCallback(() => {
     const modes = [
-      {mode: 'none', name: 'Fit'},
-      {mode: 'cover', name: 'Cover'},
-      {mode: 'stretch', name: 'Stretch'},
-      {mode: 'contain', name: 'Contain'},
+      { mode: "none", name: "Fit" },
+      { mode: "cover", name: "Cover" },
+      { mode: "stretch", name: "Stretch" },
+      { mode: "contain", name: "Contain" },
     ];
-    const index = modes.findIndex(mode => mode.mode === resizeMode);
+    const index = modes.findIndex((mode) => mode.mode === resizeMode);
     const nextMode = modes[(index + 1) % modes.length];
     setResizeMode(nextMode.mode);
-    setToast('Resize Mode: ' + nextMode.name, 2000);
+    setToast("Resize Mode: " + nextMode.name, 2000);
   }, [resizeMode]);
 
   // Memoized toast setter
@@ -183,7 +190,7 @@ export const usePlayerSettings = () => {
       unlockButtonTimerRef.current = null;
     }
 
-    setToast(newLockState ? 'Player Locked' : 'Player Unlocked', 2000);
+    setToast(newLockState ? "Player Locked" : "Player Unlocked", 2000);
   }, [isPlayerLocked, setToast]);
 
   // Memoized locked screen tap handler
@@ -206,7 +213,7 @@ export const usePlayerSettings = () => {
 
   // Memoized fullscreen toggle
   const toggleFullScreen = useCallback(() => {
-    setIsFullScreen(prev => !prev);
+    setIsFullScreen((prev) => !prev);
   }, []);
 
   return {

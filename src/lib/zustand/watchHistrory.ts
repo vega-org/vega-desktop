@@ -1,5 +1,5 @@
-import {create} from 'zustand';
-import {WatchHistoryItem, watchHistoryStorage} from '../storage';
+import { create } from "zustand";
+import { WatchHistoryItem, watchHistoryStorage } from "../storage";
 
 export interface History {
   history: WatchHistoryItem[];
@@ -15,22 +15,22 @@ export interface History {
 
 // Helper function to convert between our storage format and zustand format
 const convertStorageToZustand = (items: any[]): WatchHistoryItem[] => {
-  return items.map(item => ({
+  return items.map((item) => ({
     ...item,
     lastPlayed: item.timestamp,
     currentTime: item.progress || 0,
   }));
 };
 
-const useWatchHistoryStore = create<History>(set => ({
+const useWatchHistoryStore = create<History>((set) => ({
   // Initialize from our storage service
   history: convertStorageToZustand(watchHistoryStorage.getWatchHistory()),
 
-  addItem: item => {
+  addItem: (item) => {
     try {
       // Format item for our storage service
       const storageItem: WatchHistoryItem = {
-        id: item.link || item.title,
+        id: item.id || item.link || item.title,
         title: item.title,
         poster: item.poster,
         provider: item.provider,
@@ -39,9 +39,10 @@ const useWatchHistoryStore = create<History>(set => ({
         episodeTitle: item.episodeTitle,
         cachedInfoData: item.cachedInfoData,
       };
-      
+
       if (item.duration !== undefined) storageItem.duration = item.duration;
-      if (item.currentTime !== undefined) storageItem.progress = item.currentTime;
+      if (item.currentTime !== undefined)
+        storageItem.progress = item.currentTime;
 
       // Add to storage
       watchHistoryStorage.addToWatchHistory(storageItem);
@@ -51,14 +52,16 @@ const useWatchHistoryStore = create<History>(set => ({
         history: convertStorageToZustand(watchHistoryStorage.getWatchHistory()),
       });
     } catch (error) {
-      console.error('❌ Error:', error);
+      console.error("❌ Error:", error);
     }
   },
 
   updatePlaybackInfo: (link, playbackInfo) => {
     try {
       const history = watchHistoryStorage.getWatchHistory();
-      const existingItem = history.find(item => item.link === link);
+      const existingItem = history.find(
+        (item) => item.id === link || item.link === link,
+      );
 
       if (existingItem) {
         const updatedItem = {
@@ -75,11 +78,11 @@ const useWatchHistoryStore = create<History>(set => ({
         history: convertStorageToZustand(watchHistoryStorage.getWatchHistory()),
       });
     } catch (error) {
-      console.error('❌ Error updating watch history:', error);
+      console.error("❌ Error updating watch history:", error);
     }
   },
 
-  removeItem: item => {
+  removeItem: (item) => {
     watchHistoryStorage.removeFromWatchHistory(item.link);
     set({
       history: convertStorageToZustand(watchHistoryStorage.getWatchHistory()),
@@ -88,13 +91,13 @@ const useWatchHistoryStore = create<History>(set => ({
 
   clearHistory: () => {
     watchHistoryStorage.clearWatchHistory();
-    set({history: []});
+    set({ history: [] });
   },
 
   updateItemWithInfo: (link, infoData) => {
     try {
       const history = watchHistoryStorage.getWatchHistory();
-      const existingItem = history.find(item => item.link === link);
+      const existingItem = history.find((item) => item.link === link);
 
       if (existingItem) {
         const updatedItem = {
@@ -109,7 +112,7 @@ const useWatchHistoryStore = create<History>(set => ({
         history: convertStorageToZustand(watchHistoryStorage.getWatchHistory()),
       });
     } catch (error) {
-      console.error('❌ Error caching info data:', error);
+      console.error("❌ Error caching info data:", error);
     }
   },
 }));

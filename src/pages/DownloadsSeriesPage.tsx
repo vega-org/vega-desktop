@@ -49,9 +49,7 @@ export const DownloadsSeriesPage = () => {
   const poster = showDownloads[0]?.poster;
 
   const currentSeasonDownloads = sortDownloadedEpisodes(
-    showDownloads.filter(
-      (d) => (d.seasonTitle || "Extras") === activeSeason,
-    ),
+    showDownloads.filter((d) => (d.seasonTitle || "Extras") === activeSeason),
   );
 
   const formatBytes = (bytes: number) => {
@@ -65,6 +63,7 @@ export const DownloadsSeriesPage = () => {
   const handlePlay = (item: DownloadItem, index: number) => {
     // Pass the entire season list so we can do next/prev
     const episodeList = currentSeasonDownloads.map((d) => ({
+      id: d.id,
       title: d.episodeName || d.title,
       link: d.filePath,
       localFile: true,
