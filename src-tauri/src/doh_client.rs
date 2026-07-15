@@ -2,7 +2,8 @@ use hickory_resolver::{
     config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts},
     TokioAsyncResolver,
 };
-use reqwest::{dns::Resolve, Client, Method};
+use wreq::{dns::Resolve, redirect::Policy, Client, Method};
+use wreq_util::Emulation;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -56,7 +57,7 @@ impl CustomDnsResolver {
 }
 
 impl Resolve for CustomDnsResolver {
-    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+    fn resolve(&self, name: wreq::dns::Name) -> wreq::dns::Resolving {
         let resolver = self.resolver.clone();
         let name_str = name.as_str().to_string();
         Box::pin(async move {
@@ -68,7 +69,7 @@ impl Resolve for CustomDnsResolver {
                         .map(|ip| SocketAddr::new(ip, 0))
                         .collect();
                     println!("[DoH] Resolved {} to {:?}", name_str, addrs);
-                    Ok(Box::new(addrs.into_iter()) as reqwest::dns::Addrs)
+                    Ok(Box::new(addrs.into_iter()) as wreq::dns::Addrs)
                 }
                 Err(e) => {
                     eprintln!("[DoH] Resolution failed for {}: {:?}", name_str, e);
@@ -95,15 +96,17 @@ async fn get_client(provider: &str, custom_url: Option<String>) -> Result<Client
 
     let resolver = CustomDnsResolver::new(provider, custom_url);
     
-    let client = reqwest::Client::builder()
+    // Keep TLS and HTTP/2 behavior aligned with a real Chrome client.
+    let client = Client::builder()
+        .emulation(Emulation::Chrome137)
         .dns_resolver(Arc::new(resolver))
-        .http1_only()
+        .redirect(Policy::limited(10))
         .build()
         .map_err(|e| e.to_string())?;
 
     let mut cache = CLIENT_CACHE.write().await;
     cache.insert(key, client.clone());
-    
+
     Ok(client)
 }
 
@@ -113,6 +116,7 @@ pub struct FetchArgs {
     method: String,
     headers: HashMap<String, String>,
     body: Option<String>,
+    max_redirects: Option<usize>,
     doh_provider: String,
     doh_custom_url: Option<String>,
 }
@@ -135,19 +139,20 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
     let method = Method::from_bytes(args.method.as_bytes()).unwrap_or(Method::GET);
     let mut request = client.request(method, &args.url);
 
-    let mut has_user_agent = false;
+    if let Some(max_redirects) = args.max_redirects {
+        let redirect_policy = if max_redirects == 0 {
+            Policy::none()
+        } else {
+            Policy::limited(max_redirects)
+        };
+        request = request.redirect(redirect_policy);
+    }
+
     for (k, v) in args.headers {
-        if k.eq_ignore_ascii_case("user-agent") {
-            has_user_agent = true;
-        }
         if k.eq_ignore_ascii_case("accept-encoding") {
             continue;
         }
         request = request.header(&k, &v);
-    }
-
-    if !has_user_agent {
-        request = request.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
     }
 
     if let Some(body) = args.body {

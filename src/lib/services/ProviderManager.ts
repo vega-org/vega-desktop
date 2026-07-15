@@ -1,16 +1,29 @@
-
-import {providerContext} from '../providers/providerContext';
-import {Catalog, EpisodeLink, Info, Post} from '../providers/types';
-import {extensionManager} from './ExtensionManager';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { providerContext } from "../providers/providerContext";
+import { Catalog, EpisodeLink, Info, Post } from "../providers/types";
+import { extensionManager } from "./ExtensionManager";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 export class ProviderManager {
-  private createExecutionContext() {
+  private createExecutionContext(providerValue: string) {
+    const providerConsole = new Proxy(console, {
+      get(target, property, receiver) {
+        const value = Reflect.get(target, property, receiver);
+        if (
+          typeof value === "function" &&
+          ["debug", "error", "info", "log", "warn"].includes(String(property))
+        ) {
+          return (...args: unknown[]) =>
+            value.call(target, `[Provider:${providerValue}]`, ...args);
+        }
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
     return {
       exports: {},
       require: () => ({}), // Mock require function
-      module: {exports: {}},
-      console,
+      module: { exports: {} },
+      console: providerConsole,
       Promise,
       setTimeout,
       clearTimeout,
@@ -52,12 +65,16 @@ export class ProviderManager {
     };
   }
 
-  private executeModule(moduleCode: string, ...args: any[]): any {
-    const context = this.createExecutionContext();
+  private executeModule(
+    moduleCode: string,
+    providerValue: string,
+    ...args: any[]
+  ): any {
+    const context = this.createExecutionContext(providerValue);
 
     const executeModule = new Function(
-      'context',
-      ...Array.from({length: args.length}, (_, i) => `arg${i}`),
+      "context",
+      ...Array.from({ length: args.length }, (_, i) => `arg${i}`),
       `
       const exports = context.exports;
       const __awaiter = context.__awaiter;
@@ -77,7 +94,7 @@ export class ProviderManager {
     );
     return executeModule(context, ...args);
   }
-  getCatalog = ({providerValue}: {providerValue: string}): Catalog[] => {
+  getCatalog = ({ providerValue }: { providerValue: string }): Catalog[] => {
     // Use extensionManager which now handles test mode automatically
     const catalogModule =
       extensionManager.getProviderModules(providerValue)?.modules.catalog;
@@ -85,17 +102,17 @@ export class ProviderManager {
       return [];
     }
     try {
-      const moduleExports = this.executeModule(catalogModule);
+      const moduleExports = this.executeModule(catalogModule, providerValue);
 
       // Return the catalog array directly from exports
       return moduleExports.catalog || [];
     } catch (error) {
-      console.error('Error loading catalog:', error);
-      console.error('Module content:', catalogModule);
+      console.error("Error loading catalog:", error);
+      console.error("Module content:", catalogModule);
       throw new Error(`Invalid catalog module for provider: ${providerValue}`);
     }
   };
-  getGenres = ({providerValue}: {providerValue: string}): Catalog[] => {
+  getGenres = ({ providerValue }: { providerValue: string }): Catalog[] => {
     // Use extensionManager which now handles test mode automatically
     const catalogModule =
       extensionManager.getProviderModules(providerValue)?.modules.catalog;
@@ -103,13 +120,13 @@ export class ProviderManager {
       return [];
     }
     try {
-      const moduleExports = this.executeModule(catalogModule);
+      const moduleExports = this.executeModule(catalogModule, providerValue);
 
       // Return the genres array directly from exports
       return moduleExports.genres || [];
     } catch (error) {
-      console.error('Error loading genres:', error);
-      console.error('Module content:', catalogModule);
+      console.error("Error loading genres:", error);
+      console.error("Module content:", catalogModule);
       throw new Error(`Invalid catalog module for provider: ${providerValue}`);
     }
   };
@@ -125,14 +142,16 @@ export class ProviderManager {
     signal: AbortSignal;
   }): Promise<Post[]> => {
     // Use extensionManager which now handles test mode automatically
-    const getPostsModule =
-      extensionManager.getProviderModules(providerValue)?.modules.posts;
+    const getPostsModule = (
+      await extensionManager.getProviderModulesAsync(providerValue)
+    )?.modules.posts;
     if (!getPostsModule) {
       throw new Error(`No posts module found for provider: ${providerValue}`);
     }
     try {
       const moduleExports = this.executeModule(
         getPostsModule,
+        providerValue,
         filter,
         page,
         providerValue,
@@ -149,7 +168,7 @@ export class ProviderManager {
         providerContext,
       });
     } catch (error: any) {
-      console.error('Error in posts function:', error);
+      console.error("Error in posts function:", error);
       // Re-throw the original error message if it exists, otherwise use generic message
       const errorMessage =
         error?.message || `Failed to get posts from provider: ${providerValue}`;
@@ -168,14 +187,16 @@ export class ProviderManager {
     signal: AbortSignal;
   }): Promise<Post[]> => {
     // Use extensionManager which now handles test mode automatically
-    const getPostsModule =
-      extensionManager.getProviderModules(providerValue)?.modules.posts;
+    const getPostsModule = (
+      await extensionManager.getProviderModulesAsync(providerValue)
+    )?.modules.posts;
     if (!getPostsModule) {
       throw new Error(`No posts module found for provider: ${providerValue}`);
     }
     try {
       const moduleExports = this.executeModule(
         getPostsModule,
+        providerValue,
         searchQuery,
         page,
         providerValue,
@@ -192,7 +213,7 @@ export class ProviderManager {
         providerContext,
       });
     } catch (error: any) {
-      console.error('Error in search posts function:', error);
+      console.error("Error in search posts function:", error);
       // Re-throw the original error message if it exists, otherwise use generic message
       const errorMessage =
         error?.message ||
@@ -208,14 +229,16 @@ export class ProviderManager {
     provider: string;
   }): Promise<Info> => {
     // Use extensionManager which now handles test mode automatically
-    const getMetaDataModule =
-      extensionManager.getProviderModules(provider)?.modules.meta;
+    const getMetaDataModule = (
+      await extensionManager.getProviderModulesAsync(provider)
+    )?.modules.meta;
     if (!getMetaDataModule) {
       throw new Error(`No meta data module found for provider: ${provider}`);
     }
     try {
       const moduleExports = this.executeModule(
         getMetaDataModule,
+        provider,
         link,
         provider,
         providerContext,
@@ -228,7 +251,7 @@ export class ProviderManager {
         providerContext,
       });
     } catch (error: any) {
-      console.error('Error in meta data function:', error);
+      console.error("Error in meta data function:", error);
       // Re-throw the original error message if it exists, otherwise use generic message
       const errorMessage =
         error?.message || `Failed to get metadata from provider: ${provider}`;
@@ -247,29 +270,50 @@ export class ProviderManager {
     providerValue: string;
   }): Promise<any[]> => {
     // Use extensionManager which now handles test mode automatically
-    const getStreamModule =
-      extensionManager.getProviderModules(providerValue)?.modules.stream;
+    const getStreamModule = (
+      await extensionManager.getProviderModulesAsync(providerValue)
+    )?.modules.stream;
     if (!getStreamModule) {
       throw new Error(`No stream module found for provider: ${providerValue}`);
     }
     try {
+      console.log(`[Provider:${providerValue}] Executing stream module`, {
+        link,
+        type,
+        moduleBytes: getStreamModule.length,
+      });
       const moduleExports = this.executeModule(
         getStreamModule,
+        providerValue,
         link,
         type,
         signal,
         providerContext,
       );
 
+      console.log(
+        `[Provider:${providerValue}] Stream module exports`,
+        Object.keys(moduleExports),
+      );
+
+      if (typeof moduleExports.getStream !== "function") {
+        throw new Error("Stream module does not export getStream");
+      }
+
       // Call the getStream function
-      return await moduleExports.getStream({
+      const streams = await moduleExports.getStream({
         link,
         type,
         signal,
         providerContext,
       });
+      console.log(
+        `[Provider:${providerValue}] getStream returned`,
+        Array.isArray(streams) ? `${streams.length} stream(s)` : streams,
+      );
+      return streams;
     } catch (error: any) {
-      console.error('Error in stream function:', error);
+      console.error("Error in stream function:", error);
       // Re-throw the original error message if it exists, otherwise use generic message
       const errorMessage =
         error?.message ||
@@ -285,8 +329,9 @@ export class ProviderManager {
     providerValue: string;
   }): Promise<EpisodeLink[]> => {
     // Use extensionManager which now handles test mode automatically
-    const getEpisodeLinksModule =
-      extensionManager.getProviderModules(providerValue)?.modules.episodes;
+    const getEpisodeLinksModule = (
+      await extensionManager.getProviderModulesAsync(providerValue)
+    )?.modules.episodes;
     if (!getEpisodeLinksModule) {
       throw new Error(
         `No episode links module found for provider: ${providerValue}`,
@@ -295,6 +340,7 @@ export class ProviderManager {
     try {
       const moduleExports = this.executeModule(
         getEpisodeLinksModule,
+        providerValue,
         url,
         providerContext,
       );
@@ -305,7 +351,7 @@ export class ProviderManager {
         providerContext,
       });
     } catch (error: any) {
-      console.error('Error in episodes function:', error);
+      console.error("Error in episodes function:", error);
       // Re-throw the original error message if it exists, otherwise use generic message
       const errorMessage =
         error?.message ||
