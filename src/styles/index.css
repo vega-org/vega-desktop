@@ -1,5 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-@import './variables.css';
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+@import "./variables.css";
 
 * {
   box-sizing: border-box;
@@ -28,7 +28,14 @@
   background: var(--primary);
 }
 
-html, body {
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html,
+body {
   overscroll-behavior: none;
 }
 
@@ -39,6 +46,7 @@ body {
   color: var(--on-background);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
   overflow-x: hidden;
 }
 
@@ -68,8 +76,8 @@ button {
 }
 /* Hide scrollbar for IE, Edge and Firefox */
 .no-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
 }
 
 /* Typography styles */
@@ -127,4 +135,3 @@ button {
   z-index: 100;
   border-radius: 8px; /* Safe default, can be overridden by specific components if needed */
 }
-
