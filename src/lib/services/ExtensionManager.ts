@@ -14,8 +14,8 @@ export class ExtensionManager {
   private static instance: ExtensionManager;
   private readonly legacyCustomProviderBaseUrlKey = "customProviderBaseUrl";
 
-  private testMode = true;
-  private baseUrlTestMode = "http://172.16.0.2:3001";
+  private testMode = false;
+  private baseUrlTestMode = "";
 
   private getManifest = (url: string) => {
     return `${url}/manifest.json`;
