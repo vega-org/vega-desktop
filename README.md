@@ -17,7 +17,7 @@ ___
 
 ## Download ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/vega-org/vega-desktop/total?link=https%3A%2F%2Fgithub.com%2Fvega-org%2Fvega-desktop%2Freleases&label=Github%20Downloads)
 
-<a href="https://get.microsoft.com/installer/download/9n3fdt30wdlb?referrer=appbadge" target="_self" >
+<a href="https://apps.microsoft.com/detail/9n3fdt30wdlb?referrer=appbadge&mode=full" target="_blank"  rel="noopener noreferrer">
 	<img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200"/>
 </a>
 
