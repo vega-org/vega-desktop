@@ -267,7 +267,7 @@ export const MetaPage: React.FC = () => {
 
   // Scroll to top on page load
   useEffect(() => {
-    window.scrollTo(0, 0);
+    document.querySelector<HTMLElement>(".layout-content")?.scrollTo(0, 0);
   }, [link]);
 
   // Initialize activeSeason once info is loaded

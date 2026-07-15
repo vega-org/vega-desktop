@@ -1,6 +1,7 @@
 .meta-page {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   position: relative;
   min-height: 100vh;
   margin-top: -72px;
