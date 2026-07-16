@@ -100,6 +100,7 @@ async fn get_client(provider: &str, custom_url: Option<String>) -> Result<Client
     let client = Client::builder()
         .emulation(Emulation::Chrome137)
         .dns_resolver(Arc::new(resolver))
+        .cookie_store(true)
         .redirect(Policy::limited(10))
         .build()
         .map_err(|e| e.to_string())?;
@@ -111,11 +112,18 @@ async fn get_client(provider: &str, custom_url: Option<String>) -> Result<Client
 }
 
 #[derive(Deserialize)]
+#[serde(untagged)]
+enum FetchBody {
+    Text(String),
+    Bytes(Vec<u8>),
+}
+
+#[derive(Deserialize)]
 pub struct FetchArgs {
     url: String,
     method: String,
     headers: HashMap<String, String>,
-    body: Option<String>,
+    body: Option<FetchBody>,
     max_redirects: Option<usize>,
     doh_provider: String,
     doh_custom_url: Option<String>,
@@ -125,7 +133,8 @@ pub struct FetchArgs {
 pub struct FetchResponse {
     status: u16,
     status_text: String,
-    headers: HashMap<String, String>,
+    url: String,
+    headers: Vec<(String, String)>,
     data: Vec<u8>,
 }
 
@@ -156,7 +165,10 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
     }
 
     if let Some(body) = args.body {
-        request = request.body(body);
+        request = match body {
+            FetchBody::Text(text) => request.body(text),
+            FetchBody::Bytes(bytes) => request.body(bytes),
+        };
     }
 
     let response = request.send().await.map_err(|e| format!("{:#?}", e));
@@ -167,12 +179,13 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
     
     let status = response.status().as_u16();
     let status_text = response.status().canonical_reason().unwrap_or("").to_string();
+        let response_url = response.url().to_string();
     println!("[doh_fetch] response: {} {} for {}", status, status_text, args.url);
     
-    let mut headers = HashMap::new();
+    let mut headers = Vec::new();
     for (k, v) in response.headers() {
         if let Ok(val) = v.to_str() {
-            headers.insert(k.as_str().to_string(), val.to_string());
+            headers.push((k.as_str().to_string(), val.to_string()));
         }
     }
 
@@ -181,6 +194,7 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
     Ok(FetchResponse {
         status,
         status_text,
+            url: response_url,
         headers,
         data,
     })

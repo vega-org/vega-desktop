@@ -26,7 +26,7 @@ tauri-plugin-http = { version = "2", default-features = false, features = ["unsa
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 reqwest = { version = "0.12", features = ["stream", "rustls-tls", "json", "gzip", "brotli"], default-features = false }
-wreq = { version = "5", features = ["gzip", "brotli", "deflate", "zstd"] }
+wreq = { version = "5", features = ["gzip", "brotli", "deflate", "zstd", "cookies"] }
 wreq-util = "2"
 hickory-resolver = { version = "0.24", features = ["dns-over-https-rustls", "webpki-roots"] }
 lazy_static = "1.5"

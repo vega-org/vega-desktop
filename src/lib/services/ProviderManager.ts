@@ -1,7 +1,7 @@
 import { providerContext } from "../providers/providerContext";
+import { providerFetch } from "../providers/tauriAxiosAdapter";
 import { Catalog, EpisodeLink, Info, Post } from "../providers/types";
 import { extensionManager } from "./ExtensionManager";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 export class ProviderManager {
   private createExecutionContext(providerValue: string) {
@@ -29,7 +29,7 @@ export class ProviderManager {
       clearTimeout,
       setInterval,
       clearInterval,
-      fetch: tauriFetch,
+      fetch: providerFetch,
       __awaiter: (thisArg: any, _arguments: any, P: any, generator: any) => {
         function adopt(value: any) {
           return value instanceof P

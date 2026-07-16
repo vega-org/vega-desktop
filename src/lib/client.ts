@@ -1,4 +1,4 @@
-import {QueryClient} from '@tanstack/react-query';
+import { QueryClient } from "@tanstack/react-query";
 
 // Enhanced query client with optimal configurations
 export const queryClient = new QueryClient({
@@ -6,19 +6,19 @@ export const queryClient = new QueryClient({
     queries: {
       // Retry configuration
       retry: (failureCount, error) => {
-        if (error.name === 'AbortError') {
+        if (error.name === "AbortError") {
           return false;
         }
-        if (error.message?.includes('WAF')) {
+        if (error.message?.includes("WAF")) {
           return false;
         }
-        if (error.message?.includes('4')) {
+        if (error.message?.includes("4")) {
           return false;
         }
 
         return failureCount < 1;
       },
-      retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
 
       // Cache configuration
       staleTime: 5 * 60 * 1000, // 5 minutes - data is fresh for 5 minutes
@@ -26,24 +26,24 @@ export const queryClient = new QueryClient({
 
       // Network configuration
       refetchOnWindowFocus: false, // Don't refetch when app regains focus
-      refetchOnReconnect: 'always', // Always refetch when reconnected
+      refetchOnReconnect: "always", // Always refetch when reconnected
       refetchOnMount: true, // Refetch when component mounts
 
       // Performance optimizations
       refetchInterval: false, // Disable automatic polling by default
-      notifyOnChangeProps: 'all', // Only notify on tracked properties
+      notifyOnChangeProps: "all", // Only notify on tracked properties
 
       // Error handling
       throwOnError: false, // Don't throw errors, handle them in components
 
       // Network mode - continue with cached data if offline
-      networkMode: 'online',
+      networkMode: "online",
     },
     mutations: {
       retry: 1, // Retry mutations once
       retryDelay: 1000,
       throwOnError: false,
-      networkMode: 'online',
+      networkMode: "online",
     },
   },
 });
@@ -56,13 +56,13 @@ export const createDevQueryClient = () => {
 
   // Add development-only event listeners
   if (import.meta.env.DEV) {
-    client.getQueryCache().subscribe(event => {
-      console.log('Query cache event:', event.type, event.query.queryKey);
-    });
+    // client.getQueryCache().subscribe(event => {
+    //   console.log('Query cache event:', event.type, event.query.queryKey);
+    // });
 
-    client.getMutationCache().subscribe(event => {
+    client.getMutationCache().subscribe((event) => {
       console.log(
-        'Mutation cache event:',
+        "Mutation cache event:",
         event.type,
         event?.mutation?.options?.mutationKey,
       );
@@ -81,18 +81,18 @@ export const queryClientUtils = {
 
     return {
       totalQueries: queries.length,
-      freshQueries: queries.filter(q => q.isStale() === false).length,
-      staleQueries: queries.filter(q => q.isStale() === true).length,
-      loadingQueries: queries.filter(q => q.state.fetchStatus === 'fetching')
+      freshQueries: queries.filter((q) => q.isStale() === false).length,
+      staleQueries: queries.filter((q) => q.isStale() === true).length,
+      loadingQueries: queries.filter((q) => q.state.fetchStatus === "fetching")
         .length,
-      errorQueries: queries.filter(q => q.state.status === 'error').length,
+      errorQueries: queries.filter((q) => q.state.status === "error").length,
     };
   },
 
   // Clear specific cache patterns
   clearCache: (patterns: string[]) => {
-    patterns.forEach(pattern => {
-      queryClient.removeQueries({queryKey: [pattern]});
+    patterns.forEach((pattern) => {
+      queryClient.removeQueries({ queryKey: [pattern] });
     });
   },
 
@@ -100,10 +100,10 @@ export const queryClientUtils = {
   prefetchCommonData: async (providerValue: string) => {
     // Prefetch catalog data
     await queryClient.prefetchQuery({
-      queryKey: ['catalog', providerValue],
+      queryKey: ["catalog", providerValue],
       queryFn: async () => {
-        const {providerManager} = await import('./services/ProviderManager');
-        return providerManager.getCatalog({providerValue});
+        const { providerManager } = await import("./services/ProviderManager");
+        return providerManager.getCatalog({ providerValue });
       },
       staleTime: 10 * 60 * 1000, // 10 minutes
     });
@@ -119,4 +119,6 @@ export const queryClientUtils = {
 };
 
 // Export the appropriate client based on environment
-export const client = import.meta.env.DEV ? createDevQueryClient() : queryClient;
+export const client = import.meta.env.DEV
+  ? createDevQueryClient()
+  : queryClient;
