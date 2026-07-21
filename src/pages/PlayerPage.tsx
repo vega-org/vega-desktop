@@ -13,6 +13,7 @@ import useContentStore from "../lib/zustand/contentStore";
 import useWatchHistoryStore from "../lib/zustand/watchHistrory";
 import { cacheStorage } from "../lib/storage";
 import { PlayerControls } from "./PlayerControls";
+import { PlayerInitError } from "./PlayerInitError";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize } from "@tauri-apps/api/dpi";
 import {
@@ -869,6 +870,15 @@ const DesktopPlayer: React.FC<any> = ({
           <button onClick={() => navigate(-1)}>Go Back</button>
         </div>
       </div>
+    );
+  }
+
+  if (mpv.initializationError) {
+    return (
+      <PlayerInitError
+        error={mpv.initializationError}
+        onBack={() => navigate(-1)}
+      />
     );
   }
 

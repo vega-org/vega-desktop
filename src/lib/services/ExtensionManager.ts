@@ -15,7 +15,7 @@ export class ExtensionManager {
   private readonly legacyCustomProviderBaseUrlKey = "customProviderBaseUrl";
 
   private testMode = false;
-  private baseUrlTestMode = "";
+  private baseUrlTestMode = "http://localhost:3001";
 
   private getManifest = (url: string) => {
     return `${url}/manifest.json`;

@@ -2,6 +2,11 @@
   "identifier": "Zenda-X.VegaApp",
   "bundle": {
     "targets": ["nsis"],
-    "resources": ["lib/*.dll"]
+    "resources": ["lib/*.dll", "resources/windows/vc_redist.x64.exe"],
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh"
+      }
+    }
   }
 }
