@@ -1,6 +1,6 @@
-import {Content} from './zustand/contentStore';
-import {Post} from './providers/types';
-import {providerManager} from './services/ProviderManager';
+import { Content } from "./zustand/contentStore";
+import { Post } from "./providers/types";
+import { providerManager } from "./services/ProviderManager";
 
 export interface HomePageData {
   title: string;
@@ -11,17 +11,17 @@ export interface HomePageData {
 
 // Optimized version with better error handling
 export const getHomePageDataOptimized = async (
-  activeProvider: Content['provider'],
+  activeProvider: Content["provider"],
   signal: AbortSignal,
 ): Promise<HomePageData[]> => {
-  console.log('Fetching data for provider:', activeProvider.display_name);
+  console.log("Fetching data for provider:", activeProvider.display_name);
 
-  const catalogs = providerManager.getCatalog({
+  const catalogs = await providerManager.getCatalog({
     providerValue: activeProvider.value,
   });
 
   // Use Promise.allSettled for partial success
-  const fetchPromises = catalogs.map(async item => {
+  const fetchPromises = catalogs.map(async (item) => {
     try {
       const data = await providerManager.getPosts({
         filter: item.filter,
@@ -31,7 +31,7 @@ export const getHomePageDataOptimized = async (
       });
 
       if (signal.aborted) {
-        throw new Error('Request aborted');
+        throw new Error("Request aborted");
       }
 
       console.log(`✅ Fetched ${data?.length || 0} posts for: ${item.title}`);
@@ -49,7 +49,7 @@ export const getHomePageDataOptimized = async (
         title: item.title,
         Posts: [],
         filter: item.filter,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   });
@@ -62,7 +62,7 @@ export const getHomePageDataOptimized = async (
   let failureCount = 0;
 
   results.forEach((result, index) => {
-    if (result.status === 'fulfilled') {
+    if (result.status === "fulfilled") {
       homePageData.push(result.value);
       if (result.value.Posts.length > 0) {
         successCount++;
@@ -79,7 +79,7 @@ export const getHomePageDataOptimized = async (
         title: catalogs[index].title,
         Posts: [],
         filter: catalogs[index].filter,
-        error: result.reason?.message || 'Failed to load',
+        error: result.reason?.message || "Failed to load",
       });
     }
   });
@@ -90,7 +90,7 @@ export const getHomePageDataOptimized = async (
 
   // Ensure we have at least some data
   if (successCount === 0) {
-    throw new Error('Failed to load any content categories');
+    throw new Error("Failed to load any content categories");
   }
 
   return homePageData;

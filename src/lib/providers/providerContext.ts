@@ -1,11 +1,11 @@
-import axios from 'axios';
-import { getBaseUrl } from './getBaseUrl';
-import { headers } from './headers';
-import * as cheerio from 'cheerio';
-import { ProviderContext } from './types';
-import { Crypto } from '../../platform/crypto';
-import { openWebView } from '../../platform/waf';
-import { tauriAxiosAdapter } from './tauriAxiosAdapter';
+import axios from "axios";
+import { getBaseUrl } from "./getBaseUrl";
+import { headers } from "./headers";
+import * as cheerio from "cheerio";
+import { ProviderContext } from "./types";
+import { Crypto } from "../../platform/crypto";
+import { openWebView } from "../../platform/waf";
+import { tauriAxiosAdapter } from "./tauriAxiosAdapter";
 
 // Force all axios requests to go through the Tauri Rust backend.
 // This completely bypasses the browser's CORS restrictions and allows us to spoof

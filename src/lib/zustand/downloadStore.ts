@@ -55,6 +55,13 @@ interface DownloadState {
   markError: (id: string) => void;
 }
 
+const getDownloadBaseDir = async () => {
+  const configured = settingsStorage.getDownloadLocation();
+  return configured === "vega"
+    ? join(await documentDir(), "VegaDownloads")
+    : configured;
+};
+
 export const useDownloadStore = create<DownloadState>()(
   persist(
     (set, get) => {
@@ -66,11 +73,7 @@ export const useDownloadStore = create<DownloadState>()(
           const now = Date.now();
 
           // Determine save path
-          const customDir = settingsStorage.getDownloadLocation();
-          const baseDir =
-            customDir === "vega"
-              ? await join(await documentDir(), "VegaDownloads")
-              : customDir;
+          const baseDir = await getDownloadBaseDir();
 
           const cleanName = item.showName || item.title;
           const safeTitle = cleanName.replace(/[^a-z0-9]/gi, "_").toLowerCase();
@@ -136,6 +139,7 @@ export const useDownloadStore = create<DownloadState>()(
                   if (response.ok) {
                     const text = await response.text();
                     await invoke("save_subtitle", {
+                      baseDir,
                       path: subPath,
                       content: text,
                     });
@@ -173,6 +177,7 @@ export const useDownloadStore = create<DownloadState>()(
               await invoke("start_download", {
                 id,
                 url: item.url,
+                baseDir,
                 filePath,
                 headers: item.headers || null,
                 videoType:
@@ -221,6 +226,7 @@ export const useDownloadStore = create<DownloadState>()(
           }));
 
           try {
+            const baseDir = await getDownloadBaseDir();
             if (item.isTorrent && item.torrentInfoHash) {
               const apiPort = await invoke<number>("get_torrent_api_port");
               const { fetch } = await import("@tauri-apps/plugin-http");
@@ -232,6 +238,7 @@ export const useDownloadStore = create<DownloadState>()(
               await invoke("start_download", {
                 id,
                 url: item.url,
+                baseDir,
                 filePath: item.filePath,
                 headers: item.headers || null,
                 videoType:
@@ -249,11 +256,7 @@ export const useDownloadStore = create<DownloadState>()(
           const item = get().downloads[id];
           if (!item) return;
 
-          const customDir = settingsStorage.getDownloadLocation();
-          const baseDir =
-            customDir === "vega"
-              ? await join(await documentDir(), "VegaDownloads")
-              : customDir;
+          const baseDir = await getDownloadBaseDir();
 
           try {
             if (item.isTorrent && item.torrentInfoHash) {

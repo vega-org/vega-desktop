@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc::{self, Sender};
@@ -38,12 +38,52 @@ impl DownloadState {
     }
 }
 
+fn validate_download_path(base_dir: &str, file_path: &str) -> Result<PathBuf, String> {
+    let base = PathBuf::from(base_dir);
+    let target = PathBuf::from(file_path);
+    if !base.is_absolute() || !target.is_absolute() {
+        return Err("Download paths must be absolute".into());
+    }
+
+    std::fs::create_dir_all(&base).map_err(|e| e.to_string())?;
+    let canonical_base = std::fs::canonicalize(&base).map_err(|e| e.to_string())?;
+    let relative = target
+        .strip_prefix(&base)
+        .map_err(|_| "Download path is outside the configured directory".to_string())?;
+    if relative.as_os_str().is_empty()
+        || relative
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err("Invalid download path".into());
+    }
+
+    let mut existing_ancestor = target.as_path();
+    while !existing_ancestor.exists() {
+        existing_ancestor = existing_ancestor
+            .parent()
+            .ok_or_else(|| "Invalid download path".to_string())?;
+    }
+    let canonical_ancestor =
+        std::fs::canonicalize(existing_ancestor).map_err(|e| e.to_string())?;
+    if !canonical_ancestor.starts_with(&canonical_base) {
+        return Err("Download path escapes the configured directory".into());
+    }
+
+    Ok(target)
+}
+
 #[tauri::command]
-pub async fn save_subtitle(path: String, content: String) -> Result<(), String> {
-    if let Some(parent) = std::path::Path::new(&path).parent() {
+pub async fn save_subtitle(base_dir: String, path: String, content: String) -> Result<(), String> {
+    let path = validate_download_path(&base_dir, &path)?;
+    match path.extension().and_then(|extension| extension.to_str()) {
+        Some(extension) if extension.eq_ignore_ascii_case("srt") || extension.eq_ignore_ascii_case("vtt") => {}
+        _ => return Err("Unsupported subtitle file extension".into()),
+    }
+    if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    std::fs::write(&path, content).map_err(|e| e.to_string())
+    std::fs::write(path, content).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -52,10 +92,12 @@ pub async fn start_download(
     state: State<'_, DownloadState>,
     id: String,
     url: String,
+    base_dir: String,
     file_path: String,
     headers: Option<HashMap<String, String>>,
     video_type: Option<String>,
 ) -> Result<(), String> {
+    let path = validate_download_path(&base_dir, &file_path)?;
     let mut client_builder = Client::builder()
         .danger_accept_invalid_certs(true); // For scraping generic streams
         
@@ -77,7 +119,6 @@ pub async fn start_download(
         return download_m3u8(app, state, id, url, file_path, client).await;
     }
 
-    let path = PathBuf::from(&file_path);
     let part_path = path.with_extension("part");
 
     // Ensure parent directory exists
@@ -215,7 +256,7 @@ pub async fn cancel_download(
     }
 
     // Then delete the partial file
-    let path = PathBuf::from(&file_path);
+    let path = validate_download_path(&base_dir, &file_path)?;
     let part_path = path.with_extension("part");
     if part_path.exists() {
         let _ = std::fs::remove_file(part_path);
@@ -237,7 +278,7 @@ pub async fn cancel_download(
             }
         }
         
-        let base_path = std::path::Path::new(&base_dir);
+        let base_path = Path::new(&base_dir);
         let mut directory = Some(parent);
         while let Some(current) = directory {
             if current == base_path || !current.starts_with(base_path) {
@@ -254,6 +295,52 @@ pub async fn cancel_download(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::validate_download_path;
+
+    fn test_root() -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "vega-download-path-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn accepts_nested_path_below_download_root() {
+        let root = test_root();
+        let target = root.join("show").join("episode.mp4");
+
+        let result = validate_download_path(
+            root.to_str().unwrap(),
+            target.to_str().unwrap(),
+        );
+
+        assert_eq!(result.unwrap(), target);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_path_outside_download_root() {
+        let root = test_root();
+        let outside = root.parent().unwrap().join("outside.mp4");
+
+        let result = validate_download_path(
+            root.to_str().unwrap(),
+            outside.to_str().unwrap(),
+        );
+
+        assert!(result.is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
 
 fn sanitize_first_segment(data: &[u8]) -> (&[u8], bool) {
