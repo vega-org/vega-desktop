@@ -13,6 +13,8 @@ export const PreferencesSettings: React.FC = () => {
   const [autoCheckUpdates, setAutoCheckUpdates] = useState<boolean>(true);
   const [tvModeEnabled, setTvModeEnabled] = useState<boolean>(false);
   const [hwAccelEnabled, setHwAccelEnabled] = useState<boolean>(false);
+  const [devtoolsShortcutsEnabled, setDevtoolsShortcutsEnabled] =
+    useState<boolean>(false);
   const [dohEnabled, setDohEnabled] = useState<boolean>(true);
   const [dohProvider, setDohProvider] = useState<string>("cloudflare");
   const [dohCustomUrl, setDohCustomUrl] = useState<string>("");
@@ -24,6 +26,7 @@ export const PreferencesSettings: React.FC = () => {
     setAutoCheckUpdates(settingsStorage.isAutoCheckUpdateEnabled());
     setTvModeEnabled(settingsStorage.isTvModeEnabled());
     setHwAccelEnabled(settingsStorage.isHardwareAccelerationEnabled());
+    setDevtoolsShortcutsEnabled(settingsStorage.areDevtoolsShortcutsEnabled());
     setDohEnabled(settingsStorage.isDohEnabled());
     setDohProvider(settingsStorage.getDohProvider());
     setDohCustomUrl(settingsStorage.getDohCustomUrl());
@@ -80,6 +83,12 @@ export const PreferencesSettings: React.FC = () => {
     const nextState = !hwAccelEnabled;
     setHwAccelEnabled(nextState);
     settingsStorage.setHardwareAccelerationEnabled(nextState);
+  };
+
+  const handleToggleDevtoolsShortcuts = () => {
+    const nextState = !devtoolsShortcutsEnabled;
+    setDevtoolsShortcutsEnabled(nextState);
+    settingsStorage.setDevtoolsShortcutsEnabled(nextState);
   };
 
   const handleToggleDoh = () => {
@@ -205,6 +214,23 @@ export const PreferencesSettings: React.FC = () => {
           onClick={handleToggleHwAccel}
         >
           {hwAccelEnabled ? "ON" : "OFF"}
+        </FocusableButton>
+      </div>
+
+      <div className="settings-divider" />
+
+      <div className="settings-row">
+        <div className="settings-info">
+          <h3 className="label-lg">Developer Tools Shortcuts</h3>
+          <p className="body-md text-muted">
+            Allow F12 or Ctrl+Shift+I to toggle developer tools
+          </p>
+        </div>
+        <FocusableButton
+          className={`theme-toggle-btn ${devtoolsShortcutsEnabled ? "active" : ""}`}
+          onClick={handleToggleDevtoolsShortcuts}
+        >
+          {devtoolsShortcutsEnabled ? "ON" : "OFF"}
         </FocusableButton>
       </div>
 

@@ -20,6 +20,7 @@ import { CatalogPage } from "./pages/CatalogPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { updateProvidersService } from "./lib/services/UpdateProviders";
 import { init as initNavigation } from "@noriginmedia/norigin-spatial-navigation-core";
+import { invoke } from "@tauri-apps/api/core";
 import {
   initializeSyncService,
   publishSyncManifest,
@@ -81,6 +82,29 @@ export default function App() {
       isNavInitialized = true;
     }
   }, [tvMode]);
+
+  useEffect(() => {
+    const handleDevtoolsShortcut = (event: KeyboardEvent) => {
+      const isDevtoolsShortcut =
+        event.key === "F12" ||
+        (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "i");
+
+      if (!isDevtoolsShortcut) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (!settingsStorage.areDevtoolsShortcutsEnabled()) return;
+
+      invoke("toggle_devtools").catch((error) =>
+        console.error("Failed to toggle developer tools:", error),
+      );
+    };
+
+    window.addEventListener("keydown", handleDevtoolsShortcut, true);
+    return () =>
+      window.removeEventListener("keydown", handleDevtoolsShortcut, true);
+  }, []);
 
   useEffect(() => {
     // Start auto provider updates on boot

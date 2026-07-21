@@ -60,6 +60,23 @@ fn open_external_player(_url: String) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+fn toggle_devtools(window: tauri::WebviewWindow) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        if window.is_devtools_open() {
+            window.close_devtools();
+        } else {
+            window.open_devtools();
+        }
+    }
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = window;
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()
@@ -122,6 +139,7 @@ pub fn run() {
             cookie_manager::get_cookies_for_url,
             cookie_manager::clear_cookies_for_url,
             open_external_player,
+            toggle_devtools,
             doh_client::doh_fetch,
             sync_manifest::read_sync_manifests,
             sync_manifest::write_sync_manifest,

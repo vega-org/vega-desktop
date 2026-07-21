@@ -46,6 +46,7 @@ export enum SettingsKeys {
 
   // Advanced settings
   HARDWARE_ACCELERATION = "hardwareAcceleration",
+  DEVTOOLS_SHORTCUTS_ENABLED = "devtoolsShortcutsEnabled",
 }
 
 /**
@@ -101,6 +102,14 @@ export class SettingsStorage {
 
   setTvModeEnabled(enabled: boolean): void {
     mainStorage.setBool(SettingsKeys.TV_MODE_ENABLED, enabled);
+  }
+
+  areDevtoolsShortcutsEnabled(): boolean {
+    return mainStorage.getBool(SettingsKeys.DEVTOOLS_SHORTCUTS_ENABLED, false);
+  }
+
+  setDevtoolsShortcutsEnabled(enabled: boolean): void {
+    mainStorage.setBool(SettingsKeys.DEVTOOLS_SHORTCUTS_ENABLED, enabled);
   }
 
   isHapticFeedbackEnabled(): boolean {
