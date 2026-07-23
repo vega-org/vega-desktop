@@ -8,7 +8,7 @@ Native Desktop app for streaming media (Windows, macOS, Linux).
 - Multi Audio and external Subs support.
 - WatchList.
 - Desktop-native, hardware-accelerated video player (MPV).
-- Background Provider Auto-Update.
+- Sync with mobile app
 <br>
 
 [![Discord](https://custom-icon-badges.demolab.com/badge/-Join_Discord-6567a5?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/cr42m6maWy)
