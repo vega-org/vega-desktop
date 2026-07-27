@@ -1,13 +1,10 @@
 import React from "react";
 import useThemeStore from "../lib/zustand/themeStore";
-import { themes, socialLinks } from "../lib/constants";
-import {
-  LuMonitor as Monitor,
-  LuCheck as Check,
-  LuCode as Code,
-} from "react-icons/lu";
+import { themes } from "../lib/constants";
+import { LuMonitor as Monitor, LuCheck as Check } from "react-icons/lu";
 import { SubtitleSettings } from "../components/settings/SubtitleSettings";
 import { PreferencesSettings } from "../components/settings/PreferencesSettings";
+import { GitHubStarButton } from "../components/settings/GitHubStarButton";
 import { checkAppUpdates } from "../lib/hooks/useAppUpdater";
 import { FocusableButton } from "../components/layout/FocusableButton";
 
@@ -150,20 +147,10 @@ export const SettingsPage: React.FC = () => {
                   Check for Updates
                 </FocusableButton>
               </div>
-              <div style={{ display: "flex", gap: "12px" }}>
-                <a
-                  href={socialLinks.github}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="social-btn"
-                  title="GitHub"
-                  tabIndex={-1}
-                >
-                  <FocusableButton className="social-btn">
-                    <Code size={20} />
-                  </FocusableButton>
-                </a>
-              </div>
+            </div>
+            <div className="settings-divider" />
+            <div className="github-star-row">
+              <GitHubStarButton />
             </div>
           </div>
         </section>
