@@ -8,7 +8,7 @@ Native Desktop app for streaming media (Windows, macOS, Linux).
 - Multi Audio and external Subs support.
 - WatchList.
 - Desktop-native, hardware-accelerated video player (MPV).
-- Background Provider Auto-Update.
+- Sync with mobile app
 <br>
 
 [![Discord](https://custom-icon-badges.demolab.com/badge/-Join_Discord-6567a5?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/cr42m6maWy)
@@ -88,9 +88,12 @@ ___
 > Vega Desktop does not host, store, or provide any media content. It is not affiliated with or connected to any external providers or extensions. All content accessed through the app is managed and sourced directly by the user via third-party tools or integrations. Vega Desktop has no control over it.
 
 
-## Stars
+## Leave a star if this was helpful
+
+<a href="https://www.star-history.com/?repos=vega-org%2Fvega-desktop&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=vega-org/vega-desktop&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=vega-org/vega-desktop&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=vega-org/vega-desktop&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=vega-org/vega-desktop&type=date&theme=dark&legend=top-left&sealed_token=SwfgCYQUvYOEmyBxBuqg6TRnKYUC--tE4ofeMPffwgFhWcUQeelSwQv9ZBbt-MX45r5kYl6ZewH2hJOXyrvg1UijYGv_f8nGVjAiHdQ5mUvbfplgWWnMpG4CnOFXx1ZaIn_BCvOdNR93_wU3JQ3IwCeLQOM4SrjrqhL9UOOxINUclpgvJCUGxNoyqqrG" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=vega-org/vega-desktop&type=date&legend=top-left&sealed_token=SwfgCYQUvYOEmyBxBuqg6TRnKYUC--tE4ofeMPffwgFhWcUQeelSwQv9ZBbt-MX45r5kYl6ZewH2hJOXyrvg1UijYGv_f8nGVjAiHdQ5mUvbfplgWWnMpG4CnOFXx1ZaIn_BCvOdNR93_wU3JQ3IwCeLQOM4SrjrqhL9UOOxINUclpgvJCUGxNoyqqrG" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=vega-org/vega-desktop&type=date&legend=top-left&sealed_token=SwfgCYQUvYOEmyBxBuqg6TRnKYUC--tE4ofeMPffwgFhWcUQeelSwQv9ZBbt-MX45r5kYl6ZewH2hJOXyrvg1UijYGv_f8nGVjAiHdQ5mUvbfplgWWnMpG4CnOFXx1ZaIn_BCvOdNR93_wU3JQ3IwCeLQOM4SrjrqhL9UOOxINUclpgvJCUGxNoyqqrG" />
  </picture>
+</a>
