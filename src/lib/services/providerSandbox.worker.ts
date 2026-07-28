@@ -2,6 +2,7 @@ import axios, { AxiosHeaders, type AxiosAdapter } from "axios";
 import * as cheerio from "cheerio";
 import { Crypto } from "../../platform/crypto";
 import { headers as commonHeaders } from "../providers/headers";
+import { getErrorMessage } from "./providerErrors";
 
 type RpcOperation = "fetch" | "getBaseUrl" | "openWebView";
 
@@ -81,8 +82,14 @@ const rpc = <T>(operation: RpcOperation, args: unknown): Promise<T> => {
 };
 
 const serializeBody = async (body: BodyInit | null | undefined) => {
-  if (body == null) return undefined;
-  return new Response(body).arrayBuffer();
+  if (body == null) {
+    return { data: undefined, contentType: null };
+  }
+  const serialized = new Response(body);
+  return {
+    data: await serialized.arrayBuffer(),
+    contentType: serialized.headers.get("content-type"),
+  };
 };
 
 const sandboxFetch = async (
@@ -93,13 +100,17 @@ const sandboxFetch = async (
   const url = request?.url ?? input.toString();
   const headers = new Headers(request?.headers);
   new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+  const serializedBody = await serializeBody(init.body);
+  if (serializedBody.contentType && !headers.has("content-type")) {
+    headers.set("Content-Type", serializedBody.contentType);
+  }
 
   const response = await rpc<SerializedResponse>("fetch", {
     url,
     init: {
       method: init.method ?? request?.method,
       headers: Array.from(headers.entries()),
-      body: await serializeBody(init.body),
+      body: serializedBody.data,
       redirect: init.redirect,
     },
   });
@@ -316,7 +327,7 @@ addMessageListener("message", async (event: MessageEvent<HostMessage>) => {
     sendMessage({
       type: "result",
       token: activeToken,
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     });
   }
 });

@@ -3,6 +3,7 @@ import { Catalog, EpisodeLink, Info, Post } from "../providers/types";
 import { getBaseUrl } from "../providers/getBaseUrl";
 import { openWebView } from "../../platform/waf";
 import { extensionManager } from "./ExtensionManager";
+import { getErrorMessage } from "./providerErrors";
 
 export class ProviderManager {
   private readonly providerState = new Map<string, Record<string, unknown>>();
@@ -213,7 +214,12 @@ export class ProviderManager {
     } catch (error) {
       console.error("Error loading catalog:", error);
       console.error("Module content:", catalogModule);
-      throw new Error(`Invalid catalog module for provider: ${providerValue}`);
+      throw new Error(
+        getErrorMessage(
+          error,
+          `Invalid catalog module for provider: ${providerValue}`,
+        ),
+      );
     }
   };
   getGenres = async ({
@@ -236,7 +242,12 @@ export class ProviderManager {
     } catch (error) {
       console.error("Error loading genres:", error);
       console.error("Module content:", catalogModule);
-      throw new Error(`Invalid catalog module for provider: ${providerValue}`);
+      throw new Error(
+        getErrorMessage(
+          error,
+          `Invalid catalog module for provider: ${providerValue}`,
+        ),
+      );
     }
   };
   getPosts = async ({
@@ -265,12 +276,14 @@ export class ProviderManager {
         { filter, page, providerValue },
         signal,
       );
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error in posts function:", error);
-      // Re-throw the original error message if it exists, otherwise use generic message
-      const errorMessage =
-        error?.message || `Failed to get posts from provider: ${providerValue}`;
-      throw new Error(errorMessage);
+      throw new Error(
+        getErrorMessage(
+          error,
+          `Failed to get posts from provider: ${providerValue}`,
+        ),
+      );
     }
   };
   getSearchPosts = async ({
@@ -299,13 +312,14 @@ export class ProviderManager {
         { searchQuery, page, providerValue },
         signal,
       );
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error in search posts function:", error);
-      // Re-throw the original error message if it exists, otherwise use generic message
-      const errorMessage =
-        error?.message ||
-        `Failed to search posts from provider: ${providerValue}`;
-      throw new Error(errorMessage);
+      throw new Error(
+        getErrorMessage(
+          error,
+          `Failed to search posts from provider: ${providerValue}`,
+        ),
+      );
     }
   };
   getMetaData = async ({
@@ -329,12 +343,14 @@ export class ProviderManager {
         "getMeta",
         { link, provider },
       );
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error in meta data function:", error);
-      // Re-throw the original error message if it exists, otherwise use generic message
-      const errorMessage =
-        error?.message || `Failed to get metadata from provider: ${provider}`;
-      throw new Error(errorMessage);
+      throw new Error(
+        getErrorMessage(
+          error,
+          `Failed to get metadata from provider: ${provider}`,
+        ),
+      );
     }
   };
   getStream = async ({
@@ -373,13 +389,14 @@ export class ProviderManager {
         Array.isArray(streams) ? `${streams.length} stream(s)` : streams,
       );
       return streams;
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error in stream function:", error);
-      // Re-throw the original error message if it exists, otherwise use generic message
-      const errorMessage =
-        error?.message ||
-        `Failed to get stream from provider: ${providerValue}`;
-      throw new Error(errorMessage);
+      throw new Error(
+        getErrorMessage(
+          error,
+          `Failed to get stream from provider: ${providerValue}`,
+        ),
+      );
     }
   };
   getEpisodes = async ({
@@ -405,12 +422,12 @@ export class ProviderManager {
         "getEpisodes",
         { url },
       );
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error in episodes function:", error);
-      // Re-throw the original error message if it exists, otherwise use generic message
-      const errorMessage =
-        error?.message ||
-        `Failed to get episodes from provider: ${providerValue}`;
+      const errorMessage = getErrorMessage(
+        error,
+        `Failed to get episodes from provider: ${providerValue}`,
+      );
       console.warn(errorMessage);
       throw new Error(errorMessage);
     }

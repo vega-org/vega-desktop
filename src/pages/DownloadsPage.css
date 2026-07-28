@@ -136,6 +136,15 @@
   background: #22c55e;
 }
 
+.action-btn.start-now {
+  color: var(--primary-color, #ff6347);
+}
+
+.action-btn.start-now:hover {
+  color: #fff;
+  background: var(--primary-color, #ff6347);
+}
+
 .action-btn.cancel:hover {
   background: #ef4444;
 }
@@ -154,7 +163,9 @@
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
 }
 
 .completed-card:hover {
@@ -218,7 +229,9 @@
   justify-content: center;
   cursor: pointer;
   opacity: 0 !important;
-  transition: opacity 0.2s, background 0.2s;
+  transition:
+    opacity 0.2s,
+    background 0.2s;
 }
 
 .completed-card:hover .delete-btn,

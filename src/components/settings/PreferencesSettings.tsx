@@ -3,6 +3,7 @@ import { settingsStorage } from "../../lib/storage";
 import { open } from "@tauri-apps/plugin-dialog";
 import { LuFolderOpen as FolderOpen } from "react-icons/lu";
 import { FocusableButton } from "../layout/FocusableButton";
+import { useDownloadStore } from "../../lib/zustand/downloadStore";
 
 const QUALITIES = ["360p", "480p", "720p", "1080p", "4k"];
 
@@ -18,6 +19,7 @@ export const PreferencesSettings: React.FC = () => {
   const [dohEnabled, setDohEnabled] = useState<boolean>(true);
   const [dohProvider, setDohProvider] = useState<string>("cloudflare");
   const [dohCustomUrl, setDohCustomUrl] = useState<string>("");
+  const [downloadConcurrency, setDownloadConcurrency] = useState<number>(2);
 
   useEffect(() => {
     setDownloadLocation(settingsStorage.getDownloadLocation());
@@ -30,6 +32,7 @@ export const PreferencesSettings: React.FC = () => {
     setDohEnabled(settingsStorage.isDohEnabled());
     setDohProvider(settingsStorage.getDohProvider());
     setDohCustomUrl(settingsStorage.getDohCustomUrl());
+    setDownloadConcurrency(settingsStorage.getDownloadConcurrency());
   }, []);
 
   const handleChangeDir = async () => {
@@ -111,6 +114,13 @@ export const PreferencesSettings: React.FC = () => {
 
   const isAndroid = navigator.userAgent.toLowerCase().includes("android");
 
+  const updateDownloadConcurrency = (value: number) => {
+    const next = Math.min(Math.max(value, 1), 5);
+    setDownloadConcurrency(next);
+    settingsStorage.setDownloadConcurrency(next);
+    useDownloadStore.getState().scheduleDownloads();
+  };
+
   return (
     <div className="preferences-settings">
       {/* Download Directory */}
@@ -144,6 +154,36 @@ export const PreferencesSettings: React.FC = () => {
             )}
           </div>
         )}
+      </div>
+
+      <div className="settings-divider" />
+
+      <div className="settings-row">
+        <div className="settings-info">
+          <h3 className="label-lg">Concurrent Downloads</h3>
+          <p className="body-md text-muted">
+            Extra downloads wait in a FIFO queue. Default is 2.
+          </p>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <FocusableButton
+            className="theme-toggle-btn"
+            disabled={downloadConcurrency <= 1}
+            onClick={() => updateDownloadConcurrency(downloadConcurrency - 1)}
+          >
+            -
+          </FocusableButton>
+          <span style={{ minWidth: "28px", textAlign: "center" }}>
+            {downloadConcurrency}
+          </span>
+          <FocusableButton
+            className="theme-toggle-btn"
+            disabled={downloadConcurrency >= 5}
+            onClick={() => updateDownloadConcurrency(downloadConcurrency + 1)}
+          >
+            +
+          </FocusableButton>
+        </div>
       </div>
 
       <div className="settings-divider" />

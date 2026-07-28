@@ -6,6 +6,7 @@ import {
   LuX as X,
   LuTrash2 as Trash2,
   LuCircleAlert as AlertCircle,
+  LuRocket as Rocket,
 } from "react-icons/lu";
 import { useNavigate } from "react-router-dom";
 import { FocusableButton } from "../components/layout/FocusableButton";
@@ -14,7 +15,7 @@ import { settingsStorage } from "../lib/storage";
 import "./DownloadsPage.css";
 
 export const DownloadsPage = () => {
-  const { downloads, pauseDownload, resumeDownload, cancelDownload } =
+  const { downloads, pauseDownload, resumeDownload, cancelDownload, startNow } =
     useDownloadStore();
   const navigate = useNavigate();
 
@@ -171,6 +172,8 @@ export const DownloadsPage = () => {
                           <span className="text-red-500 flex items-center gap-1">
                             <AlertCircle size={14} /> Error
                           </span>
+                        ) : item.status === "queued" ? (
+                          <span className="text-blue-400">Queued</span>
                         ) : item.status === "paused" ? (
                           <span className="text-yellow-500">Paused</span>
                         ) : (
@@ -185,6 +188,15 @@ export const DownloadsPage = () => {
                       </div>
                     </div>
                     <div className="card-actions">
+                      {item.status === "queued" && (
+                        <FocusableButton
+                          className="action-btn start-now"
+                          onClick={() => startNow(item.id)}
+                          title="Start now"
+                        >
+                          <Rocket size={20} />
+                        </FocusableButton>
+                      )}
                       {item.status === "downloading" && (
                         <FocusableButton
                           className="action-btn pause"

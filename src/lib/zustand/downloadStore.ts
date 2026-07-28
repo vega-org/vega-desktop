@@ -24,6 +24,7 @@ export interface DownloadItem {
   isTorrent?: boolean;
   torrentInfoHash?: string;
   filePath: string;
+  baseDir?: string;
   totalBytes: number;
   downloadedBytes: number;
   speed: number;
@@ -43,6 +44,8 @@ interface DownloadState {
   ) => Promise<void>;
   pauseDownload: (id: string) => Promise<void>;
   resumeDownload: (id: string) => Promise<void>;
+  startNow: (id: string) => Promise<void>;
+  scheduleDownloads: () => void;
   cancelDownload: (id: string) => Promise<void>;
   removeDownload: (id: string) => Promise<void>;
   updateProgress: (
@@ -62,9 +65,115 @@ const getDownloadBaseDir = async () => {
     : configured;
 };
 
+const ACTIVE_DOWNLOAD_STATUSES = new Set(["downloading"]);
+
 export const useDownloadStore = create<DownloadState>()(
   persist(
     (set, get) => {
+      const startDownloadItem = async (id: string) => {
+        const item = get().downloads[id];
+        if (!item || item.status !== "queued") return;
+
+        set((state) => ({
+          downloads: {
+            ...state.downloads,
+            [id]: {
+              ...state.downloads[id],
+              status: "downloading",
+              updatedAt: Date.now(),
+            },
+          },
+        }));
+
+        try {
+          const baseDir = item.baseDir || (await getDownloadBaseDir());
+
+          if (item.subtitles && item.subtitles.length > 0) {
+            const { fetch } = await import("@tauri-apps/plugin-http");
+            const baseName = item.filePath.substring(
+              0,
+              item.filePath.lastIndexOf("."),
+            );
+            let subIdx = 0;
+            for (const sub of item.subtitles) {
+              try {
+                const ext =
+                  sub.format || (sub.url.endsWith(".srt") ? "srt" : "vtt");
+                const subPath = `${baseName}.${sub.language || "unk"}_${subIdx}.${ext}`;
+                subIdx++;
+                const response = await fetch(sub.url);
+                if (response.ok) {
+                  await invoke("save_subtitle", {
+                    baseDir,
+                    path: subPath,
+                    content: await response.text(),
+                  });
+                }
+              } catch (subErr) {
+                console.error("Failed to download subtitle:", subErr);
+              }
+            }
+          }
+
+          if (item.isTorrent) {
+            const apiPort = await invoke<number>("get_torrent_api_port");
+            const { fetch } = await import("@tauri-apps/plugin-http");
+            const res = await fetch(
+              `http://127.0.0.1:${apiPort}/torrents?output_folder=${encodeURIComponent(item.filePath)}&overwrite=true`,
+              { method: "POST", body: item.url },
+            );
+            if (!res.ok) throw new Error("Failed to add torrent to librqbit");
+            const data = await res.json();
+            if (data?.details?.info_hash) {
+              set((state) => ({
+                downloads: {
+                  ...state.downloads,
+                  [id]: {
+                    ...state.downloads[id],
+                    torrentInfoHash: data.details.info_hash,
+                  },
+                },
+              }));
+            }
+          } else {
+            await invoke("start_download", {
+              id,
+              url: item.url,
+              baseDir,
+              filePath: item.filePath,
+              headers: item.headers || null,
+              videoType:
+                item.videoType || (item.url.includes(".m3u8") ? "m3u8" : null),
+            });
+          }
+        } catch (e) {
+          console.error("Failed to start download:", e);
+          get().markError(id);
+        }
+      };
+
+      const scheduleDownloads = () => {
+        const downloads = Object.values(get().downloads);
+        const activeCount = downloads.filter((item) =>
+          ACTIVE_DOWNLOAD_STATUSES.has(item.status),
+        ).length;
+        const available = Math.max(
+          settingsStorage.getDownloadConcurrency() - activeCount,
+          0,
+        );
+        downloads
+          .filter((item) => item.status === "queued")
+          .sort(
+            (left, right) =>
+              (left.createdAt || 0) - (right.createdAt || 0) ||
+              left.id.localeCompare(right.id),
+          )
+          .slice(0, available)
+          .forEach((item) => {
+            startDownloadItem(item.id).catch(() => undefined);
+          });
+      };
+
       return {
         downloads: {},
 
@@ -108,7 +217,8 @@ export const useDownloadStore = create<DownloadState>()(
             ...item,
             isTorrent,
             filePath,
-            status: "downloading",
+            baseDir,
+            status: "queued",
             downloadedBytes: 0,
             totalBytes: 0,
             speed: 0,
@@ -120,75 +230,13 @@ export const useDownloadStore = create<DownloadState>()(
             downloads: { ...state.downloads, [id]: newItem },
           }));
 
-          try {
-            // Download subtitles first
-            if (item.subtitles && item.subtitles.length > 0) {
-              const { fetch } = await import("@tauri-apps/plugin-http");
+          scheduleDownloads();
+        },
 
-              const baseName = filePath.substring(0, filePath.lastIndexOf("."));
+        scheduleDownloads,
 
-              let subIdx = 0;
-              for (const sub of item.subtitles) {
-                try {
-                  const ext =
-                    sub.format || (sub.url.endsWith(".srt") ? "srt" : "vtt");
-                  const subPath = `${baseName}.${sub.language || "unk"}_${subIdx}.${ext}`;
-                  subIdx++;
-
-                  const response = await fetch(sub.url);
-                  if (response.ok) {
-                    const text = await response.text();
-                    await invoke("save_subtitle", {
-                      baseDir,
-                      path: subPath,
-                      content: text,
-                    });
-                  }
-                } catch (subErr) {
-                  console.error("Failed to download subtitle:", subErr);
-                }
-              }
-            }
-
-            if (isTorrent) {
-              const apiPort = await invoke<number>("get_torrent_api_port");
-              const { fetch } = await import("@tauri-apps/plugin-http");
-              const res = await fetch(
-                `http://127.0.0.1:${apiPort}/torrents?output_folder=${encodeURIComponent(filePath)}&overwrite=true`,
-                {
-                  method: "POST",
-                  body: item.url,
-                },
-              );
-              if (!res.ok) throw new Error("Failed to add torrent to librqbit");
-              const data = await res.json();
-              if (data && data.details && data.details.info_hash) {
-                set((state) => ({
-                  downloads: {
-                    ...state.downloads,
-                    [id]: {
-                      ...state.downloads[id],
-                      torrentInfoHash: data.details.info_hash,
-                    },
-                  },
-                }));
-              }
-            } else {
-              await invoke("start_download", {
-                id,
-                url: item.url,
-                baseDir,
-                filePath,
-                headers: item.headers || null,
-                videoType:
-                  item.videoType ||
-                  (item.url.includes(".m3u8") ? "m3u8" : null),
-              });
-            }
-          } catch (e) {
-            console.error("Failed to start download:", e);
-            get().markError(id);
-          }
+        startNow: async (id) => {
+          await startDownloadItem(id);
         },
 
         pauseDownload: async (id) => {
@@ -212,6 +260,7 @@ export const useDownloadStore = create<DownloadState>()(
           } else if (!item.isTorrent) {
             await invoke("pause_download", { id });
           }
+          scheduleDownloads();
         },
 
         resumeDownload: async (id) => {
@@ -226,7 +275,7 @@ export const useDownloadStore = create<DownloadState>()(
           }));
 
           try {
-            const baseDir = await getDownloadBaseDir();
+            const baseDir = item.baseDir || (await getDownloadBaseDir());
             if (item.isTorrent && item.torrentInfoHash) {
               const apiPort = await invoke<number>("get_torrent_api_port");
               const { fetch } = await import("@tauri-apps/plugin-http");
@@ -256,7 +305,7 @@ export const useDownloadStore = create<DownloadState>()(
           const item = get().downloads[id];
           if (!item) return;
 
-          const baseDir = await getDownloadBaseDir();
+          const baseDir = item.baseDir || (await getDownloadBaseDir());
 
           try {
             if (item.isTorrent && item.torrentInfoHash) {
@@ -282,6 +331,7 @@ export const useDownloadStore = create<DownloadState>()(
             delete next[id];
             return { downloads: next };
           });
+          scheduleDownloads();
         },
 
         removeDownload: async (id) => {
@@ -330,6 +380,7 @@ export const useDownloadStore = create<DownloadState>()(
               },
             };
           });
+          scheduleDownloads();
         },
 
         markError: (id) => {
@@ -343,6 +394,7 @@ export const useDownloadStore = create<DownloadState>()(
               },
             };
           });
+          scheduleDownloads();
         },
       };
     },
@@ -384,6 +436,18 @@ export function initDownloadListeners() {
     useDownloadStore.getState().markCompleted(id);
   });
 
+  useDownloadStore.setState((state) => ({
+    downloads: Object.fromEntries(
+      Object.entries(state.downloads).map(([id, item]) => [
+        id,
+        item.status === "downloading"
+          ? { ...item, status: "queued" as const, speed: 0 }
+          : item,
+      ]),
+    ),
+  }));
+  useDownloadStore.getState().scheduleDownloads();
+
   // Start polling loop for torrents
   startTorrentPolling();
 }
@@ -391,8 +455,7 @@ export function initDownloadListeners() {
 async function startTorrentPolling() {
   const { fetch } = await import("@tauri-apps/plugin-http");
 
-  // On startup, re-add any torrents that are in 'downloading' or 'queued' or 'paused' state
-  // Because librqbit session does not persist across restarts since we delete its default dir!
+  // Re-add paused torrents because the scheduler handles queued items.
   const state = useDownloadStore.getState();
   const downloads = state.downloads;
   let apiPort = 0;
@@ -406,10 +469,7 @@ async function startTorrentPolling() {
 
   for (const id in downloads) {
     const item = downloads[id];
-    if (
-      item.isTorrent &&
-      ["downloading", "queued", "paused"].includes(item.status)
-    ) {
+    if (item.isTorrent && item.status === "paused") {
       try {
         const res = await fetch(
           `http://127.0.0.1:${apiPort}/torrents?output_folder=${encodeURIComponent(item.filePath)}&overwrite=true${item.status === "paused" ? "&paused=true" : ""}`,
