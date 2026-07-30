@@ -1,46 +1,60 @@
 .downloads-page {
-  padding: 30px 40px;
+  padding: 0 var(--spacing-gutter) var(--spacing-xl) var(--spacing-gutter);
   height: 100%;
   overflow-y: auto;
-  color: #fff;
+  color: var(--on-background);
+}
+
+.downloads-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: var(--spacing-lg);
+  border-bottom: 1px solid var(--outline-variant);
+  padding-bottom: var(--spacing-md);
 }
 
 .downloads-header h1 {
-  margin-bottom: 24px;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--on-background);
 }
 
 .downloads-content {
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  gap: var(--spacing-lg);
 }
 
 .section-title {
   font-size: 1.25rem;
-  font-weight: 600;
-  margin-bottom: 16px;
-  color: rgba(255, 255, 255, 0.9);
+  font-weight: 700;
+  margin-bottom: var(--spacing-sm);
+  color: var(--on-surface);
 }
 
 .active-downloads-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--spacing-sm);
 }
 
 .active-download-card {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  padding: 12px;
-  gap: 16px;
-  transition: background 0.2s;
+  background: var(--surface-container-low);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--rounded-lg);
+  padding: var(--spacing-sm);
+  gap: var(--spacing-md);
+  transition: all 0.25s ease;
 }
 
 .active-download-card:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-container);
+  border-color: rgba(var(--primary-rgb), 0.2);
 }
 
 .card-poster {
@@ -48,8 +62,8 @@
   aspect-ratio: 2/3;
   background-size: cover;
   background-position: center;
-  border-radius: 8px;
-  background-color: #222;
+  border-radius: var(--rounded-md);
+  background-color: var(--surface-container-highest);
   position: relative;
   overflow: hidden;
   display: flex;
@@ -58,7 +72,7 @@
 }
 
 .no-poster {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--on-surface-variant);
   font-size: 0.8rem;
   text-transform: uppercase;
   font-weight: bold;
@@ -75,37 +89,39 @@
 .card-info h3 {
   margin: 0;
   font-size: 1.1rem;
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--on-surface);
 }
 
 .progress-bar-container {
   height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
+  background: var(--surface-container-highest);
+  border-radius: var(--rounded-full);
   overflow: hidden;
 }
 
 .progress-bar-fill {
   height: 100%;
-  background: var(--primary-color, #e50914);
-  border-radius: 3px;
+  background: var(--primary);
+  border-radius: var(--rounded-full);
   transition: width 0.3s ease;
 }
 
 .download-meta {
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--on-surface-variant);
   display: flex;
   justify-content: space-between;
 }
 
 .speed-badge {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--surface-container-highest);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--rounded-sm);
   margin-left: 8px;
-  color: #fff;
+  color: var(--on-surface);
   font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 .card-actions {
@@ -114,9 +130,9 @@
 }
 
 .action-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  color: #fff;
+  background: var(--surface-container-highest);
+  border: 1px solid var(--outline-variant);
+  color: var(--on-surface);
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -124,54 +140,59 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
 .action-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.05);
+  background: var(--surface-variant);
+  color: var(--primary);
+  transform: scale(1.08);
 }
 
 .action-btn.play:hover {
-  background: #22c55e;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  border-color: var(--primary);
 }
 
 .action-btn.start-now {
-  color: var(--primary-color, #ff6347);
+  color: var(--primary);
 }
 
 .action-btn.start-now:hover {
-  color: #fff;
-  background: var(--primary-color, #ff6347);
+  color: var(--on-primary);
+  background: var(--primary);
 }
 
 .action-btn.cancel:hover {
-  background: #ef4444;
+  background-color: var(--error, #ffb4ab);
+  color: var(--on-error, #690005);
+  border-color: var(--error);
 }
 
 /* Completed Grid */
 .completed-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 16px;
+  gap: var(--spacing-md);
 }
 
 .completed-card {
   position: relative;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
+  background: var(--surface-container-low);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--rounded-lg);
   overflow: hidden;
   cursor: pointer;
-  transition:
-    transform 0.2s,
-    box-shadow 0.2s;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .completed-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+  border-color: rgba(var(--primary-rgb), 0.3);
+  background: var(--surface-container-high);
 }
 
 .completed-card .card-poster {
@@ -189,6 +210,7 @@
   justify-content: center;
   opacity: 0;
   transition: opacity 0.2s;
+  color: #fff;
 }
 
 .completed-card:hover .play-overlay {
@@ -202,7 +224,8 @@
 .title-truncate {
   margin: 0;
   font-size: 1rem;
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--on-surface);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -211,16 +234,18 @@
 .size-label {
   margin: 4px 0 0;
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--on-surface-variant);
 }
 
 .delete-btn {
   position: absolute;
   top: 8px;
   right: 8px;
-  background: rgba(0, 0, 0, 0.7);
-  border: none;
-  color: #fff;
+  background: rgba(19, 19, 19, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--on-surface);
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -229,9 +254,8 @@
   justify-content: center;
   cursor: pointer;
   opacity: 0 !important;
-  transition:
-    opacity 0.2s,
-    background 0.2s;
+  transition: all 0.2s ease;
+  z-index: 20;
 }
 
 .completed-card:hover .delete-btn,
@@ -240,15 +264,54 @@
 }
 
 .delete-btn:hover {
-  background-color: var(--primary);
-  color: var(--on-primary);
+  background-color: var(--error, #ffb4ab) !important;
+  color: var(--on-error, #690005) !important;
+  border-color: var(--error);
   transform: scale(1.1);
 }
 
 .empty-state {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--on-surface-variant);
   text-align: center;
   padding: 40px;
-  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border: 1px dashed var(--outline-variant);
   border-radius: 12px;
+  background: var(--surface-container-lowest);
+}
+
+/* Download Status Badges */
+.download-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+}
+
+.status-error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.status-queued {
+  background: rgba(96, 165, 250, 0.15);
+  color: #93c5fd;
+  border: 1px solid rgba(96, 165, 250, 0.25);
+}
+
+.status-paused {
+  background: rgba(234, 179, 8, 0.15);
+  color: #fde047;
+  border: 1px solid rgba(234, 179, 8, 0.25);
+}
+
+.status-downloading {
+  background: rgba(var(--primary-rgb), 0.15);
+  color: var(--primary);
+  border: 1px solid rgba(var(--primary-rgb), 0.25);
 }

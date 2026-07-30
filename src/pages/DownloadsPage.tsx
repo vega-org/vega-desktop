@@ -167,24 +167,39 @@ export const DownloadsPage = () => {
                           style={{ width: `${progressPct}%` }}
                         />
                       </div>
-                      <div className="download-meta">
-                        {item.status === "error" ? (
-                          <span className="text-red-500 flex items-center gap-1">
-                            <AlertCircle size={14} /> Error
-                          </span>
-                        ) : item.status === "queued" ? (
-                          <span className="text-blue-400">Queued</span>
-                        ) : item.status === "paused" ? (
-                          <span className="text-yellow-500">Paused</span>
-                        ) : (
+                      <div className="download-meta flex justify-between items-center text-xs text-white/60 w-full mt-1">
+                        <div className="flex items-center gap-2">
+                          {item.status === "error" && (
+                            <span className="download-status-badge status-error">
+                              <AlertCircle size={12} className="mr-1" /> Error
+                            </span>
+                          )}
+                          {item.status === "queued" && (
+                            <span className="download-status-badge status-queued">
+                              Queued
+                            </span>
+                          )}
+                          {item.status === "paused" && (
+                            <span className="download-status-badge status-paused">
+                              Paused
+                            </span>
+                          )}
+                          {item.status === "downloading" && (
+                            <span className="download-status-badge status-downloading animate-pulse">
+                              Downloading
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 font-medium">
                           <span>
-                            {formatBytes(item.downloadedBytes)} /{" "}
-                            {formatBytes(item.totalBytes)}
-                            <span className="speed-badge">
+                            {formatBytes(item.downloadedBytes)} / {formatBytes(item.totalBytes)}
+                          </span>
+                          {item.status === "downloading" && (
+                            <span className="speed-badge bg-white/10 px-1.5 py-0.5 rounded text-[11px]">
                               {formatBytes(item.speed)}/s
                             </span>
-                          </span>
-                        )}
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="card-actions">

@@ -1,7 +1,7 @@
 {
   "name": "vega-desktop",
   "private": true,
-  "version": "1.4.2",
+  "version": "1.4.3b",
   "type": "module",
   "scripts": {
     "dev": "vite",

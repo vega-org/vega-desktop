@@ -50,8 +50,9 @@
 }
 
 .nav-item.active {
-  background-color: var(--on-surface);
-  color: var(--surface); /* Inverted color for active */
+  background-color: var(--primary);
+  color: var(--on-primary);
+  box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3);
 }
 
 .nav-spacer {

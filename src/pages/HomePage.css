@@ -10,6 +10,21 @@
   padding-right: var(--spacing-md);
 }
 
+.search-results-meta .back-btn {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--on-surface-variant);
+  transition: all 0.25s ease;
+}
+
+.search-results-meta .back-btn:hover,
+.search-results-meta .back-btn.tv-focus {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(255, 255, 255, 0.08);
+  transform: scale(1.05);
+}
+
 .sliders-section {
   display: flex;
   flex-direction: column;

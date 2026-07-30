@@ -14,10 +14,12 @@
 }
 
 .meta-header {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  z-index: 50;
+  position: sticky;
+  top: 24px;
+  left: 24px;
+  z-index: 100;
+  height: 0;
+  pointer-events: none;
 }
 
 .back-btn {
@@ -27,7 +29,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--surface-variant);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(19, 19, 19, 0.6) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: var(--on-surface);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+}
+
+.back-btn:hover, .back-btn.tv-focus {
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: scale(1.08) !important;
+  box-shadow: 0 0 15px var(--primary-container), 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
 .meta-hero-bg-container {
@@ -122,9 +138,9 @@
 }
 
 .meta-tag {
-  color: var(--on-surface-variant);
-  font-weight: 500;
-  font-size: 14px;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+  font-size: 12px;
 }
 
 .meta-actions {

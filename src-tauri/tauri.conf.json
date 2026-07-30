@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Vega",
-  "version": "1.4.2",
+  "version": "1.4.3b",
   "identifier": "com.vega.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Vega",
+        "title": "Vega v1.4.3b",
         "width": 800,
         "height": 600,
         "transparent": true

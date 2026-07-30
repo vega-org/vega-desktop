@@ -25,48 +25,51 @@ export const WatchlistPage: React.FC = () => {
 
   if (!watchList || watchList.length === 0) {
     return (
-      <div className="search-page empty-state">
-        <Bookmark size={64} className="text-muted mb-md opacity-50" />
+      <div className="watchlist-empty-state">
+        <div className="watchlist-empty-icon-container">
+          <Bookmark size={64} className="text-muted opacity-50" />
+          <div className="watchlist-empty-icon-glow" />
+        </div>
         <h2 className="headline-lg mb-sm">Your Watchlist is Empty</h2>
-        <p className="body-lg text-muted">Save shows and movies to watch later by clicking the bookmark icon on their page.</p>
+        <p className="body-lg text-muted" style={{ maxWidth: '480px' }}>Save shows and movies to watch later by clicking the bookmark icon on their page.</p>
       </div>
     );
   }
 
   return (
     <div className="watchlist-page">
-        <div className="page-header">
-          <div className="page-header-icon">
-            <Bookmark size={36} />
-          </div>
-          <div className="page-header-content">
-            <h1 className="display-sm">Watchlist</h1>
-            <p className="body-lg text-muted">{watchList.length} saved {watchList.length === 1 ? 'item' : 'items'}</p>
-          </div>
+      <div className="page-header">
+        <div className="page-header-icon">
+          <Bookmark size={28} />
         </div>
-
-        <div className="search-grid">
-          {watchList.map((post, index) => (
-            <div key={`${post.link}-${index}`} className="search-card watchlist-card">
-              <WatchlistCardClickable onClick={() => handlePostClick(post.link)}>
-                <img src={post.poster} alt={post.title} className="search-poster" loading="lazy" />
-                <div className="search-hover-overlay">
-                  <Play size={48} fill="currentColor" />
-                </div>
-                <FocusableButton 
-                  className="watchlist-remove-btn"
-                  onClick={(e: any) => handleRemove(e, post.link)}
-                  aria-label="Remove from watchlist"
-                  title="Remove from watchlist"
-                >
-                  <Trash2 size={20} />
-                </FocusableButton>
-              </WatchlistCardClickable>
-              <h3 className="search-title label-md">{post.title}</h3>
-            </div>
-          ))}
+        <div className="page-header-content">
+          <h1>Watchlist</h1>
+          <p className="body-md text-muted">{watchList.length} saved {watchList.length === 1 ? 'item' : 'items'}</p>
         </div>
       </div>
+
+      <div className="search-grid">
+        {watchList.map((post, index) => (
+          <div key={`${post.link}-${index}`} className="search-card watchlist-card">
+            <WatchlistCardClickable onClick={() => handlePostClick(post.link)}>
+              <img src={post.poster} alt={post.title} className="search-poster" loading="lazy" />
+              <div className="search-hover-overlay">
+                <Play size={48} fill="currentColor" />
+              </div>
+              <FocusableButton 
+                className="watchlist-remove-btn"
+                onClick={(e: any) => handleRemove(e, post.link)}
+                aria-label="Remove from watchlist"
+                title="Remove from watchlist"
+              >
+                <Trash2 size={20} />
+              </FocusableButton>
+            </WatchlistCardClickable>
+            <h3 className="search-title label-md">{post.title}</h3>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 };
 

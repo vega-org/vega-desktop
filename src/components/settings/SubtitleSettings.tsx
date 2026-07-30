@@ -181,6 +181,55 @@ export const SubtitleSettings: React.FC = () => {
           className="slider"
         />
       </div>
+
+      <div className="settings-divider" />
+
+      {/* Subtitle Live Preview Box */}
+      <div className="settings-row flex-col items-stretch pt-4 pb-2" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+        <h3 className="label-lg text-muted" style={{ marginBottom: '12px' }}>Live Preview</h3>
+        <div 
+          className="relative w-full h-32 rounded-xl border border-white/10 overflow-hidden flex items-center justify-center"
+          style={{
+            position: 'relative',
+            width: '100%',
+            height: '120px',
+            borderRadius: '12px',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: "radial-gradient(circle at center, #2d2e3d 0%, #0d0e12 100%)",
+          }}
+        >
+          {/* Subtle cinematic visual overlay */}
+          <div 
+            style={{
+              position: 'absolute',
+              inset: 0,
+              opacity: 0.05,
+              backgroundImage: "linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)",
+              backgroundSize: "20px 20px"
+            }}
+          />
+          <span
+            style={{
+              zIndex: 10,
+              color: '#ffffff',
+              fontFamily: fontFamily,
+              fontSize: `${fontSize}px`,
+              fontWeight: fontWeight,
+              textShadow: outlineSize > 0 
+                ? `0 0 ${outlineSize}px #000, 0 0 ${outlineSize}px #000, 0 0 ${outlineSize}px #000, 0 0 ${outlineSize}px #000` 
+                : 'none',
+              paddingBottom: `${bottomPadding}px`,
+              transition: 'all 0.15s ease-out',
+            }}
+          >
+            Example Subtitle Text
+          </span>
+        </div>
+      </div>
     </div>
   );
 };

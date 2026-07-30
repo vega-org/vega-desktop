@@ -360,6 +360,14 @@ export const MetaPage: React.FC = () => {
     }
   };
 
+  const handleBack = () => {
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1);
+    } else {
+      navigate("/");
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="meta-page skeleton-page">
@@ -373,7 +381,7 @@ export const MetaPage: React.FC = () => {
         >
           <FocusableButton
             className="icon-btn back-btn glass-overlay"
-            onClick={() => navigate(-1)}
+            onClick={handleBack}
           >
             <ArrowLeft size={24} />
           </FocusableButton>
@@ -413,7 +421,7 @@ export const MetaPage: React.FC = () => {
         <p className="body-md text-muted">
           {error?.message || "Content not found"}
         </p>
-        <button className="btn-secondary" onClick={() => navigate(-1)}>
+        <button className="btn-secondary" onClick={handleBack}>
           Go Back
         </button>
       </div>
@@ -543,7 +551,7 @@ export const MetaPage: React.FC = () => {
         >
           <FocusableButton
             className="icon-btn back-btn glass-overlay"
-            onClick={() => navigate(-1)}
+            onClick={handleBack}
           >
             <ArrowLeft size={24} />
           </FocusableButton>
@@ -576,16 +584,16 @@ export const MetaPage: React.FC = () => {
                   <h1 className="display-lg meta-title">{title}</h1>
                 )}
 
-                <div className="meta-tags">
-                  {year && <span className="meta-tag">{year}</span>}
+                 <div className="meta-tags flex flex-wrap gap-2 items-center mb-6">
+                  {year && <span className="meta-tag px-3 py-1 text-xs font-semibold rounded-full bg-white/5 border border-white/10 text-white/95 backdrop-blur-sm">{year}</span>}
                   {meta?.runtime && (
-                    <span className="meta-tag">{meta.runtime}</span>
+                    <span className="meta-tag px-3 py-1 text-xs font-semibold rounded-full bg-white/5 border border-white/10 text-white/95 backdrop-blur-sm">{meta.runtime}</span>
                   )}
                   {meta?.imdbRating && (
-                    <span className="meta-tag">⭐ {meta.imdbRating}</span>
+                    <span className="meta-tag px-3 py-1 text-xs font-semibold rounded-full bg-white/5 border border-white/10 text-yellow-400 backdrop-blur-sm">⭐ {meta.imdbRating}</span>
                   )}
                   {info?.type && (
-                    <span className="meta-tag capitalize">{info.type}</span>
+                    <span className="meta-tag capitalize px-3 py-1 text-xs font-semibold rounded-full bg-white/5 border border-white/10 text-white/95 backdrop-blur-sm">{info.type}</span>
                   )}
                 </div>
               </div>

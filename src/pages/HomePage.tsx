@@ -12,6 +12,7 @@ import {
   LuRefreshCw as RefreshCw,
   LuPlay as Play,
   LuLoaderCircle as Loader2,
+  LuArrowLeft as ArrowLeft,
 } from "react-icons/lu";
 import useWatchHistoryStore from "../lib/zustand/watchHistrory";
 import { FocusableButton } from "../components/layout/FocusableButton";
@@ -83,7 +84,7 @@ export const HomePage: React.FC = () => {
   if (!installedProviders || installedProviders.length === 0) {
     return (
       <div className="empty-state">
-        <h2 className="headline-lg">Welcome to Vega</h2>
+        <h2 className="headline-lg">Welcome to Vega v1.4.3b</h2>
         <p className="body-lg text-muted">
           Please install an extension to get started.
         </p>
@@ -95,7 +96,15 @@ export const HomePage: React.FC = () => {
   if (query) {
     return (
       <div className="home-page search-active">
-        <div className="search-results-meta mb-md">
+        <div className="search-results-meta mb-md flex items-center gap-3">
+          <FocusableButton
+            className="icon-btn back-btn glass-overlay mr-sm"
+            onClick={() => navigate("/")}
+            title="Exit Search"
+            style={{ width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+          >
+            <ArrowLeft size={20} />
+          </FocusableButton>
           <p className="body-lg text-muted">
             Showing results for "{query}" on {provider?.display_name}
           </p>

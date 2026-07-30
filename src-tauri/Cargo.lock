@@ -3,8 +3,8 @@
 version = 4
 
 [[package]]
-name = "Vega"
-version = "1.4.2"
+name = "Vega_Beta_Angel"
+version = "1.4.3"
 dependencies = [
  "aes",
  "anyhow",

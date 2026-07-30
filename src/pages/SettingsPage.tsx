@@ -1,12 +1,21 @@
 import React from "react";
 import useThemeStore from "../lib/zustand/themeStore";
 import { themes } from "../lib/constants";
-import { LuMonitor as Monitor, LuCheck as Check } from "react-icons/lu";
+import { 
+  LuMonitor as Monitor, 
+  LuCheck as Check,
+  LuSlidersHorizontal as Sliders,
+  LuCaptions as ClosedCaption,
+  LuInfo as Info,
+  LuChevronRight as ChevronRight,
+  LuRefreshCw as RefreshCw
+} from "react-icons/lu";
 import { SubtitleSettings } from "../components/settings/SubtitleSettings";
 import { PreferencesSettings } from "../components/settings/PreferencesSettings";
 import { GitHubStarButton } from "../components/settings/GitHubStarButton";
 import { checkAppUpdates } from "../lib/hooks/useAppUpdater";
 import { FocusableButton } from "../components/layout/FocusableButton";
+import logo from "../assets/logo.png";
 
 import "./SettingsPage.css";
 
@@ -26,15 +35,25 @@ export const SettingsPage: React.FC = () => {
     <div className="settings-page">
       <div className="page-header">
         <h1 className="headline-lg">Settings</h1>
+        <p className="body-md text-muted page-subtitle">
+          Customize Vega v1.4.3b to your preference
+        </p>
       </div>
 
       <div className="settings-content">
+        {/* Preferences Group */}
+        <section className="settings-group">
+          <h2 className="title-md flex items-center gap-2">
+            <Sliders size={20} /> Preferences
+          </h2>
+          <div className="settings-card">
+            <PreferencesSettings />
+          </div>
+        </section>
+
         {/* Appearance Group */}
         <section className="settings-group">
-          <h2
-            className="title-md flex items-center gap-2"
-            style={{ marginBottom: "8px" }}
-          >
+          <h2 className="title-md flex items-center gap-2">
             <Monitor size={20} /> Appearance
           </h2>
           <div className="settings-card">
@@ -58,6 +77,18 @@ export const SettingsPage: React.FC = () => {
                   onClick={() => setThemeBackground("gray")}
                 >
                   Gray
+                </FocusableButton>
+                <FocusableButton
+                  className={`theme-toggle-btn ${themeBackground === "deep-blue" ? "active" : ""}`}
+                  onClick={() => setThemeBackground("deep-blue")}
+                >
+                  Deep Blue
+                </FocusableButton>
+                <FocusableButton
+                  className={`theme-toggle-btn ${themeBackground === "white" ? "active" : ""}`}
+                  onClick={() => setThemeBackground("white")}
+                >
+                  White
                 </FocusableButton>
               </div>
             </div>
@@ -99,26 +130,10 @@ export const SettingsPage: React.FC = () => {
           </div>
         </section>
 
-        {/* Preferences Group */}
-        <section className="settings-group">
-          <h2
-            className="title-md flex items-center gap-2"
-            style={{ marginBottom: "8px" }}
-          >
-            Preferences
-          </h2>
-          <div className="settings-card">
-            <PreferencesSettings />
-          </div>
-        </section>
-
         {/* Subtitles Group */}
         <section className="settings-group">
-          <h2
-            className="title-md flex items-center gap-2"
-            style={{ marginBottom: "8px" }}
-          >
-            Subtitles
+          <h2 className="title-md flex items-center gap-2">
+            <ClosedCaption size={20} /> Subtitles
           </h2>
           <div className="settings-card">
             <SubtitleSettings />
@@ -127,25 +142,27 @@ export const SettingsPage: React.FC = () => {
 
         {/* About Group */}
         <section className="settings-group">
-          <h2 className="title-md" style={{ marginBottom: "8px" }}>
-            About
+          <h2 className="title-md flex items-center gap-2">
+            <Info size={20} /> About
           </h2>
           <div className="settings-card">
-            <div className="settings-row">
-              <div className="settings-info">
-                <h3 className="label-lg">Vega Desktop</h3>
+            <div className="settings-row about-row-content">
+              <div className="about-logo-wrapper">
+                <img src={logo} alt="Vega Logo" className="about-logo" />
+              </div>
+              <div className="settings-info flex-1">
+                <h3 className="label-lg">Vega v1.4.3b</h3>
                 <p className="body-md text-muted">{appVersion}</p>
                 <FocusableButton
-                  className="theme-toggle-btn active"
+                  className="update-btn"
                   onClick={() => checkAppUpdates(true)}
-                  style={{
-                    width: "fit-content",
-                    padding: "6px 12px",
-                    marginTop: "8px",
-                  }}
                 >
-                  Check for Updates
+                  <RefreshCw size={14} className="update-btn-icon" />
+                  <span>Check for Updates</span>
                 </FocusableButton>
+              </div>
+              <div className="about-chevron-wrapper">
+                <ChevronRight size={20} className="about-chevron" />
               </div>
             </div>
             <div className="settings-divider" />

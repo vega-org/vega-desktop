@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { LuSearch as Search } from 'react-icons/lu';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ProviderSwitcher } from './ProviderSwitcher';
 import { useFocusable } from '@noriginmedia/norigin-spatial-navigation-react';
 import { resume } from '@noriginmedia/norigin-spatial-navigation-core';
@@ -10,9 +10,16 @@ import './Topbar.css';
 export const Topbar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [query, setQuery] = useState('');
+  const [searchParams] = useSearchParams();
+  const urlQuery = searchParams.get('q') || '';
+  const [query, setQuery] = useState(urlQuery);
   const [isTyping, setIsTyping] = useState(false);
   const nativeInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync input value with URL query parameters
+  useEffect(() => {
+    setQuery(urlQuery);
+  }, [urlQuery]);
 
   const isAndroid = navigator.userAgent.toLowerCase().includes('android');
   const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;

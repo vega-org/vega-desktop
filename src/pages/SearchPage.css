@@ -11,7 +11,29 @@
   gap: var(--spacing-md);
   margin-bottom: var(--spacing-xl);
   padding-bottom: var(--spacing-lg);
-  border-bottom: 1px solid var(--surface-variant);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.search-page-header-container .back-btn {
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--on-surface-variant);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.search-page-header-container .back-btn:hover,
+.search-page-header-container .back-btn.tv-focus {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(255, 255, 255, 0.08);
+  transform: scale(1.05);
 }
 
 .search-page-form {
@@ -19,17 +41,32 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  background-color: var(--surface-container);
+  background-color: var(--surface-container-low);
   border-radius: var(--rounded-full);
-  padding: var(--spacing-sm) var(--spacing-lg);
-  border: 1px solid var(--surface-variant);
+  padding: 10px var(--spacing-lg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.search-page-form:focus-within,
+.search-page-form:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background-color: var(--surface-container);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.search-page-form-inner.tv-focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--rounded-full);
 }
 
 .search-page-input {
   flex: 1;
   background: transparent;
   border: none;
-  font-size: large;
+  font-size: 1.15rem;
+  font-weight: 500;
   color: var(--on-surface);
   outline: none;
   box-shadow: none;
@@ -38,7 +75,7 @@
 
 .search-page-input::placeholder {
   color: var(--on-surface-variant);
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .search-page-empty {
@@ -47,7 +84,95 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  margin-top: 10vh;
+  margin-top: 6vh;
+}
+
+/* Recommended tags styling */
+.search-tags-container {
+  margin-top: var(--spacing-lg);
+  max-width: 600px;
+  width: 100%;
+}
+
+.search-tags-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+.search-tag-chip {
+  padding: 8px 20px;
+  border-radius: var(--rounded-full);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--on-surface-variant);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.search-tag-chip:hover,
+.search-tag-chip.tv-focus {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 4px 15px rgba(var(--primary-rgb), 0.3);
+}
+
+/* Glow effects */
+.search-icon-glow-container {
+  position: relative;
+  margin-bottom: var(--spacing-md);
+}
+
+.search-icon-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80px;
+  height: 80px;
+  background: radial-gradient(circle, rgba(var(--primary-rgb), 0.15) 0%, rgba(var(--primary-rgb), 0) 70%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Provider result wrapper styling */
+.search-provider-slider-wrap {
+  margin-bottom: var(--spacing-md);
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  border-radius: var(--rounded-xl);
+  padding: var(--spacing-sm) 0;
+  transition: all 0.25s ease;
+}
+
+.search-provider-slider-wrap:hover {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.search-provider-slider-wrap .slider-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  opacity: 0.95;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-provider-slider-wrap .slider-title::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 18px;
+  background: var(--primary);
+  border-radius: 2px;
 }
 
 .search-loading {

@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { settingsStorage } from "../../lib/storage";
 import { open } from "@tauri-apps/plugin-dialog";
-import { LuFolderOpen as FolderOpen } from "react-icons/lu";
+import { 
+  LuFolderOpen as FolderOpen,
+  LuFolder,
+  LuLayers,
+  LuCloudDownload,
+  LuRefreshCw,
+  LuGamepad2,
+  LuCpu,
+  LuTerminal,
+  LuShield,
+  LuVideo
+} from "react-icons/lu";
 import { FocusableButton } from "../layout/FocusableButton";
 import { useDownloadStore } from "../../lib/zustand/downloadStore";
 
@@ -123,282 +134,305 @@ export const PreferencesSettings: React.FC = () => {
 
   return (
     <div className="preferences-settings">
-      {/* Download Directory */}
-      <div className="settings-row">
-        <div className="settings-info">
-          <h3 className="label-lg">Download Directory</h3>
-          <p className="body-md text-muted" style={{ wordBreak: "break-all" }}>
-            {isAndroid
-              ? "Internal App Storage (Recommended for Android)"
-              : downloadLocation === "vega"
-                ? "Default (Documents/VegaDownloads)"
-                : downloadLocation}
-          </p>
-        </div>
-        {!isAndroid && (
-          <div style={{ display: "flex", gap: "8px" }}>
-            <FocusableButton
-              className="theme-toggle-btn active"
-              style={{ display: "flex", alignItems: "center", gap: "8px" }}
-              onClick={handleChangeDir}
-            >
-              <FolderOpen size={16} /> Change
-            </FocusableButton>
-            {downloadLocation !== "vega" && (
-              <FocusableButton
-                className="theme-toggle-btn"
-                onClick={handleResetDir}
-              >
-                Reset
-              </FocusableButton>
-            )}
+      {/* Left Column of Preferences */}
+      <div className="preferences-column">
+        {/* Download Directory */}
+        <div className="settings-row preference-row">
+          <div className="preference-icon-wrapper folder">
+            <LuFolder size={20} />
           </div>
-        )}
-      </div>
-
-      <div className="settings-divider" />
-
-      <div className="settings-row">
-        <div className="settings-info">
-          <h3 className="label-lg">Concurrent Downloads</h3>
-          <p className="body-md text-muted">
-            Extra downloads wait in a FIFO queue. Default is 2.
-          </p>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <FocusableButton
-            className="theme-toggle-btn"
-            disabled={downloadConcurrency <= 1}
-            onClick={() => updateDownloadConcurrency(downloadConcurrency - 1)}
-          >
-            -
-          </FocusableButton>
-          <span style={{ minWidth: "28px", textAlign: "center" }}>
-            {downloadConcurrency}
-          </span>
-          <FocusableButton
-            className="theme-toggle-btn"
-            disabled={downloadConcurrency >= 5}
-            onClick={() => updateDownloadConcurrency(downloadConcurrency + 1)}
-          >
-            +
-          </FocusableButton>
-        </div>
-      </div>
-
-      <div className="settings-divider" />
-
-      {/* Auto Install Updates */}
-      <div className="settings-row">
-        <div className="settings-info">
-          <h3 className="label-lg">Auto Install App Updates</h3>
-          <p className="body-md text-muted">
-            Automatically download and install new versions of Vega
-          </p>
-        </div>
-        <FocusableButton
-          className={`theme-toggle-btn ${autoInstallUpdates ? "active" : ""}`}
-          onClick={handleToggleAutoInstall}
-        >
-          {autoInstallUpdates ? "ON" : "OFF"}
-        </FocusableButton>
-      </div>
-
-      <div className="settings-divider" />
-
-      {/* Auto Check Updates */}
-      <div className="settings-row">
-        <div className="settings-info">
-          <h3 className="label-lg">Auto Check for Updates</h3>
-          <p className="body-md text-muted">Check for updates on app startup</p>
-        </div>
-        <FocusableButton
-          className={`theme-toggle-btn ${autoCheckUpdates ? "active" : ""}`}
-          onClick={handleToggleAutoCheck}
-        >
-          {autoCheckUpdates ? "ON" : "OFF"}
-        </FocusableButton>
-      </div>
-
-      <div className="settings-divider" />
-
-      {/* TV Mode */}
-      <div className="settings-row">
-        <div className="settings-info">
-          <h3 className="label-lg">TV / Controller Mode</h3>
-          <p className="body-md text-muted">
-            Enable arrow-key spatial navigation for remotes and gamepads
-            (Requires app restart)
-          </p>
-        </div>
-        <FocusableButton
-          className={`theme-toggle-btn ${tvModeEnabled ? "active" : ""}`}
-          onClick={handleToggleTvMode}
-        >
-          {tvModeEnabled ? "ON" : "OFF"}
-        </FocusableButton>
-      </div>
-
-      <div className="settings-divider" />
-
-      {/* Hardware Acceleration */}
-      <div className="settings-row">
-        <div className="settings-info">
-          <h3 className="label-lg">Hardware Acceleration</h3>
-          <p className="body-md text-muted">
-            Use GPU to decode video. Turn off if you experience playback issues.
-          </p>
-        </div>
-        <FocusableButton
-          className={`theme-toggle-btn ${hwAccelEnabled ? "active" : ""}`}
-          onClick={handleToggleHwAccel}
-        >
-          {hwAccelEnabled ? "ON" : "OFF"}
-        </FocusableButton>
-      </div>
-
-      <div className="settings-divider" />
-
-      <div className="settings-row">
-        <div className="settings-info">
-          <h3 className="label-lg">Developer Tools Shortcuts</h3>
-          <p className="body-md text-muted">
-            Allow F12 or Ctrl+Shift+I to toggle developer tools
-          </p>
-        </div>
-        <FocusableButton
-          className={`theme-toggle-btn ${devtoolsShortcutsEnabled ? "active" : ""}`}
-          onClick={handleToggleDevtoolsShortcuts}
-        >
-          {devtoolsShortcutsEnabled ? "ON" : "OFF"}
-        </FocusableButton>
-      </div>
-
-      <div className="settings-divider" />
-
-      {/* DNS over HTTPS */}
-      <div className="settings-row" style={{ alignItems: "flex-start" }}>
-        <div className="settings-info">
-          <h3 className="label-lg">DNS over HTTPS</h3>
-          <p className="body-md text-muted">
-            Bypass ISP DNS blocking for movie providers
-          </p>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "12px",
-            alignItems: "flex-end",
-          }}
-        >
-          <FocusableButton
-            className={`theme-toggle-btn ${dohEnabled ? "active" : ""}`}
-            onClick={handleToggleDoh}
-          >
-            {dohEnabled ? "ON" : "OFF"}
-          </FocusableButton>
-
-          {dohEnabled && (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "8px",
-                width: "200px",
-              }}
-            >
-              <select
-                value={dohProvider}
-                onChange={handleChangeDohProvider}
-                style={{
-                  backgroundColor: "rgba(255, 255, 255, 0.05)",
-                  color: "white",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: "6px",
-                  padding: "8px",
-                  outline: "none",
-                }}
+          <div className="settings-info flex-1">
+            <h3 className="label-lg">Download Directory</h3>
+            <p className="body-md text-muted" style={{ wordBreak: "break-all" }}>
+              {isAndroid
+                ? "Internal App Storage (Recommended for Android)"
+                : downloadLocation === "vega"
+                  ? "Default (Documents/VegaDownloads)"
+                  : downloadLocation}
+            </p>
+          </div>
+          {!isAndroid && (
+            <div className="preference-action">
+              <FocusableButton
+                className="change-dir-btn"
+                onClick={handleChangeDir}
               >
-                <option
-                  value="cloudflare"
-                  style={{ backgroundColor: "#1a1a1a", color: "white" }}
+                <FolderOpen size={16} style={{ marginRight: "4px" }} /> Change
+              </FocusableButton>
+              {downloadLocation !== "vega" && (
+                <FocusableButton
+                  className="reset-dir-btn"
+                  onClick={handleResetDir}
                 >
-                  Cloudflare (1.1.1.1)
-                </option>
-                <option
-                  value="google"
-                  style={{ backgroundColor: "#1a1a1a", color: "white" }}
-                >
-                  Google (8.8.8.8)
-                </option>
-                <option
-                  value="adguard"
-                  style={{ backgroundColor: "#1a1a1a", color: "white" }}
-                >
-                  AdGuard
-                </option>
-                <option
-                  value="custom"
-                  style={{ backgroundColor: "#1a1a1a", color: "white" }}
-                >
-                  Custom URL
-                </option>
-              </select>
-
-              {dohProvider === "custom" && (
-                <input
-                  type="text"
-                  placeholder="https://dns.example.com/dns-query"
-                  value={dohCustomUrl}
-                  onChange={handleChangeDohCustomUrl}
-                  style={{
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    color: "white",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "6px",
-                    padding: "8px",
-                    outline: "none",
-                    fontSize: "12px",
-                  }}
-                />
+                  Reset
+                </FocusableButton>
               )}
             </div>
           )}
         </div>
+
+        <div className="settings-divider" />
+
+        {/* Concurrent Downloads */}
+        <div className="settings-row preference-row">
+          <div className="preference-icon-wrapper layers">
+            <LuLayers size={20} />
+          </div>
+          <div className="settings-info flex-1">
+            <h3 className="label-lg">Concurrent Downloads</h3>
+            <p className="body-md text-muted">
+              Extra downloads wait in a FIFO queue. Default is 2.
+            </p>
+          </div>
+          <div className="preference-action-concurrency">
+            <FocusableButton
+              className="concurrency-btn"
+              disabled={downloadConcurrency <= 1}
+              onClick={() => updateDownloadConcurrency(downloadConcurrency - 1)}
+            >
+              -
+            </FocusableButton>
+            <span className="concurrency-val">
+              {downloadConcurrency}
+            </span>
+            <FocusableButton
+              className="concurrency-btn"
+              disabled={downloadConcurrency >= 5}
+              onClick={() => updateDownloadConcurrency(downloadConcurrency + 1)}
+            >
+              +
+            </FocusableButton>
+          </div>
+        </div>
+
+        <div className="settings-divider" />
+
+        {/* Auto Install Updates */}
+        <div className="settings-row preference-row">
+          <div className="preference-icon-wrapper download-cloud">
+            <LuCloudDownload size={20} />
+          </div>
+          <div className="settings-info flex-1">
+            <h3 className="label-lg">Auto Install App Updates</h3>
+            <p className="body-md text-muted">
+              Automatically download and install new versions of Vega
+            </p>
+          </div>
+          <FocusableButton
+            className={`switch-toggle ${autoInstallUpdates ? "active" : ""}`}
+            onClick={handleToggleAutoInstall}
+            aria-label={`Toggle auto install app updates, currently ${autoInstallUpdates ? "on" : "off"}`}
+          >
+            <div className="switch-knob" />
+          </FocusableButton>
+        </div>
+
+        <div className="settings-divider" />
+
+        {/* Auto Check Updates */}
+        <div className="settings-row preference-row">
+          <div className="preference-icon-wrapper refresh-cw">
+            <LuRefreshCw size={20} />
+          </div>
+          <div className="settings-info flex-1">
+            <h3 className="label-lg">Auto Check for Updates</h3>
+            <p className="body-md text-muted">Check for updates on app startup</p>
+          </div>
+          <FocusableButton
+            className={`switch-toggle ${autoCheckUpdates ? "active" : ""}`}
+            onClick={handleToggleAutoCheck}
+            aria-label={`Toggle auto check for updates, currently ${autoCheckUpdates ? "on" : "off"}`}
+          >
+            <div className="switch-knob" />
+          </FocusableButton>
+        </div>
+
+        <div className="settings-divider" />
+
+        {/* TV Mode */}
+        <div className="settings-row preference-row">
+          <div className="preference-icon-wrapper gamepad">
+            <LuGamepad2 size={20} />
+          </div>
+          <div className="settings-info flex-1">
+            <h3 className="label-lg">TV / Controller Mode</h3>
+            <p className="body-md text-muted">
+              Enable arrow-key spatial navigation for remotes and gamepads
+              (Requires app restart)
+            </p>
+          </div>
+          <FocusableButton
+            className={`switch-toggle ${tvModeEnabled ? "active" : ""}`}
+            onClick={handleToggleTvMode}
+            aria-label={`Toggle TV mode, currently ${tvModeEnabled ? "on" : "off"}`}
+          >
+            <div className="switch-knob" />
+          </FocusableButton>
+        </div>
       </div>
 
-      <div className="settings-divider" />
+      {/* Right Column of Preferences */}
+      <div className="preferences-column">
+        {/* Hardware Acceleration */}
+        <div className="settings-row preference-row">
+          <div className="preference-icon-wrapper cpu">
+            <LuCpu size={20} />
+          </div>
+          <div className="settings-info flex-1">
+            <h3 className="label-lg">Hardware Acceleration</h3>
+            <p className="body-md text-muted">
+              Use GPU to decode video. Turn off if you experience playback issues.
+            </p>
+          </div>
+          <FocusableButton
+            className={`switch-toggle ${hwAccelEnabled ? "active" : ""}`}
+            onClick={handleToggleHwAccel}
+            aria-label={`Toggle hardware acceleration, currently ${hwAccelEnabled ? "on" : "off"}`}
+          >
+            <div className="switch-knob" />
+          </FocusableButton>
+        </div>
 
-      {/* Excluded Qualities */}
-      <div className="settings-row">
-        <div className="settings-info" style={{ width: "100%" }}>
-          <h3 className="label-lg">Excluded Qualities</h3>
-          <p className="body-md text-muted" style={{ marginBottom: "8px" }}>
-            Select qualities you want to hide from playback and downloads.
-          </p>
+        <div className="settings-divider" />
 
+        {/* Developer Tools Shortcuts */}
+        <div className="settings-row preference-row">
+          <div className="preference-icon-wrapper terminal">
+            <LuTerminal size={20} />
+          </div>
+          <div className="settings-info flex-1">
+            <h3 className="label-lg">Developer Tools Shortcuts</h3>
+            <p className="body-md text-muted">
+              Allow F12 or Ctrl+Shift+I to toggle developer tools
+            </p>
+          </div>
+          <FocusableButton
+            className={`switch-toggle ${devtoolsShortcutsEnabled ? "active" : ""}`}
+            onClick={handleToggleDevtoolsShortcuts}
+            aria-label={`Toggle developer tools shortcuts, currently ${devtoolsShortcutsEnabled ? "on" : "off"}`}
+          >
+            <div className="switch-knob" />
+          </FocusableButton>
+        </div>
+
+        <div className="settings-divider" />
+
+        {/* DNS over HTTPS */}
+        <div className="settings-row preference-row" style={{ alignItems: "flex-start" }}>
+          <div className="preference-icon-wrapper shield">
+            <LuShield size={20} />
+          </div>
+          <div className="settings-info flex-1">
+            <h3 className="label-lg">DNS over HTTPS</h3>
+            <p className="body-md text-muted">
+              Bypass ISP DNS blocking for movie providers
+            </p>
+          </div>
           <div
             style={{
               display: "flex",
-              flexWrap: "wrap",
-              gap: "8px",
-              marginTop: "8px",
+              flexDirection: "column",
+              gap: "12px",
+              alignItems: "flex-end",
             }}
           >
-            {QUALITIES.map((q) => {
-              const isExcluded = excludedQualities.includes(q);
-              return (
-                <FocusableButton
-                  key={q}
-                  className={`quality-toggle-btn ${isExcluded ? "excluded" : ""}`}
-                  onClick={() => handleToggleQuality(q)}
-                  title={isExcluded ? "Click to Include" : "Click to Exclude"}
+            <FocusableButton
+              className={`switch-toggle ${dohEnabled ? "active" : ""}`}
+              onClick={handleToggleDoh}
+              aria-label={`Toggle DNS over HTTPS, currently ${dohEnabled ? "on" : "off"}`}
+            >
+              <div className="switch-knob" />
+            </FocusableButton>
+
+            {dohEnabled && (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                  width: "200px",
+                }}
+              >
+                <select
+                  value={dohProvider}
+                  onChange={handleChangeDohProvider}
+                  className="doh-select"
                 >
-                  {q}
-                </FocusableButton>
-              );
-            })}
+                  <option
+                    value="cloudflare"
+                    style={{ backgroundColor: "#1a1a1a", color: "white" }}
+                  >
+                    Cloudflare (1.1.1.1)
+                  </option>
+                  <option
+                    value="google"
+                    style={{ backgroundColor: "#1a1a1a", color: "white" }}
+                  >
+                    Google (8.8.8.8)
+                  </option>
+                  <option
+                    value="adguard"
+                    style={{ backgroundColor: "#1a1a1a", color: "white" }}
+                  >
+                    AdGuard
+                  </option>
+                  <option
+                    value="custom"
+                    style={{ backgroundColor: "#1a1a1a", color: "white" }}
+                  >
+                    Custom URL
+                  </option>
+                </select>
+
+                {dohProvider === "custom" && (
+                  <input
+                    type="text"
+                    placeholder="https://dns.example.com/dns-query"
+                    value={dohCustomUrl}
+                    onChange={handleChangeDohCustomUrl}
+                    className="doh-custom-input"
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="settings-divider" />
+
+        {/* Excluded Qualities */}
+        <div className="settings-row preference-row">
+          <div className="preference-icon-wrapper video">
+            <LuVideo size={20} />
+          </div>
+          <div className="settings-info flex-1">
+            <h3 className="label-lg">Excluded Qualities</h3>
+            <p className="body-md text-muted" style={{ marginBottom: "8px" }}>
+              Select qualities you want to hide from playback and downloads.
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                marginTop: "8px",
+              }}
+            >
+              {QUALITIES.map((q) => {
+                const isExcluded = excludedQualities.includes(q);
+                return (
+                  <FocusableButton
+                    key={q}
+                    className={`quality-toggle-btn ${isExcluded ? "excluded" : ""}`}
+                    onClick={() => handleToggleQuality(q)}
+                    title={isExcluded ? "Click to Include" : "Click to Exclude"}
+                  >
+                    {q}
+                  </FocusableButton>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>

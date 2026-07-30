@@ -1,0 +1,11 @@
+[env]
+AWS_LC_SYS_PREBUILT_NASM = "1"
+
+[build]
+# Ensure CMake and NASM are on the PATH for BoringSSL (required by wreq's boring-sys2 dependency)
+# These are set here because winget installs them but doesn't always update the current shell session.
+rustflags = []
+
+# You can also set PATH via the system environment instead, but this ensures build scripts find them:
+# cmake: C:\Program Files\CMake\bin
+# nasm:  C:\Users\angel\AppData\Local\bin\NASM
