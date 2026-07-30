@@ -20,33 +20,38 @@
 .search-container {
   display: flex;
   align-items: center;
-  background-color: rgba(0, 0, 0, 0.4); /* Make it translucent over hero bg */
-  backdrop-filter: blur(8px);
+  background-color: var(--surface-container);
+  backdrop-filter: blur(12px);
   border-radius: var(--rounded-full);
   padding: 8px 16px;
   width: 400px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--outline-variant);
   transition: all 0.2s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 .search-container:focus-within {
   border-color: var(--primary);
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: var(--surface-container-high);
+  box-shadow: 0 4px 20px rgba(var(--primary-rgb), 0.25);
 }
 
 .search-icon {
   color: var(--on-surface-variant);
   margin-right: 12px;
+  flex-shrink: 0;
 }
 
 .search-input {
   background: transparent;
   border: none;
-  color: var(--on-surface);
+  color: var(--on-surface) !important;
   flex: 1;
   outline: none;
+  font-size: 14px;
 }
 
 .search-input::placeholder {
   color: var(--on-surface-variant);
+  opacity: 0.8;
 }

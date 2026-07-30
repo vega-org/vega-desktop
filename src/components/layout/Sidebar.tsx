@@ -6,6 +6,7 @@ import {
   LuSettings as Settings,
   LuBlocks as Blocks,
   LuDownload as Download,
+  LuHistory as History,
 } from "react-icons/lu";
 import { FocusableNavLink } from "./FocusableNavLink";
 import {
@@ -76,6 +77,14 @@ export const Sidebar: React.FC = () => {
             title="Settings"
           >
             <Settings size={24} />
+          </FocusableNavLink>
+
+          <FocusableNavLink
+            to="/changelog"
+            className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+            title="Changelog"
+          >
+            <History size={24} />
           </FocusableNavLink>
         </nav>
       </aside>

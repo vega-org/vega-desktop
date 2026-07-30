@@ -18,6 +18,7 @@ import { DownloadsSeriesPage } from "./pages/DownloadsSeriesPage";
 import { WatchlistPage } from "./pages/WatchlistPage";
 import { CatalogPage } from "./pages/CatalogPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { ChangelogPage } from "./pages/ChangelogPage";
 import { updateProvidersService } from "./lib/services/UpdateProviders";
 import { init as initNavigation } from "@noriginmedia/norigin-spatial-navigation-core";
 import { invoke } from "@tauri-apps/api/core";
@@ -148,6 +149,8 @@ export default function App() {
             <Route path="extensions" element={<ExtensionsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="/changelog" element={<ChangelogPage />} />
+            <Route path="changelog" element={<ChangelogPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

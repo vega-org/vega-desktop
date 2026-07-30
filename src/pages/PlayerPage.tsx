@@ -903,6 +903,12 @@ const DesktopPlayer: React.FC<any> = ({
         secondaryTitle={activeEpisode?.title || state.secondaryTitle}
         showNextEpisode={showNextBtn}
         onBack={() => navigate(-1)}
+        onNavigateToApp={async () => {
+          if (isPip) {
+            await togglePip();
+          }
+          navigate("/");
+        }}
         onTogglePause={() => {
           mpv.togglePause();
           revealControls();

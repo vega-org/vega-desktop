@@ -48,6 +48,9 @@ export enum SettingsKeys {
   // Advanced settings
   HARDWARE_ACCELERATION = "hardwareAcceleration",
   DEVTOOLS_SHORTCUTS_ENABLED = "devtoolsShortcutsEnabled",
+
+  // Volume setting
+  PLAYER_VOLUME = "playerVolume",
 }
 
 /**
@@ -332,6 +335,17 @@ export class SettingsStorage {
 
   setDohCustomUrl(url: string): void {
     mainStorage.setString("dohCustomUrl", url);
+  }
+
+  // Volume settings
+  getPlayerVolume(): number {
+    const val = mainStorage.getNumber(SettingsKeys.PLAYER_VOLUME);
+    return typeof val === "number" && Number.isFinite(val) ? val : 100;
+  }
+
+  setPlayerVolume(volume: number): void {
+    const clamped = Math.max(0, Math.min(150, Math.round(volume)));
+    mainStorage.setNumber(SettingsKeys.PLAYER_VOLUME, clamped);
   }
 }
 

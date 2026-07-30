@@ -90,7 +90,7 @@ export const Topbar: React.FC = () => {
                 handleSearch(e as any);
               }
             }}
-            style={{ width: '100%', flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'inherit' }}
+            style={{ width: '100%', flex: 1, background: 'transparent', border: 'none', outline: 'none' }}
           />
         </div>
       </form>

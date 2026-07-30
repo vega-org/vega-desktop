@@ -36,7 +36,7 @@ export const SettingsPage: React.FC = () => {
       <div className="page-header">
         <h1 className="headline-lg">Settings</h1>
         <p className="body-md text-muted page-subtitle">
-          Customize Vega v1.4.3b to your preference
+          Customize VegaBR31 v1.4.3b to your preference
         </p>
       </div>
 
@@ -148,10 +148,10 @@ export const SettingsPage: React.FC = () => {
           <div className="settings-card">
             <div className="settings-row about-row-content">
               <div className="about-logo-wrapper">
-                <img src={logo} alt="Vega Logo" className="about-logo" />
+                <img src={logo} alt="VegaBR31 Logo" className="about-logo" />
               </div>
               <div className="settings-info flex-1">
-                <h3 className="label-lg">Vega v1.4.3b</h3>
+                <h3 className="label-lg">VegaBR31 v1.4.3b</h3>
                 <p className="body-md text-muted">{appVersion}</p>
                 <FocusableButton
                   className="update-btn"

@@ -1,6 +1,6 @@
-# Vega v1.4.3b — Update by Angel Mehul Singh
+# VegaBR31 v1.4.3b — Update by Angel Mehul Singh
 
-This document outlines the UI enhancements, visual overhauls, and build configuration changes implemented in **Vega Desktop v1.4.3b** by Angel Mehul Singh.
+This document outlines the UI enhancements, visual overhauls, volume persistence, PiP navigation features, and build configuration changes implemented in **VegaBR31 Desktop v1.4.3b** by Angel Mehul Singh.
 
 
 * **Author:** Angel Mehul Singh
@@ -79,8 +79,10 @@ This document outlines the UI enhancements, visual overhauls, and build configur
 ## 🎬 Player & Playback Controls
 
 ### [PlayerControls.tsx](file:///d:/SteamLibrary/Vega4UPDT/vega-desktop/src/pages/PlayerControls.tsx), [PlayerPage.tsx](file:///d:/SteamLibrary/Vega4UPDT/vega-desktop/src/pages/PlayerPage.tsx) & [useMpvPlayer.ts](file:///d:/SteamLibrary/Vega4UPDT/vega-desktop/src/lib/hooks/useMpvPlayer.ts)
-* **Volume Control Bar:** Integrated an interactive volume control bar into the player action bar with dynamic mute/unmute icons (`Volume2`, `Volume1`, `VolumeX`), a responsive volume slider, real-time percentage readout, and volume state persistence.
+* **Persistent MPV Volume Bar:** Integrated an interactive volume control bar into the player action bar with dynamic mute/unmute icons (`Volume2`, `Volume1`, `VolumeX`), a responsive volume slider, real-time percentage readout, and persistent volume level storage across app restarts via `SettingsStorage.setPlayerVolume`.
+* **Picture-in-Picture App Navigation:** Enhanced Picture-in-Picture (PiP) overlay controls with a dedicated "Navigate to App" button (`Home` icon). Users can watch content in PiP mode while seamlessly returning to browse the main application interface.
 * **Crop / Fit Aspect Ratio Fix:** Fixed video crop/fit toggle button by properly executing MPV `panscan` commands (`panscan 1.0` vs `panscan 0.0`) alongside property setter calls and exposing MPV command execution in `useMpvPlayer.ts`.
+* **VegaBR31 Branding & NSIS Installer:** Updated product configuration in `tauri.conf.json`, `index.html`, and UI components to **VegaBR31**. Ensured NSIS installer packages, desktop shortcuts, and window titles build under the new **VegaBR31** branding.
 
 ### [DownloadsPage.tsx](file:///d:/SteamLibrary/Vega4UPDT/vega-desktop/src/pages/DownloadsPage.tsx) & [DownloadsPage.css](file:///d:/SteamLibrary/Vega4UPDT/vega-desktop/src/pages/DownloadsPage.css)
 * **Status Badges:** Replaced simple status strings with beautiful status badges:

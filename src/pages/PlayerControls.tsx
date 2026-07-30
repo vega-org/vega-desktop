@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState, useEffect } from 'react';
-import { LuArrowLeft as ArrowLeft, LuPlay as Play, LuPause as Pause, LuSkipBack as SkipBack, LuSkipForward as SkipForward, LuRewind as Rewind, LuFastForward as FastForward, LuMaximize as Maximize, LuMinimize as Minimize, LuSkipForward as NextIcon, LuCaptions as Subtitles, LuGauge as Gauge, LuPictureInPicture as PictureInPicture, LuRectangleHorizontal as RectangleHorizontal, LuCheck as Check, LuServer as ServerIcon, LuTv as Tv, LuAudioLines, LuVolume2 as Volume2, LuVolume1 as Volume1, LuVolumeX as VolumeX } from 'react-icons/lu';
+import { LuArrowLeft as ArrowLeft, LuPlay as Play, LuPause as Pause, LuSkipBack as SkipBack, LuSkipForward as SkipForward, LuRewind as Rewind, LuFastForward as FastForward, LuMaximize as Maximize, LuMinimize as Minimize, LuSkipForward as NextIcon, LuCaptions as Subtitles, LuGauge as Gauge, LuPictureInPicture as PictureInPicture, LuRectangleHorizontal as RectangleHorizontal, LuCheck as Check, LuServer as ServerIcon, LuTv as Tv, LuAudioLines, LuVolume2 as Volume2, LuVolume1 as Volume1, LuVolumeX as VolumeX, LuHouse as Home } from 'react-icons/lu';
 import { MdVideoSettings, Md4K, Md8K, MdHd, MdSd, MdHighQuality } from 'react-icons/md';
 import type { MpvTrack } from '../lib/hooks/useMpvPlayer';
 import { SearchSubtitlesModal } from '../components/SearchSubtitlesModal';
@@ -17,6 +17,7 @@ interface PlayerControlsProps {
   secondaryTitle?: string;
   showNextEpisode: boolean;
   onBack: () => void;
+  onNavigateToApp?: () => void;
   onTogglePause: () => void;
   onSeek: (time: number) => void;
   onSeekRelative: (delta: number) => void;
@@ -96,6 +97,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   secondaryTitle,
   showNextEpisode,
   onBack,
+  onNavigateToApp,
   onTogglePause,
   onSeek,
   onSeekRelative,
@@ -218,9 +220,14 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
               </div>
             )}
           </div>
-          <button className="pip-exit-btn" onClick={onTogglePip} onMouseDown={stop}>
-            <Minimize size={16} />
-          </button>
+          <div className="pip-top-actions">
+            <button className="pip-action-btn" onClick={onNavigateToApp || onBack} onMouseDown={stop} title="Navigate to App">
+              <Home size={16} />
+            </button>
+            <button className="pip-action-btn" onClick={onTogglePip} onMouseDown={stop} title="Exit PIP">
+              <Minimize size={16} />
+            </button>
+          </div>
         </div>
       </>
     );

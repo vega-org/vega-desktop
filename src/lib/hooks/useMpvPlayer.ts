@@ -59,7 +59,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
   const [isPaused, setIsPaused] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(100);
+  const [volume, setVolume] = useState(() => settingsStorage.getPlayerVolume());
   const [speed, setSpeed] = useState(1.0);
   const [isBuffering, setIsBuffering] = useState(false);
   const [cacheDuration, setCacheDuration] = useState(0);
@@ -173,6 +173,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
             "sub-margin-y": (
               settingsStorage.getSubtitleBottomPadding() || 36
             ).toString(),
+            "volume": settingsStorage.getPlayerVolume().toString(),
             "sub-ass-override": "force",
             "demuxer-lavf-o": "fflags=+genpts",
           };
@@ -221,7 +222,11 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
               if (data !== null) setCacheDuration(data as number);
               break;
             case "volume":
-              setVolume(data as number);
+              if (data !== null) {
+                const vol = data as number;
+                setVolume(vol);
+                settingsStorage.setPlayerVolume(vol);
+              }
               break;
             case "speed":
               setSpeed(data as number);
@@ -655,6 +660,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
       try {
         const vol = Math.max(0, Math.min(150, level));
         await setProperty("volume", vol);
+        settingsStorage.setPlayerVolume(vol);
       } catch (err) {
         console.error("Failed to set volume:", err);
       }

@@ -84,7 +84,7 @@ export const HomePage: React.FC = () => {
   if (!installedProviders || installedProviders.length === 0) {
     return (
       <div className="empty-state">
-        <h2 className="headline-lg">Welcome to Vega v1.4.3b</h2>
+        <h2 className="headline-lg">Welcome to VegaBR31 v1.4.3b</h2>
         <p className="body-lg text-muted">
           Please install an extension to get started.
         </p>

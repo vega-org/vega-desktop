@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Vega",
+  "productName": "VegaBR31",
   "version": "1.4.3-beta",
   "identifier": "com.vega.desktop",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Vega v1.4.3b",
+        "title": "VegaBR31 v1.4.3b",
         "width": 800,
         "height": 600,
         "transparent": true

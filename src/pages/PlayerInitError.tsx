@@ -52,7 +52,7 @@ export const PlayerInitError: React.FC<PlayerInitErrorProps> = ({
           <p className="player-error-hint">
             This looks like a missing system runtime. Installing or repairing
             the Microsoft Visual C++ Redistributable may help, then restart
-            Vega v1.4.3b.
+            VegaBR31 v1.4.3b.
           </p>
         )}
         <div className="player-error-actions">

@@ -6,7 +6,7 @@
     ${If} $0 != 0
     ${AndIf} $0 != 1638
     ${AndIf} $0 != 3010
-      MessageBox MB_ICONEXCLAMATION "Microsoft Visual C++ Redistributable could not be installed. Vega may require it for video playback."
+      MessageBox MB_ICONEXCLAMATION "Microsoft Visual C++ Redistributable could not be installed. VegaBR31 may require it for video playback."
     ${EndIf}
   ${EndIf}
 !macroend
