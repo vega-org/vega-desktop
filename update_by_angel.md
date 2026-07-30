@@ -72,6 +72,15 @@ This document outlines the UI enhancements, visual overhauls, and build configur
 * **Card Animations:** Programmed smooth hover effects on movie/show tiles (lift translate + subtle scale).
 * **Hover Trash Button:** Styled the deletion button to fade in on card hover, transforming into an error-themed glowing red button on hover/focus.
 * **Glow Empty State:** Created a matching bookmark icon glow for empty lists.
+* **Provider Context Navigation:** Fixed wishlist item navigation to pass `?provider=...` parameters, allowing content details to fetch cleanly using the item's provider even when a different provider is active globally.
+
+---
+
+## 🎬 Player & Playback Controls
+
+### [PlayerControls.tsx](file:///d:/SteamLibrary/Vega4UPDT/vega-desktop/src/pages/PlayerControls.tsx), [PlayerPage.tsx](file:///d:/SteamLibrary/Vega4UPDT/vega-desktop/src/pages/PlayerPage.tsx) & [useMpvPlayer.ts](file:///d:/SteamLibrary/Vega4UPDT/vega-desktop/src/lib/hooks/useMpvPlayer.ts)
+* **Volume Control Bar:** Integrated an interactive volume control bar into the player action bar with dynamic mute/unmute icons (`Volume2`, `Volume1`, `VolumeX`), a responsive volume slider, real-time percentage readout, and volume state persistence.
+* **Crop / Fit Aspect Ratio Fix:** Fixed video crop/fit toggle button by properly executing MPV `panscan` commands (`panscan 1.0` vs `panscan 0.0`) alongside property setter calls and exposing MPV command execution in `useMpvPlayer.ts`.
 
 ### [DownloadsPage.tsx](file:///d:/SteamLibrary/Vega4UPDT/vega-desktop/src/pages/DownloadsPage.tsx) & [DownloadsPage.css](file:///d:/SteamLibrary/Vega4UPDT/vega-desktop/src/pages/DownloadsPage.css)
 * **Status Badges:** Replaced simple status strings with beautiful status badges:

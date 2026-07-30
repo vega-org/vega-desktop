@@ -800,7 +800,18 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
       if (isInitialized) {
         try {
           await setProperty(prop, val);
-        } catch (e) {}
+        } catch (e) {
+          console.error(`[MPV] Failed to set property ${prop}:`, e);
+        }
+      }
+    },
+    command: async (cmdName: string, args?: (string | number)[]) => {
+      if (isInitialized) {
+        try {
+          await command(cmdName, args || []);
+        } catch (e) {
+          console.error(`[MPV] Failed to execute command ${cmdName}:`, e);
+        }
       }
     },
   };

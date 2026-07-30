@@ -14,8 +14,13 @@ export const WatchlistPage: React.FC = () => {
 
 
 
-  const handlePostClick = (link: string) => {
-    navigate(`/content/${encodeURIComponent(link)}`);
+  const handlePostClick = (link: string, providerValue?: string) => {
+    const params = new URLSearchParams();
+    if (providerValue) {
+      params.append('provider', providerValue);
+    }
+    const queryString = params.toString();
+    navigate(`/content/${encodeURIComponent(link)}${queryString ? `?${queryString}` : ''}`);
   };
 
   const handleRemove = (e: React.MouseEvent, link: string) => {
@@ -51,7 +56,7 @@ export const WatchlistPage: React.FC = () => {
       <div className="search-grid">
         {watchList.map((post, index) => (
           <div key={`${post.link}-${index}`} className="search-card watchlist-card">
-            <WatchlistCardClickable onClick={() => handlePostClick(post.link)}>
+            <WatchlistCardClickable onClick={() => handlePostClick(post.link, post.provider)}>
               <img src={post.poster} alt={post.title} className="search-poster" loading="lazy" />
               <div className="search-hover-overlay">
                 <Play size={48} fill="currentColor" />

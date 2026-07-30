@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState, useEffect } from 'react';
-import { LuArrowLeft as ArrowLeft, LuPlay as Play, LuPause as Pause, LuSkipBack as SkipBack, LuSkipForward as SkipForward, LuRewind as Rewind, LuFastForward as FastForward, LuMaximize as Maximize, LuMinimize as Minimize, LuSkipForward as NextIcon, LuCaptions as Subtitles, LuGauge as Gauge, LuPictureInPicture as PictureInPicture, LuRectangleHorizontal as RectangleHorizontal, LuCheck as Check, LuServer as ServerIcon, LuTv as Tv, LuAudioLines } from 'react-icons/lu';
+import { LuArrowLeft as ArrowLeft, LuPlay as Play, LuPause as Pause, LuSkipBack as SkipBack, LuSkipForward as SkipForward, LuRewind as Rewind, LuFastForward as FastForward, LuMaximize as Maximize, LuMinimize as Minimize, LuSkipForward as NextIcon, LuCaptions as Subtitles, LuGauge as Gauge, LuPictureInPicture as PictureInPicture, LuRectangleHorizontal as RectangleHorizontal, LuCheck as Check, LuServer as ServerIcon, LuTv as Tv, LuAudioLines, LuVolume2 as Volume2, LuVolume1 as Volume1, LuVolumeX as VolumeX } from 'react-icons/lu';
 import { MdVideoSettings, Md4K, Md8K, MdHd, MdSd, MdHighQuality } from 'react-icons/md';
 import type { MpvTrack } from '../lib/hooks/useMpvPlayer';
 import { SearchSubtitlesModal } from '../components/SearchSubtitlesModal';
@@ -11,6 +11,8 @@ interface PlayerControlsProps {
   currentTime: number;
   duration: number;
   cacheDuration?: number;
+  volume: number;
+  onVolumeChange: (val: number) => void;
   primaryTitle: string;
   secondaryTitle?: string;
   showNextEpisode: boolean;
@@ -88,6 +90,8 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   currentTime,
   duration,
   cacheDuration,
+  volume,
+  onVolumeChange,
   primaryTitle,
   secondaryTitle,
   showNextEpisode,
@@ -124,6 +128,17 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   const trackRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<'audio' | 'subtitle' | 'speed' | 'quality' | 'server' | null>(null);
   const [showOnlineSearch, setShowOnlineSearch] = useState(false);
+  const [prevVolume, setPrevVolume] = useState<number>(100);
+
+  const handleToggleMute = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (volume > 0) {
+      setPrevVolume(volume);
+      onVolumeChange(0);
+    } else {
+      onVolumeChange(prevVolume > 0 ? prevVolume : 100);
+    }
+  }, [volume, prevVolume, onVolumeChange]);
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -281,6 +296,31 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
 
         <div className="player-actions-row">
           <div className="player-actions-left">
+            <div className="volume-control" onClick={stop}>
+              <button
+                className="action-btn text-btn"
+                onClick={handleToggleMute}
+                title={volume === 0 ? "Unmute" : "Mute"}
+              >
+                {volume === 0 ? (
+                  <VolumeX size={20} />
+                ) : volume < 50 ? (
+                  <Volume1 size={20} />
+                ) : (
+                  <Volume2 size={20} />
+                )}
+              </button>
+              <input
+                type="range"
+                className="volume-slider"
+                min="0"
+                max="100"
+                value={volume}
+                onChange={(e) => onVolumeChange(Number(e.target.value))}
+              />
+              <span className="volume-text">{Math.round(volume)}%</span>
+            </div>
+
             <div className="inline-menu-container">
               <button className={`action-btn text-btn ${openMenu === 'audio' ? 'active' : ''}`} onClick={(e) => toggleMenu(e, 'audio')}>
                 <LuAudioLines size={20} />

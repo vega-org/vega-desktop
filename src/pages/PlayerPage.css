@@ -559,25 +559,38 @@
 }
 
 .volume-slider {
-  width: 0;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.12);
+  width: 70px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.25);
   border-radius: 999px;
   cursor: pointer;
-  transition: width 0.2s;
+  transition: width 0.2s, background 0.15s;
   -webkit-appearance: none;
   appearance: none;
 }
 .volume-control:hover .volume-slider {
-  width: 80px;
+  width: 90px;
+  background: rgba(255, 255, 255, 0.35);
 }
 .volume-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 10px;
-  height: 10px;
-  background: #fff;
+  width: 12px;
+  height: 12px;
+  background: var(--primary, #fff);
   border-radius: 50%;
   cursor: pointer;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+  transition: transform 0.12s;
+}
+.volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+.volume-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+  min-width: 34px;
+  user-select: none;
 }
 
 /* ---- Settings Panel ---- */

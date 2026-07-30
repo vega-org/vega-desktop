@@ -776,6 +776,7 @@ const DesktopPlayer: React.FC<any> = ({
     const nextCrop = !isCropped;
     setIsCropped(nextCrop);
     mpv.setProperty("panscan", nextCrop ? 1.0 : 0.0);
+    mpv.command("set", ["panscan", nextCrop ? "1.0" : "0.0"]);
   };
 
   const handleStreamSelect = useCallback(
@@ -896,6 +897,8 @@ const DesktopPlayer: React.FC<any> = ({
         currentTime={mpv.currentTime}
         duration={mpv.duration}
         cacheDuration={mpv.cacheDuration}
+        volume={mpv.volume}
+        onVolumeChange={(v) => mpv.setVolumeLevel(v)}
         primaryTitle={state.primaryTitle}
         secondaryTitle={activeEpisode?.title || state.secondaryTitle}
         showNextEpisode={showNextBtn}
