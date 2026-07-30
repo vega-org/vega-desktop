@@ -1,6 +1,6 @@
 [package]
 name = "Vega_Beta_Angel"
-version = "1.4.3b"
+version = "1.4.3-beta"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"

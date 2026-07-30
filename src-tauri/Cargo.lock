@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "Vega_Beta_Angel"
-version = "1.4.3"
+version = "1.4.3-beta"
 dependencies = [
  "aes",
  "anyhow",
