@@ -5,9 +5,12 @@ const SYNC_DIRECTORY: &str = ".vega-sync";
 fn safe_relative_path(relative_path: &str) -> Result<PathBuf, String> {
     let path = Path::new(relative_path);
     if path.is_absolute()
-        || path
-            .components()
-            .any(|component| matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_)))
+        || path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
     {
         return Err("Invalid relative media path".into());
     }
@@ -116,10 +119,7 @@ mod tests {
         let actual = season.join("Episode_1.mp4");
         std::fs::write(&actual, b"video").unwrap();
 
-        let resolved = resolve_existing_media_path(
-            &root,
-            Path::new("show/season_1/Episode_1.mkv"),
-        );
+        let resolved = resolve_existing_media_path(&root, Path::new("show/season_1/Episode_1.mkv"));
 
         assert_eq!(resolved.as_deref(), Some(actual.as_path()));
         std::fs::remove_dir_all(root).unwrap();

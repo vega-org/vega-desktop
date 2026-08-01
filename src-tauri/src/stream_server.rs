@@ -41,14 +41,13 @@ pub async fn start_server() -> Result<u16, String> {
         .pool_max_idle_per_host(4)
         .build()
         .map_err(|e| e.to_string())?;
-    let listener = TcpListener::bind("127.0.0.1:0").await.map_err(|e| e.to_string())?;
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|e| e.to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     println!("[stream_proxy] Starting on port {}", port);
 
-    let state = ProxyState {
-        client,
-        port,
-    };
+    let state = ProxyState { client, port };
 
     let app = Router::new()
         .route("/playlist.m3u8", get(handle_proxy))
@@ -68,7 +67,12 @@ fn encode_url(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect::<String>()
 }
 
-fn build_request(client: &Client, url: &str, referer: &Option<String>, ua: &Option<String>) -> reqwest::RequestBuilder {
+fn build_request(
+    client: &Client,
+    url: &str,
+    referer: &Option<String>,
+    ua: &Option<String>,
+) -> reqwest::RequestBuilder {
     let mut req = client.get(url);
     if let Some(ref r) = referer {
         req = req.header("Referer", r);
@@ -93,9 +97,19 @@ fn resolve_url(base: &str, relative: &str) -> String {
     relative.to_string()
 }
 
-fn build_proxy_url(port: u16, target_url: &str, is_playlist: bool, referer: &Option<String>, ua: &Option<String>) -> String {
+fn build_proxy_url(
+    port: u16,
+    target_url: &str,
+    is_playlist: bool,
+    referer: &Option<String>,
+    ua: &Option<String>,
+) -> String {
     let encoded = encode_url(target_url);
-    let route = if is_playlist { "playlist.m3u8" } else { "segment.ts" };
+    let route = if is_playlist {
+        "playlist.m3u8"
+    } else {
+        "segment.ts"
+    };
     let mut result = format!("http://127.0.0.1:{}/{}?url={}", port, route, encoded);
     if let Some(ref r) = referer {
         result.push_str(&format!("&referer={}", encode_url(r)));
@@ -127,10 +141,12 @@ async fn fetch_with_retry(
                     label, status, url, attempt, max_attempts
                 );
                 if (status.as_u16() == 403 || status.as_u16() == 429 || status.is_server_error())
-                    && attempt < max_attempts {
-                        tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
-                        continue;
-                    }
+                    && attempt < max_attempts
+                {
+                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64))
+                        .await;
+                    continue;
+                }
                 return Err(StatusCode::BAD_GATEWAY);
             }
             Err(e) => {
@@ -139,7 +155,8 @@ async fn fetch_with_retry(
                     label, url, attempt, max_attempts, e
                 );
                 if attempt < max_attempts {
-                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64))
+                        .await;
                     continue;
                 }
                 return Err(StatusCode::BAD_GATEWAY);
@@ -153,16 +170,30 @@ async fn handle_proxy(
     State(state): State<ProxyState>,
     Query(query): Query<ProxyQuery>,
 ) -> Result<Response, StatusCode> {
-    println!("[stream_proxy] Received playlist request for: {}", query.url);
-    let response = fetch_with_retry(&state.client, &query.url, &query.referer, &query.ua, "playlist").await?;
-    
-    let content_type = response.headers()
+    println!(
+        "[stream_proxy] Received playlist request for: {}",
+        query.url
+    );
+    let response = fetch_with_retry(
+        &state.client,
+        &query.url,
+        &query.referer,
+        &query.ua,
+        "playlist",
+    )
+    .await?;
+
+    let content_type = response
+        .headers()
         .get(axum::http::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_string();
 
-    if !content_type.contains("mpegurl") && !content_type.contains("m3u8") && !content_type.contains("application/x-mpegURL") {
+    if !content_type.contains("mpegurl")
+        && !content_type.contains("m3u8")
+        && !content_type.contains("application/x-mpegURL")
+    {
         // The CDN returned a direct video stream (e.g. MP4) instead of a playlist!
         let stream = response.bytes_stream();
         let body = axum::body::Body::from_stream(stream);
@@ -195,8 +226,15 @@ async fn handle_proxy(
                     let uri_end = uri_start + end_offset;
                     let original = processed[uri_start..uri_end].to_string();
                     let resolved = resolve_url(&query.url, &original);
-                    let is_sub_playlist = resolved.contains(".m3u8") || line.contains("EXT-X-MEDIA");
-                    let new_uri = build_proxy_url(state.port, &resolved, is_sub_playlist, &query.referer, &query.ua);
+                    let is_sub_playlist =
+                        resolved.contains(".m3u8") || line.contains("EXT-X-MEDIA");
+                    let new_uri = build_proxy_url(
+                        state.port,
+                        &resolved,
+                        is_sub_playlist,
+                        &query.referer,
+                        &query.ua,
+                    );
                     processed.replace_range(uri_start..uri_end, &new_uri);
                 }
             }
@@ -207,32 +245,48 @@ async fn handle_proxy(
             new_playlist.push('\n');
         } else {
             let resolved = resolve_url(&query.url, line.trim());
-            let new_uri = build_proxy_url(state.port, &resolved, is_master, &query.referer, &query.ua);
+            let new_uri =
+                build_proxy_url(state.port, &resolved, is_master, &query.referer, &query.ua);
             new_playlist.push_str(&new_uri);
             new_playlist.push('\n');
         }
     }
 
     Ok((
-        [(axum::http::header::CONTENT_TYPE, "application/vnd.apple.mpegurl")],
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "application/vnd.apple.mpegurl",
+        )],
         new_playlist,
-    ).into_response())
+    )
+        .into_response())
 }
 
 async fn handle_segment(
     State(state): State<ProxyState>,
     Query(query): Query<SegmentQuery>,
 ) -> Result<Response, StatusCode> {
-    let response = fetch_with_retry(&state.client, &query.url, &query.referer, &query.ua, "segment").await?;
+    let response = fetch_with_retry(
+        &state.client,
+        &query.url,
+        &query.referer,
+        &query.ua,
+        "segment",
+    )
+    .await?;
 
-    let content_type = response.headers()
+    let content_type = response
+        .headers()
         .get(axum::http::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("video/MP2T")
         .to_string();
 
     let url_lower = query.url.to_lowercase();
-    let is_fmp4 = url_lower.contains(".mp4") || url_lower.contains(".m4s") || url_lower.contains(".m4v") || url_lower.contains(".m4a");
+    let is_fmp4 = url_lower.contains(".mp4")
+        || url_lower.contains(".m4s")
+        || url_lower.contains(".m4v")
+        || url_lower.contains(".m4a");
 
     if is_fmp4 {
         let stream = response.bytes_stream();
@@ -258,8 +312,5 @@ async fn handle_segment(
         }
     }
 
-    Ok((
-        [(axum::http::header::CONTENT_TYPE, content_type)],
-        data,
-    ).into_response())
+    Ok(([(axum::http::header::CONTENT_TYPE, content_type)], data).into_response())
 }

@@ -37,7 +37,9 @@ pub async fn get_cookies_for_url<R: Runtime>(
             path: c.path().unwrap_or("/").to_string(),
             http_only: c.http_only().unwrap_or(false),
             secure: c.secure().unwrap_or(false),
-            expires: c.expires().and_then(|e| e.datetime().map(|dt| dt.unix_timestamp() as f64)),
+            expires: c
+                .expires()
+                .and_then(|e| e.datetime().map(|dt| dt.unix_timestamp() as f64)),
         })
         .collect())
 }

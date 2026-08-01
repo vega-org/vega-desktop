@@ -2,17 +2,12 @@ use hickory_resolver::{
     config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts},
     TokioAsyncResolver,
 };
+use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, net::SocketAddr, str::FromStr, sync::Arc};
+use tokio::sync::RwLock;
 use wreq::{dns::Resolve, redirect::Policy, Client, Method};
 use wreq_util::Emulation;
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    str::FromStr,
-    sync::Arc,
-};
-use tokio::sync::RwLock;
-use lazy_static::lazy_static;
 
 #[derive(Clone)]
 struct CustomDnsResolver {
@@ -86,7 +81,7 @@ lazy_static! {
 
 async fn get_client(provider: &str, custom_url: Option<String>) -> Result<Client, String> {
     let key = format!("{}_{}", provider, custom_url.clone().unwrap_or_default());
-    
+
     {
         let cache = CLIENT_CACHE.read().await;
         if let Some(client) = cache.get(&key) {
@@ -95,7 +90,7 @@ async fn get_client(provider: &str, custom_url: Option<String>) -> Result<Client
     }
 
     let resolver = CustomDnsResolver::new(provider, custom_url);
-    
+
     // Keep TLS and HTTP/2 behavior aligned with a real Chrome client.
     let client = Client::builder()
         .emulation(Emulation::Chrome137)
@@ -140,8 +135,14 @@ pub struct FetchResponse {
 
 #[tauri::command]
 pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
-    let has_cookie = args.headers.keys().any(|k| k.eq_ignore_ascii_case("cookie"));
-    println!("[doh_fetch] {} {} | has_cookie_header: {}", args.method, args.url, has_cookie);
+    let has_cookie = args
+        .headers
+        .keys()
+        .any(|k| k.eq_ignore_ascii_case("cookie"));
+    println!(
+        "[doh_fetch] {} {} | has_cookie_header: {}",
+        args.method, args.url, has_cookie
+    );
 
     let client = get_client(&args.doh_provider, args.doh_custom_url).await?;
 
@@ -176,12 +177,19 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
         eprintln!("[doh_fetch] request error: {}", e);
     }
     let response = response?;
-    
+
     let status = response.status().as_u16();
-    let status_text = response.status().canonical_reason().unwrap_or("").to_string();
-        let response_url = response.url().to_string();
-    println!("[doh_fetch] response: {} {} for {}", status, status_text, args.url);
-    
+    let status_text = response
+        .status()
+        .canonical_reason()
+        .unwrap_or("")
+        .to_string();
+    let response_url = response.url().to_string();
+    println!(
+        "[doh_fetch] response: {} {} for {}",
+        status, status_text, args.url
+    );
+
     let mut headers = Vec::new();
     for (k, v) in response.headers() {
         if let Ok(val) = v.to_str() {
@@ -194,7 +202,7 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
     Ok(FetchResponse {
         status,
         status_text,
-            url: response_url,
+        url: response_url,
         headers,
         data,
     })

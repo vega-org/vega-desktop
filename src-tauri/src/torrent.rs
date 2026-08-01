@@ -1,10 +1,10 @@
+use axum::serve::Listener;
 use std::path::PathBuf;
 use std::sync::Arc;
-use axum::serve::Listener;
 
-use librqbit::Session;
 use librqbit::api::Api;
 use librqbit::http_api::{HttpApi, HttpApiOptions};
+use librqbit::Session;
 
 pub struct TorrentState {
     pub _session: Arc<Session>,
@@ -31,10 +31,9 @@ impl TorrentState {
 
         let http_api = HttpApi::new(api, Some(opts));
 
-        let dual_listener = librqbit_dualstack_sockets::socket::MaybeDualstackSocket::<tokio::net::TcpListener>::bind_tcp(
-            "127.0.0.1:0".parse()?,
-            Default::default()
-        )?;
+        let dual_listener = librqbit_dualstack_sockets::socket::MaybeDualstackSocket::<
+            tokio::net::TcpListener,
+        >::bind_tcp("127.0.0.1:0".parse()?, Default::default())?;
         let api_port = dual_listener.local_addr()?.0.port();
 
         // Spawn HTTP server in the background
@@ -44,6 +43,9 @@ impl TorrentState {
             }
         });
 
-        Ok(Self { _session: session, api_port })
+        Ok(Self {
+            _session: session,
+            api_port,
+        })
     }
 }

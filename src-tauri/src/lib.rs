@@ -92,51 +92,58 @@ fn toggle_devtools(window: tauri::WebviewWindow) {
 
 #[tauri::command]
 fn set_player_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Result<(), String> {
-    let was_maximized = window.is_maximized().map_err(|error| error.to_string())?;
-    window
-        .set_fullscreen(fullscreen)
-        .map_err(|error| error.to_string())?;
-
-    #[cfg(target_os = "windows")]
-    if fullscreen && was_maximized {
-        let hwnd_value = window.hwnd().map_err(|error| error.to_string())?.0 as isize;
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        #[cfg(target_os = "windows")]
+        let was_maximized = window.is_maximized().map_err(|error| error.to_string())?;
         window
-            .run_on_main_thread(move || unsafe {
-                let hwnd = HWND(hwnd_value as _);
-                let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
-
-                // Clear only the native maximized bit without calling
-                // SW_RESTORE, which would visibly shrink the window first.
-                SetWindowLongPtrW(hwnd, GWL_STYLE, style & !(WS_MAXIMIZE.0 as isize));
-
-                let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-                let mut monitor_info = MONITORINFO {
-                    cbSize: std::mem::size_of::<MONITORINFO>() as u32,
-                    ..Default::default()
-                };
-
-                if GetMonitorInfoW(monitor, &mut monitor_info).as_bool() {
-                    let bounds = monitor_info.rcMonitor;
-                    let _ = SetWindowPos(
-                        hwnd,
-                        Some(HWND_TOPMOST),
-                        bounds.left,
-                        bounds.top,
-                        bounds.right - bounds.left,
-                        bounds.bottom - bounds.top,
-                        SWP_FRAMECHANGED | SWP_NOACTIVATE,
-                    );
-                }
-            })
+            .set_fullscreen(fullscreen)
             .map_err(|error| error.to_string())?;
+
+        #[cfg(target_os = "windows")]
+        if fullscreen && was_maximized {
+            let hwnd_value = window.hwnd().map_err(|error| error.to_string())?.0 as isize;
+            window
+                .run_on_main_thread(move || unsafe {
+                    let hwnd = HWND(hwnd_value as _);
+                    let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+
+                    // Clear only the native maximized bit without calling
+                    // SW_RESTORE, which would visibly shrink the window first.
+                    SetWindowLongPtrW(hwnd, GWL_STYLE, style & !(WS_MAXIMIZE.0 as isize));
+
+                    let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+                    let mut monitor_info = MONITORINFO {
+                        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                        ..Default::default()
+                    };
+
+                    if GetMonitorInfoW(monitor, &mut monitor_info).as_bool() {
+                        let bounds = monitor_info.rcMonitor;
+                        let _ = SetWindowPos(
+                            hwnd,
+                            Some(HWND_TOPMOST),
+                            bounds.left,
+                            bounds.top,
+                            bounds.right - bounds.left,
+                            bounds.bottom - bounds.top,
+                            SWP_FRAMECHANGED | SWP_NOACTIVATE,
+                        );
+                    }
+                })
+                .map_err(|error| error.to_string())?;
+        }
     }
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let _ = (window, fullscreen);
 
     Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
@@ -145,16 +152,14 @@ pub fn run() {
         .plugin(tauri_plugin_upload::init());
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        builder = builder
-            .plugin(tauri_plugin_updater::Builder::new().build())
-            .plugin(
-                tauri_plugin_window_state::Builder::new()
-                    .with_state_flags(StateFlags::all() & !StateFlags::DECORATIONS)
-                    .build(),
-            )
-            .plugin(tauri_plugin_libmpv::init());
-    }
+    let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(StateFlags::all() & !StateFlags::DECORATIONS)
+                .build(),
+        )
+        .plugin(tauri_plugin_libmpv::init());
 
     builder
         .manage(ProxyState { port: Mutex::new(None) })
