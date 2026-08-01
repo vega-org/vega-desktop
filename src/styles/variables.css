@@ -1,4 +1,5 @@
-:root, [data-theme="gray"] {
+:root,
+[data-theme="gray"] {
   --background: #131313;
   --on-background: #e2e2e2;
   --surface: #131313;
@@ -14,7 +15,7 @@
   --on-surface-variant: #a3a3a3;
   --inverse-surface: #e2e2e2;
   --inverse-on-surface: #303030;
-  
+
   --outline: #737373;
   --outline-variant: #404040;
   --surface-tint: #ffffff;
@@ -35,6 +36,10 @@
   --on-error: #690005;
   --error-container: #93000a;
   --on-error-container: #ffdad6;
+  --focus-ring: var(--primary);
+  --skeleton-base: var(--surface-container);
+  --skeleton-highlight: var(--surface-container-highest);
+  --loading-indicator: var(--primary);
 }
 
 [data-theme="oled"] {
@@ -70,10 +75,10 @@
 }
 
 :root {
-
   /* Typography */
-  --font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
-  
+  --font-family:
+    "Plus Jakarta Sans", "Inter", system-ui, -apple-system, sans-serif;
+
   --rounded-sm: 0.25rem;
   --rounded-DEFAULT: 0.5rem;
   --rounded-md: 0.75rem;

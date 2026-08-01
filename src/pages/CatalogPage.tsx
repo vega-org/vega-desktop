@@ -1,18 +1,20 @@
-import React, { useRef, useEffect, useCallback } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { LuArrowLeft as ArrowLeft, LuLoaderCircle as Loader2 } from 'react-icons/lu';
-import { providerManager } from '../lib/services/ProviderManager';
-import { PostCardItem } from '../components/home/PostCardItem';
-import { FocusableButton } from '../components/layout/FocusableButton';
-import './CatalogPage.css';
+import React, { useRef, useEffect, useCallback } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { LuArrowLeft as ArrowLeft } from "react-icons/lu";
+import { providerManager } from "../lib/services/ProviderManager";
+import { PostCardItem } from "../components/home/PostCardItem";
+import { FocusableButton } from "../components/layout/FocusableButton";
+import { Skeleton } from "../components/ui/skeleton";
+import { Spinner } from "../components/ui/spinner";
+import "./CatalogPage.css";
 
 export const CatalogPage: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const title = searchParams.get('title') || 'Catalog';
-  const filter = searchParams.get('filter') || '';
-  const searchQuery = searchParams.get('searchQuery') || '';
-  const providerValue = searchParams.get('provider') || '';
+  const title = searchParams.get("title") || "Catalog";
+  const filter = searchParams.get("filter") || "";
+  const searchQuery = searchParams.get("searchQuery") || "";
+  const providerValue = searchParams.get("provider") || "";
   const navigate = useNavigate();
   const observerTarget = useRef<HTMLDivElement>(null);
 
@@ -22,26 +24,26 @@ export const CatalogPage: React.FC = () => {
     hasNextPage,
     isFetchingNextPage,
     status,
-    error
+    error,
   } = useInfiniteQuery({
-    queryKey: ['catalog', providerValue, filter, searchQuery],
+    queryKey: ["catalog", providerValue, filter, searchQuery],
     queryFn: async ({ pageParam = 1, signal }) => {
       if (!providerValue) return [];
-      
-      if (typeof searchQuery === 'string' && searchQuery.trim().length > 0) {
+
+      if (typeof searchQuery === "string" && searchQuery.trim().length > 0) {
         const posts = await providerManager.getSearchPosts({
           searchQuery,
           page: pageParam,
           providerValue,
-          signal
+          signal,
         });
         return posts || [];
-      } else if (typeof filter === 'string') {
+      } else if (typeof filter === "string") {
         const posts = await providerManager.getPosts({
           filter,
           page: pageParam,
           providerValue,
-          signal
+          signal,
         });
         return posts || [];
       }
@@ -55,7 +57,9 @@ export const CatalogPage: React.FC = () => {
       }
       return allPages.length + 1;
     },
-    enabled: !!providerValue && (typeof filter === 'string' || typeof searchQuery === 'string'),
+    enabled:
+      !!providerValue &&
+      (typeof filter === "string" || typeof searchQuery === "string"),
   });
 
   const handleObserver = useCallback(
@@ -65,7 +69,7 @@ export const CatalogPage: React.FC = () => {
         fetchNextPage();
       }
     },
-    [fetchNextPage, hasNextPage, isFetchingNextPage]
+    [fetchNextPage, hasNextPage, isFetchingNextPage],
   );
 
   useEffect(() => {
@@ -75,7 +79,10 @@ export const CatalogPage: React.FC = () => {
   useEffect(() => {
     const element = observerTarget.current;
     if (!element) return;
-    const observer = new IntersectionObserver(handleObserver, { threshold: 0, rootMargin: '400px' });
+    const observer = new IntersectionObserver(handleObserver, {
+      threshold: 0,
+      rootMargin: "400px",
+    });
     observer.observe(element);
     return () => observer.unobserve(element);
   }, [handleObserver]);
@@ -85,27 +92,37 @@ export const CatalogPage: React.FC = () => {
   return (
     <div className="catalog-page">
       <div className="catalog-header">
-        <FocusableButton className="icon-btn back-btn" onClick={() => navigate(-1)}>
+        <FocusableButton
+          className="icon-btn back-btn"
+          onClick={() => navigate(-1)}
+        >
           <ArrowLeft size={24} />
         </FocusableButton>
         <h1 className="headline-lg">{title}</h1>
       </div>
 
-      {status === 'pending' ? (
+      {status === "pending" ? (
         <div className="catalog-grid">
           {[...Array(20)].map((_, i) => (
-            <div key={i} className="post-card skeleton-card" />
+            <div key={i} className="post-card">
+              <Skeleton className="skeleton-card" />
+              <Skeleton className="skeleton-card-title" />
+            </div>
           ))}
         </div>
-      ) : status === 'error' ? (
+      ) : status === "error" ? (
         <div className="empty-state">
           <h2 className="headline-md">Error Loading Content</h2>
-          <p className="body-lg text-muted">{error?.message || 'Something went wrong'}</p>
+          <p className="body-lg text-muted">
+            {error?.message || "Something went wrong"}
+          </p>
         </div>
       ) : posts.length === 0 ? (
         <div className="empty-state">
           <h2 className="headline-md">No Content Found</h2>
-          <p className="body-lg text-muted">There are no items in this category.</p>
+          <p className="body-lg text-muted">
+            There are no items in this category.
+          </p>
         </div>
       ) : (
         <div className="catalog-grid">
@@ -117,8 +134,8 @@ export const CatalogPage: React.FC = () => {
                 const finalProvider = p.providerValue || providerValue;
                 let url = `/content/${encodeURIComponent(p.link)}`;
                 const params = new URLSearchParams();
-                if (finalProvider) params.append('provider', finalProvider);
-                if (p.image) params.append('poster', p.image);
+                if (finalProvider) params.append("provider", finalProvider);
+                if (p.image) params.append("poster", p.image);
                 const queryString = params.toString();
                 if (queryString) {
                   url += `?${queryString}`;
@@ -133,11 +150,13 @@ export const CatalogPage: React.FC = () => {
       {/* Loading trigger / indicator */}
       <div ref={observerTarget} className="catalog-loading-more">
         {isFetchingNextPage ? (
-          <Loader2 size={32} className="spin text-primary" />
+          <Spinner size={32} label="Loading more titles" />
         ) : hasNextPage ? (
-          <div style={{ height: '20px' }} />
+          <div className="catalog-loading-sentinel" />
         ) : (
-          posts.length > 0 && <p className="text-muted body-md">You've reached the end.</p>
+          posts.length > 0 && (
+            <p className="text-muted body-md">You've reached the end.</p>
+          )
         )}
       </div>
     </div>

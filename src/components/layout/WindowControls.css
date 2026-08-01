@@ -1,0 +1,60 @@
+.window-titlebar-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 20000;
+  height: 8px;
+  color: var(--on-surface);
+  user-select: none;
+  transition: opacity 180ms ease;
+}
+
+body.player-window-fullscreen .window-titlebar-overlay {
+  display: none;
+}
+
+body.player-controls-hidden .window-titlebar-overlay {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.window-controls {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  height: 38px;
+  pointer-events: auto;
+}
+
+.window-control {
+  display: grid;
+  width: 46px;
+  height: 38px;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  color: color-mix(in srgb, var(--on-surface) 82%, transparent);
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.window-control:hover {
+  color: var(--on-surface);
+  background: color-mix(in srgb, var(--on-surface) 10%, transparent);
+}
+
+.window-control-close:hover {
+  color: #fff;
+  background: #c42b1c;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .window-titlebar-overlay,
+  .window-control {
+    transition: none;
+  }
+}

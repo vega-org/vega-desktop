@@ -1,86 +1,88 @@
 import React, { useMemo } from "react";
-import { useDownloadStore, DownloadItem } from "../lib/zustand/downloadStore";
 import {
-  LuPlay as Play,
-  LuPause as Pause,
-  LuX as X,
-  LuTrash2 as Trash2,
   LuCircleAlert as AlertCircle,
+  LuClock3 as Clock,
+  LuDownload as Download,
+  LuHardDrive as HardDrive,
+  LuPause as Pause,
+  LuPlay as Play,
   LuRocket as Rocket,
+  LuTrash2 as Trash2,
+  LuX as X,
 } from "react-icons/lu";
+import { useFocusable } from "@noriginmedia/norigin-spatial-navigation-react";
 import { useNavigate } from "react-router-dom";
 import { FocusableButton } from "../components/layout/FocusableButton";
-import { useFocusable } from "@noriginmedia/norigin-spatial-navigation-react";
 import { settingsStorage } from "../lib/storage";
+import {
+  type DownloadItem,
+  useDownloadStore,
+} from "../lib/zustand/downloadStore";
 import "./DownloadsPage.css";
+
+type CompletedGroup = {
+  showName: string;
+  poster: string;
+  type: "movie" | "series";
+  items: DownloadItem[];
+  totalBytes: number;
+};
+
+const formatBytes = (bytes: number) => {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const unit = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  );
+  return `${Number((bytes / 1024 ** unit).toFixed(1))} ${units[unit]}`;
+};
+
+const getCleanTitle = (item: DownloadItem) => {
+  if (item.type === "series") return item.episodeName || item.title;
+  return item.showName || item.title || "Unknown video";
+};
+
+const statusCopy: Record<DownloadItem["status"], string> = {
+  queued: "Queued",
+  downloading: "Downloading",
+  paused: "Paused",
+  completed: "Completed",
+  error: "Needs attention",
+};
 
 export const DownloadsPage = () => {
   const { downloads, pauseDownload, resumeDownload, cancelDownload, startNow } =
     useDownloadStore();
   const navigate = useNavigate();
-
   const allDownloads = Object.values(downloads);
 
   const activeDownloads = useMemo(
     () =>
-      allDownloads.filter((d) =>
-        ["downloading", "queued", "paused", "error"].includes(d.status),
+      allDownloads.filter((item) =>
+        ["downloading", "queued", "paused", "error"].includes(item.status),
       ),
     [allDownloads],
   );
 
-  const completedDownloads = useMemo(
-    () => allDownloads.filter((d) => d.status === "completed"),
-    [allDownloads],
-  );
-
-  const groupedCompleted = useMemo(() => {
-    const groups: Record<
-      string,
-      {
-        showName: string;
-        poster: string;
-        type: "movie" | "series";
-        items: DownloadItem[];
-        totalBytes: number;
-      }
-    > = {};
-
-    completedDownloads.forEach((item) => {
-      const key = item.showName || item.title;
-      if (!groups[key]) {
-        groups[key] = {
+  const completedGroups = useMemo(() => {
+    const groups: Record<string, CompletedGroup> = {};
+    allDownloads
+      .filter((item) => item.status === "completed")
+      .forEach((item) => {
+        const key = item.showName || item.title;
+        groups[key] ??= {
           showName: key,
           poster: item.poster || "",
           type: item.type || "movie",
           items: [],
           totalBytes: 0,
         };
-      }
-      groups[key].items.push(item);
-      groups[key].totalBytes += item.totalBytes || 0;
-    });
-
+        groups[key].items.push(item);
+        groups[key].totalBytes += item.totalBytes || 0;
+      });
     return Object.values(groups);
-  }, [completedDownloads]);
-
-  const formatBytes = (bytes: number) => {
-    if (!bytes || bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-  };
-
-  const getCleanTitle = (item: DownloadItem) => {
-    if (item.showName) {
-      if (item.episodeName) {
-        return `${item.showName} - ${item.episodeName}`;
-      }
-      return item.showName;
-    }
-    return item.title || "Unknown Video";
-  };
+  }, [allDownloads]);
 
   const handlePlay = (item: DownloadItem) => {
     navigate("/player", {
@@ -95,7 +97,7 @@ export const DownloadsPage = () => {
           },
         ],
         linkIndex: 0,
-        type: "movie", // or tv based on item data, assuming movie for direct local play
+        type: "movie",
         primaryTitle: item.showName || item.title,
         poster: { poster: item.poster },
         providerValue: item.provider || "",
@@ -105,39 +107,73 @@ export const DownloadsPage = () => {
     });
   };
 
-  const handleGroupClick = (group: any) => {
+  const openGroup = (group: CompletedGroup) => {
     if (
       group.type === "movie" &&
       group.items.length === 1 &&
       !group.items[0].seasonTitle
     ) {
-      // It's just a direct movie download, play directly
       handlePlay(group.items[0]);
-    } else {
-      // It's a series or grouped item, navigate to the specific series download page
-      navigate(`/downloads/series/${encodeURIComponent(group.showName)}`);
+      return;
     }
+    navigate(`/downloads/series/${encodeURIComponent(group.showName)}`);
   };
 
-  const handleGroupDelete = (group: any, e: React.MouseEvent) => {
-    e.stopPropagation();
-    group.items.forEach((item: DownloadItem) => cancelDownload(item.id));
+  const deleteGroup = (group: CompletedGroup, event: React.MouseEvent) => {
+    event.stopPropagation();
+    group.items.forEach((item) => void cancelDownload(item.id));
   };
+
+  const isEmpty = activeDownloads.length === 0 && completedGroups.length === 0;
 
   return (
-    <div className="downloads-page">
-      <div className="downloads-header">
-        <h1 className="headline-lg">Downloads</h1>
-      </div>
+    <main className="downloads-page">
+      <header className="downloads-page-header">
+        <div className="downloads-page-icon" aria-hidden="true">
+          <Download size={27} />
+        </div>
+        <div>
+          <p className="downloads-eyebrow">Offline library</p>
+          <h1>Downloads</h1>
+          <p>
+            {allDownloads.length
+              ? `${allDownloads.length} ${allDownloads.length === 1 ? "item" : "items"} stored or in progress`
+              : "Keep movies and episodes ready for offline playback"}
+          </p>
+        </div>
+      </header>
 
-      <div className="downloads-content">
-        {activeDownloads.length > 0 && (
-          <section className="downloads-section">
-            <h2 className="section-title">Active Downloads</h2>
-            <div className="active-downloads-list">
-              {activeDownloads.map((item) => {
-                const progressPct =
-                  item.totalBytes > 0
+      {isEmpty ? (
+        <section
+          className="downloads-empty-state"
+          aria-labelledby="downloads-empty-title"
+        >
+          <div className="downloads-empty-icon" aria-hidden="true">
+            <HardDrive size={35} />
+          </div>
+          <h2 id="downloads-empty-title">Nothing downloaded yet</h2>
+          <p>Download a movie or episode and its progress will appear here.</p>
+        </section>
+      ) : (
+        <div className="downloads-content">
+          {activeDownloads.length > 0 && (
+            <section
+              className="downloads-section"
+              aria-labelledby="active-downloads-title"
+            >
+              <div className="downloads-section-heading">
+                <div>
+                  <p className="downloads-section-kicker">In progress</p>
+                  <h2 id="active-downloads-title">Active downloads</h2>
+                </div>
+                <span className="downloads-count-chip">
+                  {activeDownloads.length}
+                </span>
+              </div>
+
+              <div className="active-downloads-list">
+                {activeDownloads.map((item) => {
+                  const progress = item.totalBytes
                     ? Math.min(
                         100,
                         Math.round(
@@ -146,138 +182,195 @@ export const DownloadsPage = () => {
                       )
                     : 0;
 
-                return (
-                  <div key={item.id} className="active-download-card">
-                    <div
-                      className="card-poster"
-                      style={{ backgroundImage: `url(${item.poster || ""})` }}
-                    >
-                      {!item.poster && <div className="no-poster">N/A</div>}
-                    </div>
-                    <div className="card-info">
-                      <h3
-                        className="title-truncate"
-                        title={item.episodeName || item.title}
+                  return (
+                    <article className="active-download-card" key={item.id}>
+                      <div
+                        className="download-row-poster"
+                        style={{
+                          backgroundImage: item.poster
+                            ? `url(${item.poster})`
+                            : undefined,
+                        }}
+                        aria-hidden="true"
                       >
-                        {getCleanTitle(item)}
-                      </h3>
-                      <div className="progress-bar-container">
-                        <div
-                          className="progress-bar-fill"
-                          style={{ width: `${progressPct}%` }}
-                        />
+                        {!item.poster && <Download size={24} />}
                       </div>
-                      <div className="download-meta">
-                        {item.status === "error" ? (
-                          <span className="text-red-500 flex items-center gap-1">
-                            <AlertCircle size={14} /> Error
-                          </span>
-                        ) : item.status === "queued" ? (
-                          <span className="text-blue-400">Queued</span>
-                        ) : item.status === "paused" ? (
-                          <span className="text-yellow-500">Paused</span>
-                        ) : (
-                          <span>
-                            {formatBytes(item.downloadedBytes)} /{" "}
-                            {formatBytes(item.totalBytes)}
-                            <span className="speed-badge">
-                              {formatBytes(item.speed)}/s
-                            </span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="card-actions">
-                      {item.status === "queued" && (
-                        <FocusableButton
-                          className="action-btn start-now"
-                          onClick={() => startNow(item.id)}
-                          title="Start now"
-                        >
-                          <Rocket size={20} />
-                        </FocusableButton>
-                      )}
-                      {item.status === "downloading" && (
-                        <FocusableButton
-                          className="action-btn pause"
-                          onClick={() => pauseDownload(item.id)}
-                        >
-                          <Pause size={20} />
-                        </FocusableButton>
-                      )}
-                      {(item.status === "paused" ||
-                        item.status === "error") && (
-                        <FocusableButton
-                          className="action-btn play"
-                          onClick={() => resumeDownload(item.id)}
-                        >
-                          <Play size={20} />
-                        </FocusableButton>
-                      )}
-                      <FocusableButton
-                        className="action-btn cancel"
-                        onClick={() => cancelDownload(item.id)}
-                      >
-                        <X size={20} />
-                      </FocusableButton>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
 
-        <section className="downloads-section">
-          <h2 className="section-title">Completed</h2>
-          {groupedCompleted.length === 0 ? (
-            <div className="empty-state">
-              <p>No completed downloads yet.</p>
-            </div>
-          ) : (
-            <div className="completed-grid">
-              {groupedCompleted.map((group) => (
-                <div key={group.showName} className="completed-card">
-                  <DownloadCardClickable
-                    onClick={() => handleGroupClick(group)}
-                    poster={group.poster}
-                  >
-                    <div className="play-overlay">
-                      <Play size={40} />
-                    </div>
-                  </DownloadCardClickable>
-                  <div className="card-details">
-                    <h4 className="title-truncate">{group.showName}</h4>
-                    <p className="size-label">
-                      {group.items.length > 1
-                        ? `${group.items.length} Episodes • `
-                        : ""}
-                      {formatBytes(group.totalBytes)}
-                    </p>
-                  </div>
-                  <FocusableButton
-                    className="delete-btn"
-                    onClick={(e: React.MouseEvent) =>
-                      handleGroupDelete(group, e)
-                    }
-                  >
-                    <Trash2 size={16} />
-                  </FocusableButton>
-                </div>
-              ))}
-            </div>
+                      <div className="download-row-copy">
+                        <div className="download-row-title-line">
+                          <div>
+                            <h3 title={item.episodeName || item.title}>
+                              {getCleanTitle(item)}
+                            </h3>
+                            {item.type === "series" && item.showName && (
+                              <p>
+                                {item.showName}
+                                {item.seasonTitle
+                                  ? ` · ${item.seasonTitle}`
+                                  : ""}
+                              </p>
+                            )}
+                          </div>
+                          <span
+                            className={`download-status-chip status-${item.status}`}
+                          >
+                            {item.status === "error" ? (
+                              <AlertCircle size={14} />
+                            ) : (
+                              <Clock size={14} />
+                            )}
+                            {statusCopy[item.status]}
+                          </span>
+                        </div>
+
+                        <div
+                          className={`download-progress-track ${item.status === "queued" ? "is-indeterminate" : ""}`}
+                          role="progressbar"
+                          aria-label={`${getCleanTitle(item)} download progress`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={
+                            item.status === "queued" ? undefined : progress
+                          }
+                        >
+                          <span
+                            style={{
+                              width: `${item.status === "queued" ? 34 : progress}%`,
+                            }}
+                          />
+                        </div>
+
+                        <div className="download-row-meta">
+                          {item.status === "queued" ? (
+                            <span>Waiting for an available download slot</span>
+                          ) : item.status === "paused" ? (
+                            <span>
+                              {formatBytes(item.downloadedBytes)} of{" "}
+                              {formatBytes(item.totalBytes)}
+                            </span>
+                          ) : item.status === "error" ? (
+                            <span>Resume to try this download again</span>
+                          ) : (
+                            <>
+                              <span>
+                                {formatBytes(item.downloadedBytes)} of{" "}
+                                {formatBytes(item.totalBytes)}
+                              </span>
+                              <span className="download-speed">
+                                {formatBytes(item.speed)}/s
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div
+                        className="download-row-actions"
+                        aria-label={`Actions for ${getCleanTitle(item)}`}
+                      >
+                        {item.status === "queued" && (
+                          <FocusableButton
+                            className="download-action-button is-primary"
+                            onClick={() => startNow(item.id)}
+                            title="Start now"
+                          >
+                            <Rocket size={19} />
+                          </FocusableButton>
+                        )}
+                        {item.status === "downloading" && (
+                          <FocusableButton
+                            className="download-action-button"
+                            onClick={() => pauseDownload(item.id)}
+                            title="Pause download"
+                          >
+                            <Pause size={19} />
+                          </FocusableButton>
+                        )}
+                        {(item.status === "paused" ||
+                          item.status === "error") && (
+                          <FocusableButton
+                            className="download-action-button is-primary"
+                            onClick={() => resumeDownload(item.id)}
+                            title="Resume download"
+                          >
+                            <Play size={19} />
+                          </FocusableButton>
+                        )}
+                        <FocusableButton
+                          className="download-action-button is-danger"
+                          onClick={() => cancelDownload(item.id)}
+                          title="Cancel download"
+                        >
+                          <X size={19} />
+                        </FocusableButton>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
           )}
-        </section>
-      </div>
-    </div>
+
+          {completedGroups.length > 0 && (
+            <section
+              className="downloads-section"
+              aria-labelledby="completed-downloads-title"
+            >
+              <div className="downloads-section-heading">
+                <div>
+                  <p className="downloads-section-kicker">Ready to watch</p>
+                  <h2 id="completed-downloads-title">Downloaded</h2>
+                </div>
+                <span className="downloads-count-chip">
+                  {completedGroups.length}
+                </span>
+              </div>
+
+              <div className="download-library-grid">
+                {completedGroups.map((group) => (
+                  <article
+                    className="download-library-card"
+                    key={group.showName}
+                  >
+                    <DownloadedPoster
+                      title={group.showName}
+                      poster={group.poster}
+                      onClick={() => openGroup(group)}
+                    />
+                    <div className="download-library-copy">
+                      <h3 title={group.showName}>{group.showName}</h3>
+                      <p>
+                        {group.items.length > 1
+                          ? `${group.items.length} episodes · `
+                          : ""}
+                        {formatBytes(group.totalBytes)}
+                      </p>
+                    </div>
+                    <FocusableButton
+                      className="download-library-delete"
+                      onClick={(event: React.MouseEvent) =>
+                        deleteGroup(group, event)
+                      }
+                      title={`Delete ${group.showName}`}
+                    >
+                      <Trash2 size={18} />
+                    </FocusableButton>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+    </main>
   );
 };
 
-const DownloadCardClickable: React.FC<{
-  children: React.ReactNode;
-  onClick: () => void;
+const DownloadedPoster: React.FC<{
+  title: string;
   poster: string;
-}> = ({ children, onClick, poster }) => {
+  onClick: () => void;
+}> = ({ title, poster, onClick }) => {
   const tvMode = settingsStorage.isTvModeEnabled();
   const { ref, focused } = useFocusable({
     focusable: tvMode,
@@ -289,12 +382,17 @@ const DownloadCardClickable: React.FC<{
 
   return (
     <div
-      ref={ref as any}
-      className={`card-poster ${focused ? "tv-focus" : ""}`}
+      ref={ref}
+      className={`download-library-poster ${focused ? "tv-focus" : ""}`}
+      style={{ backgroundImage: poster ? `url(${poster})` : undefined }}
       onClick={onClick}
-      style={{ backgroundImage: `url(${poster || ""})`, cursor: "pointer" }}
+      role="button"
+      aria-label={`Play or open ${title}`}
     >
-      {children}
+      {!poster && <Download size={30} />}
+      <span className="download-library-play" aria-hidden="true">
+        <Play size={22} fill="currentColor" />
+      </span>
     </div>
   );
 };

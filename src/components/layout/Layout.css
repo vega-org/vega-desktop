@@ -4,21 +4,52 @@
   width: 100%;
   overflow: hidden;
   background-color: var(--background);
+  color: var(--on-background);
 }
 
 .layout-main {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-width: 0; /* Important for flex children to allow truncating */
+  min-width: 0;
   min-height: 0;
+  background-color: var(--background);
 }
 
 .layout-content {
   flex: 1;
   min-height: 0;
-  padding: 0 var(--spacing-gutter) var(--spacing-gutter) var(--spacing-gutter);
+  padding: 0 var(--spacing-gutter) calc(var(--spacing-gutter) + 16px) var(--spacing-gutter);
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  scroll-behavior: smooth;
+}
+
+.layout-content::after {
+  content: "";
+  display: block;
+  width: 100%;
+  min-height: 24px;
+  flex: 0 0 24px;
+  pointer-events: none;
+}
+
+.layout-content-padded {
+  padding-top: 80px;
+}
+
+@media (max-width: 760px) {
+  .layout-content {
+    padding-right: 16px;
+    padding-bottom: 32px;
+    padding-left: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layout-content {
+    scroll-behavior: auto;
+  }
 }

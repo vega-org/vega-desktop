@@ -1,93 +1,82 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { LuBookmark as Bookmark, LuPlay as Play, LuTrash2 as Trash2 } from 'react-icons/lu';
-import useWatchListStore from '../lib/zustand/watchListStore';
-import { FocusableButton } from '../components/layout/FocusableButton';
-import { useFocusable } from '@noriginmedia/norigin-spatial-navigation-react';
-import { settingsStorage } from '../lib/storage';
-import './SearchPage.css'; // Reuse search page grid styles for now
-import './WatchlistPage.css';
+import React from "react";
+import { LuBookmark as Bookmark, LuSparkles as Sparkles } from "react-icons/lu";
+import { useNavigate } from "react-router-dom";
+import { PostCardItem, type Post } from "../components/home/PostCardItem";
+import useWatchListStore from "../lib/zustand/watchListStore";
+import "../components/home/ContentSlider.css";
+import "./WatchlistPage.css";
 
 export const WatchlistPage: React.FC = () => {
   const navigate = useNavigate();
   const { watchList, removeItem } = useWatchListStore();
 
-
-
-  const handlePostClick = (link: string) => {
-    navigate(`/content/${encodeURIComponent(link)}`);
+  const openItem = (post: Post) => {
+    const params = new URLSearchParams();
+    if (post.providerValue) params.set("provider", post.providerValue);
+    if (post.image) params.set("poster", post.image);
+    const query = params.toString();
+    navigate(
+      `/watchlist/content/${encodeURIComponent(post.link)}${query ? `?${query}` : ""}`,
+    );
   };
 
-  const handleRemove = (e: React.MouseEvent, link: string) => {
-    e.stopPropagation();
-    removeItem(link);
-  };
-
-  if (!watchList || watchList.length === 0) {
+  if (!watchList?.length) {
     return (
-      <div className="search-page empty-state">
-        <Bookmark size={64} className="text-muted mb-md opacity-50" />
-        <h2 className="headline-lg mb-sm">Your Watchlist is Empty</h2>
-        <p className="body-lg text-muted">Save shows and movies to watch later by clicking the bookmark icon on their page.</p>
-      </div>
+      <main className="library-page library-page-empty">
+        <section
+          className="library-empty-state"
+          aria-labelledby="watchlist-empty-title"
+        >
+          <div className="library-empty-icon" aria-hidden="true">
+            <Bookmark size={34} />
+            <Sparkles size={16} className="library-empty-sparkle" />
+          </div>
+          <p className="library-eyebrow">Your library</p>
+          <h1 id="watchlist-empty-title">Save something for later</h1>
+          <p>
+            Add movies and shows with the bookmark action and they will be ready
+            here whenever you come back.
+          </p>
+        </section>
+      </main>
     );
   }
 
   return (
-    <div className="watchlist-page">
-        <div className="page-header">
-          <div className="page-header-icon">
-            <Bookmark size={36} />
-          </div>
-          <div className="page-header-content">
-            <h1 className="display-sm">Watchlist</h1>
-            <p className="body-lg text-muted">{watchList.length} saved {watchList.length === 1 ? 'item' : 'items'}</p>
-          </div>
+    <main className="library-page">
+      <header className="library-header">
+        <div className="library-header-icon" aria-hidden="true">
+          <Bookmark size={26} />
         </div>
-
-        <div className="search-grid">
-          {watchList.map((post, index) => (
-            <div key={`${post.link}-${index}`} className="search-card watchlist-card">
-              <WatchlistCardClickable onClick={() => handlePostClick(post.link)}>
-                <img src={post.poster} alt={post.title} className="search-poster" loading="lazy" />
-                <div className="search-hover-overlay">
-                  <Play size={48} fill="currentColor" />
-                </div>
-                <FocusableButton 
-                  className="watchlist-remove-btn"
-                  onClick={(e: any) => handleRemove(e, post.link)}
-                  aria-label="Remove from watchlist"
-                  title="Remove from watchlist"
-                >
-                  <Trash2 size={20} />
-                </FocusableButton>
-              </WatchlistCardClickable>
-              <h3 className="search-title label-md">{post.title}</h3>
-            </div>
-          ))}
+        <div>
+          <p className="library-eyebrow">Your library</p>
+          <h1>Watchlist</h1>
+          <p className="library-header-supporting">
+            {watchList.length} saved{" "}
+            {watchList.length === 1 ? "title" : "titles"}
+          </p>
         </div>
-      </div>
-  );
-};
+      </header>
 
-const WatchlistCardClickable: React.FC<{children: React.ReactNode, onClick: () => void}> = ({children, onClick}) => {
-  const tvMode = settingsStorage.isTvModeEnabled();
-  const { ref, focused } = useFocusable({
-    focusable: tvMode,
-    onEnterPress: onClick,
-    onFocus: (layout) => {
-      layout.node.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-    }
-  });
+      <section className="library-grid" aria-label="Saved titles">
+        {watchList.map((item, index) => {
+          const post: Post = {
+            title: item.title,
+            image: item.poster,
+            link: item.link,
+            providerValue: item.provider,
+          };
 
-  return (
-    <div 
-      ref={ref as any}
-      className={`search-poster-container ${focused ? 'tv-focus' : ''}`}
-      onClick={onClick}
-      style={{ cursor: 'pointer', outlineOffset: '4px' }}
-    >
-      {children}
-    </div>
+          return (
+            <PostCardItem
+              key={`${item.link}-${index}`}
+              post={post}
+              onClick={openItem}
+              onRemove={(savedPost) => removeItem(savedPost.link)}
+            />
+          );
+        })}
+      </section>
+    </main>
   );
 };

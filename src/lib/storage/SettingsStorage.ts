@@ -11,6 +11,7 @@ export enum SettingsKeys {
   SHOW_TAB_BAR_LABELS = "showTabBarLabels",
   CUSTOM_COLOR = "customColor",
   TV_MODE_ENABLED = "tvModeEnabled",
+  INFO_PAGE_DYNAMIC_THEME = "infoPageDynamicTheme",
   // Feedback settings
   HAPTIC_FEEDBACK = "hapticFeedback",
   NOTIFICATIONS_ENABLED = "notificationsEnabled",
@@ -48,6 +49,8 @@ export enum SettingsKeys {
   // Advanced settings
   HARDWARE_ACCELERATION = "hardwareAcceleration",
   DEVTOOLS_SHORTCUTS_ENABLED = "devtoolsShortcutsEnabled",
+  TMDB_API_KEY = "tmdbApiKey",
+  TMDB_API_KEY_REVISION = "tmdbApiKeyRevision",
 }
 
 /**
@@ -105,12 +108,36 @@ export class SettingsStorage {
     mainStorage.setBool(SettingsKeys.TV_MODE_ENABLED, enabled);
   }
 
+  isInfoPageDynamicThemeEnabled(): boolean {
+    return mainStorage.getBool(SettingsKeys.INFO_PAGE_DYNAMIC_THEME, true);
+  }
+
+  setInfoPageDynamicThemeEnabled(enabled: boolean): void {
+    mainStorage.setBool(SettingsKeys.INFO_PAGE_DYNAMIC_THEME, enabled);
+  }
+
   areDevtoolsShortcutsEnabled(): boolean {
     return mainStorage.getBool(SettingsKeys.DEVTOOLS_SHORTCUTS_ENABLED, false);
   }
 
   setDevtoolsShortcutsEnabled(enabled: boolean): void {
     mainStorage.setBool(SettingsKeys.DEVTOOLS_SHORTCUTS_ENABLED, enabled);
+  }
+
+  getTmdbApiKey(): string {
+    return (mainStorage.getString(SettingsKeys.TMDB_API_KEY) || "").trim();
+  }
+
+  setTmdbApiKey(apiKey: string): void {
+    mainStorage.setString(SettingsKeys.TMDB_API_KEY, apiKey.trim());
+    mainStorage.setNumber(
+      SettingsKeys.TMDB_API_KEY_REVISION,
+      this.getTmdbApiKeyRevision() + 1,
+    );
+  }
+
+  getTmdbApiKeyRevision(): number {
+    return mainStorage.getNumber(SettingsKeys.TMDB_API_KEY_REVISION) || 0;
   }
 
   isHapticFeedbackEnabled(): boolean {

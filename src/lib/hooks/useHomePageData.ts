@@ -126,8 +126,8 @@ export const useHeroMetadata = (heroLink: string, providerValue: string) => {
         provider: providerValue,
       });
 
-      // Try to get enhanced metadata from Stremio if imdbId is available
-      if (info.imdbId) {
+      // Only enrich providers that explicitly opt in to Cinemeta metadata.
+      if (info.populateMeta === true && info.imdbId && info.type) {
         try {
           const response = await axios.get(
             `https://v3-cinemeta.strem.io/meta/${info.type}/${info.imdbId}.json`,

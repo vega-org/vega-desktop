@@ -10,13 +10,24 @@
   align-items: center;
   gap: var(--spacing-md);
   margin-bottom: var(--spacing-xl);
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--outline-variant);
 }
 
 .catalog-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: var(--spacing-lg);
+  grid-template-columns: repeat(auto-fill, minmax(150px, 190px));
+  gap: 28px 20px;
+  justify-content: space-between;
   padding: var(--spacing-xs) 0;
+}
+
+.catalog-grid .post-card {
+  width: 100%;
+}
+
+.catalog-loading-sentinel {
+  height: 20px;
 }
 
 .catalog-loading-more {

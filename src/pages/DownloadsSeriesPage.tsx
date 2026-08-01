@@ -1,73 +1,77 @@
-import { useMemo, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { useDownloadStore, DownloadItem } from "../lib/zustand/downloadStore";
+import { useEffect, useMemo, useState } from "react";
 import {
-  LuPlay as Play,
   LuArrowLeft as ArrowLeft,
+  LuDownload as Download,
+  LuPlay as Play,
   LuTrash2 as Trash2,
 } from "react-icons/lu";
+import { useNavigate, useParams } from "react-router-dom";
 import { CustomSelect } from "../components/CustomSelect";
 import { FocusableButton } from "../components/layout/FocusableButton";
 import { sortDownloadedEpisodes } from "../lib/downloadLibrary";
+import {
+  type DownloadItem,
+  useDownloadStore,
+} from "../lib/zustand/downloadStore";
 import "./DownloadsPage.css";
+
+const formatBytes = (bytes: number) => {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${Number((bytes / 1024 ** unit).toFixed(1))} ${units[unit]}`;
+};
 
 export const DownloadsSeriesPage = () => {
   const { showName } = useParams<{ showName: string }>();
   const navigate = useNavigate();
   const { downloads, cancelDownload } = useDownloadStore();
-
   const decodedShowName = decodeURIComponent(showName || "");
 
-  // Get all completed downloads for this show
-  const showDownloads = useMemo(() => {
-    return Object.values(downloads).filter(
-      (d) =>
-        d.status === "completed" &&
-        (d.showName === decodedShowName || d.title === decodedShowName),
-    );
-  }, [downloads, decodedShowName]);
+  const showDownloads = useMemo(
+    () =>
+      Object.values(downloads).filter(
+        (item) =>
+          item.status === "completed" &&
+          (item.showName === decodedShowName || item.title === decodedShowName),
+      ),
+    [downloads, decodedShowName],
+  );
 
-  // Extract unique seasons
   const seasons = useMemo(() => {
-    const sList = new Set<string>();
-    showDownloads.forEach((d) => {
-      sList.add(d.seasonTitle || "Extras");
-    });
-    return Array.from(sList).sort();
+    const values = new Set<string>();
+    showDownloads.forEach((item) => values.add(item.seasonTitle || "Extras"));
+    return Array.from(values).sort();
   }, [showDownloads]);
 
-  const [activeSeason, setActiveSeason] = useState<string>(
-    seasons.length > 0 ? seasons[0] : "Extras",
-  );
+  const [activeSeason, setActiveSeason] = useState("Extras");
 
-  // If no downloads left, go back
-  if (showDownloads.length === 0) {
-    navigate("/downloads", { replace: true });
-    return null;
-  }
+  useEffect(() => {
+    if (seasons.length && !seasons.includes(activeSeason)) {
+      setActiveSeason(seasons[0]);
+    }
+  }, [activeSeason, seasons]);
+
+  useEffect(() => {
+    if (!showDownloads.length) {
+      navigate("/downloads", { replace: true });
+    }
+  }, [navigate, showDownloads.length]);
+
+  if (!showDownloads.length) return null;
 
   const poster = showDownloads[0]?.poster;
-
   const currentSeasonDownloads = sortDownloadedEpisodes(
-    showDownloads.filter((d) => (d.seasonTitle || "Extras") === activeSeason),
+    showDownloads.filter((item) => (item.seasonTitle || "Extras") === activeSeason),
   );
 
-  const formatBytes = (bytes: number) => {
-    if (!bytes || bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-  };
-
   const handlePlay = (item: DownloadItem, index: number) => {
-    // Pass the entire season list so we can do next/prev
-    const episodeList = currentSeasonDownloads.map((d) => ({
-      id: d.id,
-      title: d.episodeName || d.title,
-      link: d.filePath,
+    const episodeList = currentSeasonDownloads.map((episode) => ({
+      id: episode.id,
+      title: episode.episodeName || episode.title,
+      link: episode.filePath,
       localFile: true,
-      sourceLink: d.sourceLink,
+      sourceLink: episode.sourceLink,
     }));
 
     navigate("/player", {
@@ -86,148 +90,87 @@ export const DownloadsSeriesPage = () => {
   };
 
   return (
-    <div className="downloads-series-page">
-      <div
-        className="downloads-header"
-        style={{
-          marginBottom: "40px",
-          display: "flex",
-          alignItems: "center",
-          gap: "20px",
-        }}
-      >
+    <main className="downloads-series-page">
+      <header className="downloads-series-header">
         <FocusableButton
-          className="icon-btn back-btn glass-overlay"
+          className="downloads-series-back"
           onClick={() => navigate("/downloads")}
+          title="Back to downloads"
         >
-          <ArrowLeft size={24} />
+          <ArrowLeft size={22} />
         </FocusableButton>
-        <h1 className="headline-lg" style={{ margin: 0 }}>
-          {decodedShowName}
-        </h1>
-      </div>
-
-      <div
-        className="series-downloads-content"
-        style={{ display: "flex", gap: "32px" }}
-      >
-        <div
-          className="series-poster-col"
-          style={{ width: "280px", flexShrink: 0 }}
-        >
-          <div
-            style={{
-              backgroundImage: `url(${poster || ""})`,
-              aspectRatio: "2/3",
-              width: "100%",
-              borderRadius: "16px",
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
-              border: "1px solid rgba(255,255,255,0.1)",
-            }}
-          />
+        <div className="downloads-series-header-copy">
+          <p className="downloads-eyebrow">Downloaded series</p>
+          <h1>{decodedShowName}</h1>
+          <p>{showDownloads.length} downloaded {showDownloads.length === 1 ? "episode" : "episodes"}</p>
         </div>
+      </header>
 
-        <div className="series-episodes-col" style={{ flex: 1 }}>
-          {seasons.length > 1 && (
-            <div className="season-selector" style={{ marginBottom: "20px" }}>
+      <div className="series-downloads-layout">
+        <aside className="series-downloads-summary">
+          <div
+            className="series-downloads-poster"
+            style={{ backgroundImage: poster ? `url(${poster})` : undefined }}
+            aria-label={`${decodedShowName} poster`}
+          >
+            {!poster && <Download size={38} />}
+          </div>
+          <div className="series-downloads-stats">
+            <span>{seasons.length} {seasons.length === 1 ? "season" : "seasons"}</span>
+            <span>{formatBytes(showDownloads.reduce((sum, item) => sum + (item.totalBytes || 0), 0))}</span>
+          </div>
+        </aside>
+
+        <section className="series-episodes-section" aria-labelledby="downloaded-episodes-title">
+          <div className="series-episodes-toolbar">
+            <div>
+              <p className="downloads-section-kicker">Ready offline</p>
+              <h2 id="downloaded-episodes-title">Episodes</h2>
+            </div>
+            {seasons.length > 1 && (
               <CustomSelect
-                options={seasons.map((s) => ({ value: s, label: s }))}
+                options={seasons.map((season) => ({ value: season, label: season }))}
                 value={activeSeason}
-                onChange={(val) => setActiveSeason(val)}
+                onChange={setActiveSeason}
                 className="season-selector-custom"
               />
-            </div>
-          )}
+            )}
+          </div>
 
-          <div className="episodes-list">
-            {currentSeasonDownloads.map((item, idx) => (
-              <div
-                key={item.id}
-                className="episode-card glass-overlay"
-                style={{
-                  padding: 0,
-                  display: "flex",
-                  marginBottom: "12px",
-                  background: "rgba(255, 255, 255, 0.05)",
-                  borderRadius: "12px",
-                }}
-              >
-                <FocusableButton
-                  onClick={() => handlePlay(item, idx)}
-                  style={{
-                    flex: 1,
-                    display: "flex",
-                    alignItems: "center",
-                    padding: "16px",
-                    gap: "16px",
-                    background: "transparent",
-                    border: "none",
-                    textAlign: "left",
-                    color: "inherit",
-                    borderRadius: "12px",
-                  }}
-                >
-                  <div
-                    className="episode-number"
-                    style={{
-                      width: "40px",
-                      fontSize: "1.2rem",
-                      fontWeight: "bold",
-                      color: "rgba(255,255,255,0.5)",
-                    }}
-                  >
-                    {idx + 1}
-                  </div>
-                  <div className="episode-info" style={{ flex: 1 }}>
-                    <h4 className="label-lg">
-                      {item.episodeName || item.title}
-                    </h4>
-                    <p
-                      className="text-muted body-sm"
-                      style={{ marginTop: "4px" }}
-                    >
-                      {formatBytes(item.totalBytes)}
-                    </p>
-                  </div>
+          <div className="downloaded-episodes-list">
+            {currentSeasonDownloads.map((item, index) => (
+              <article className="downloaded-episode-row" key={item.id}>
+                <FocusableButton className="downloaded-episode-main" onClick={() => handlePlay(item, index)}>
+                  <span className="downloaded-episode-number">{index + 1}</span>
+                  <span className="downloaded-episode-copy">
+                    <strong>{item.episodeName || item.title}</strong>
+                    <small>{formatBytes(item.totalBytes)}</small>
+                  </span>
                 </FocusableButton>
-                <div
-                  className="episode-actions"
-                  style={{
-                    display: "flex",
-                    gap: "12px",
-                    alignItems: "center",
-                    paddingRight: "16px",
-                  }}
-                >
+                <div className="downloaded-episode-actions">
                   <FocusableButton
-                    className="icon-btn"
-                    onClick={(e: React.MouseEvent) => {
-                      e.stopPropagation();
-                      cancelDownload(item.id);
+                    className="episode-download-action is-danger"
+                    onClick={(event: React.MouseEvent) => {
+                      event.stopPropagation();
+                      void cancelDownload(item.id);
                     }}
-                    style={{ color: "rgba(255, 255, 255, 0.4)" }}
-                    title="Delete Download"
+                    title="Delete download"
                   >
-                    <Trash2 size={20} />
+                    <Trash2 size={18} />
                   </FocusableButton>
                   <FocusableButton
-                    className="icon-btn"
-                    style={{
-                      background: "rgba(255,255,255,0.1)",
-                      color: "#fff",
-                    }}
-                    onClick={() => handlePlay(item, idx)}
+                    className="episode-download-action is-primary"
+                    onClick={() => handlePlay(item, index)}
+                    title="Play episode"
                   >
-                    <Play size={20} fill="currentColor" />
+                    <Play size={18} fill="currentColor" />
                   </FocusableButton>
                 </div>
-              </div>
+              </article>
             ))}
           </div>
-        </div>
+        </section>
       </div>
-    </div>
+    </main>
   );
 };

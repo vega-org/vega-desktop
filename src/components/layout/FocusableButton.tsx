@@ -11,9 +11,12 @@ interface FocusableButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElem
 export const FocusableButton: React.FC<FocusableButtonProps> = ({ 
   children, 
   onClick, 
+  onKeyDown,
   className = '', 
   disabled = false,
   focusKey,
+  tabIndex,
+  type: _type,
   ...rest 
 }) => {
   const isAndroid = navigator.userAgent.toLowerCase().includes('android');
@@ -43,8 +46,19 @@ export const FocusableButton: React.FC<FocusableButtonProps> = ({
       // @ts-ignore
       ref={ref}
       role="button"
+      aria-disabled={disabled || undefined}
+      tabIndex={disabled || tvMode ? -1 : (tabIndex ?? 0)}
       className={`${className} ${focused ? 'tv-focus' : ''}`.trim()}
       onClick={onClick}
+      onKeyDown={(event) => {
+        onKeyDown?.(event as any);
+        if (event.defaultPrevented || disabled || tvMode) return;
+
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick?.(event as any);
+        }
+      }}
       style={{ ...rest.style, opacity: disabled ? 0.5 : 1, pointerEvents: disabled ? 'none' : 'auto' }}
     >
       {children}

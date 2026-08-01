@@ -4,6 +4,9 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { LuFolderOpen as FolderOpen } from "react-icons/lu";
 import { FocusableButton } from "../layout/FocusableButton";
 import { useDownloadStore } from "../../lib/zustand/downloadStore";
+import { Switch } from "../ui/switch";
+import { Input } from "../ui/input";
+import { CustomSelect } from "../CustomSelect";
 
 const QUALITIES = ["360p", "480p", "720p", "1080p", "4k"];
 
@@ -20,6 +23,8 @@ export const PreferencesSettings: React.FC = () => {
   const [dohProvider, setDohProvider] = useState<string>("cloudflare");
   const [dohCustomUrl, setDohCustomUrl] = useState<string>("");
   const [downloadConcurrency, setDownloadConcurrency] = useState<number>(2);
+  const [tmdbApiKey, setTmdbApiKey] = useState<string>("");
+  const [tmdbKeySaved, setTmdbKeySaved] = useState(false);
 
   useEffect(() => {
     setDownloadLocation(settingsStorage.getDownloadLocation());
@@ -33,6 +38,7 @@ export const PreferencesSettings: React.FC = () => {
     setDohProvider(settingsStorage.getDohProvider());
     setDohCustomUrl(settingsStorage.getDohCustomUrl());
     setDownloadConcurrency(settingsStorage.getDownloadConcurrency());
+    setTmdbApiKey(settingsStorage.getTmdbApiKey());
   }, []);
 
   const handleChangeDir = async () => {
@@ -100,8 +106,7 @@ export const PreferencesSettings: React.FC = () => {
     settingsStorage.setDohEnabled(nextState);
   };
 
-  const handleChangeDohProvider = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
+  const handleChangeDohProvider = (val: string) => {
     setDohProvider(val);
     settingsStorage.setDohProvider(val);
   };
@@ -119,6 +124,19 @@ export const PreferencesSettings: React.FC = () => {
     setDownloadConcurrency(next);
     settingsStorage.setDownloadConcurrency(next);
     useDownloadStore.getState().scheduleDownloads();
+  };
+
+  const saveTmdbApiKey = () => {
+    settingsStorage.setTmdbApiKey(tmdbApiKey);
+    setTmdbApiKey(settingsStorage.getTmdbApiKey());
+    setTmdbKeySaved(true);
+    window.setTimeout(() => setTmdbKeySaved(false), 1800);
+  };
+
+  const clearTmdbApiKey = () => {
+    setTmdbApiKey("");
+    settingsStorage.setTmdbApiKey("");
+    setTmdbKeySaved(false);
   };
 
   return (
@@ -196,12 +214,11 @@ export const PreferencesSettings: React.FC = () => {
             Automatically download and install new versions of Vega
           </p>
         </div>
-        <FocusableButton
-          className={`theme-toggle-btn ${autoInstallUpdates ? "active" : ""}`}
-          onClick={handleToggleAutoInstall}
-        >
-          {autoInstallUpdates ? "ON" : "OFF"}
-        </FocusableButton>
+        <Switch
+          checked={autoInstallUpdates}
+          onCheckedChange={() => handleToggleAutoInstall()}
+          aria-label="Automatically install updates"
+        />
       </div>
 
       <div className="settings-divider" />
@@ -212,12 +229,11 @@ export const PreferencesSettings: React.FC = () => {
           <h3 className="label-lg">Auto Check for Updates</h3>
           <p className="body-md text-muted">Check for updates on app startup</p>
         </div>
-        <FocusableButton
-          className={`theme-toggle-btn ${autoCheckUpdates ? "active" : ""}`}
-          onClick={handleToggleAutoCheck}
-        >
-          {autoCheckUpdates ? "ON" : "OFF"}
-        </FocusableButton>
+        <Switch
+          checked={autoCheckUpdates}
+          onCheckedChange={() => handleToggleAutoCheck()}
+          aria-label="Automatically check for updates"
+        />
       </div>
 
       <div className="settings-divider" />
@@ -231,12 +247,11 @@ export const PreferencesSettings: React.FC = () => {
             (Requires app restart)
           </p>
         </div>
-        <FocusableButton
-          className={`theme-toggle-btn ${tvModeEnabled ? "active" : ""}`}
-          onClick={handleToggleTvMode}
-        >
-          {tvModeEnabled ? "ON" : "OFF"}
-        </FocusableButton>
+        <Switch
+          checked={tvModeEnabled}
+          onCheckedChange={() => handleToggleTvMode()}
+          aria-label="Enable TV mode"
+        />
       </div>
 
       <div className="settings-divider" />
@@ -249,12 +264,11 @@ export const PreferencesSettings: React.FC = () => {
             Use GPU to decode video. Turn off if you experience playback issues.
           </p>
         </div>
-        <FocusableButton
-          className={`theme-toggle-btn ${hwAccelEnabled ? "active" : ""}`}
-          onClick={handleToggleHwAccel}
-        >
-          {hwAccelEnabled ? "ON" : "OFF"}
-        </FocusableButton>
+        <Switch
+          checked={hwAccelEnabled}
+          onCheckedChange={() => handleToggleHwAccel()}
+          aria-label="Enable hardware acceleration"
+        />
       </div>
 
       <div className="settings-divider" />
@@ -266,12 +280,41 @@ export const PreferencesSettings: React.FC = () => {
             Allow F12 or Ctrl+Shift+I to toggle developer tools
           </p>
         </div>
-        <FocusableButton
-          className={`theme-toggle-btn ${devtoolsShortcutsEnabled ? "active" : ""}`}
-          onClick={handleToggleDevtoolsShortcuts}
-        >
-          {devtoolsShortcutsEnabled ? "ON" : "OFF"}
-        </FocusableButton>
+        <Switch
+          checked={devtoolsShortcutsEnabled}
+          onCheckedChange={() => handleToggleDevtoolsShortcuts()}
+          aria-label="Enable developer shortcuts"
+        />
+      </div>
+
+      <div className="settings-divider" />
+
+      <div className="settings-row" style={{ alignItems: "flex-start" }}>
+        <div className="settings-info">
+          <h3 className="label-lg">TMDB API Key</h3>
+          <p className="body-md text-muted">
+            Optional custom key for Story metadata. It overrides the bundled environment key.
+          </p>
+        </div>
+        <div className="tmdb-key-control">
+          <Input
+            type="password"
+            autoComplete="off"
+            aria-label="Custom TMDB API key"
+            placeholder={import.meta.env.VITE_TMDB_API_KEY ? "Using bundled key" : "Enter TMDB API key"}
+            value={tmdbApiKey}
+            onChange={(event) => { setTmdbApiKey(event.target.value); setTmdbKeySaved(false); }}
+            className="tmdb-key-input"
+          />
+          <div className="tmdb-key-actions">
+            <FocusableButton className="theme-toggle-btn active" onClick={saveTmdbApiKey}>
+              {tmdbKeySaved ? "Saved" : "Save"}
+            </FocusableButton>
+            {settingsStorage.getTmdbApiKey() && (
+              <FocusableButton className="theme-toggle-btn" onClick={clearTmdbApiKey}>Use bundled</FocusableButton>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="settings-divider" />
@@ -284,83 +327,35 @@ export const PreferencesSettings: React.FC = () => {
             Bypass ISP DNS blocking for movie providers
           </p>
         </div>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "12px",
-            alignItems: "flex-end",
-          }}
-        >
-          <FocusableButton
-            className={`theme-toggle-btn ${dohEnabled ? "active" : ""}`}
-            onClick={handleToggleDoh}
-          >
-            {dohEnabled ? "ON" : "OFF"}
-          </FocusableButton>
+        <div className="settings-stacked-control">
+          <Switch
+            checked={dohEnabled}
+            onCheckedChange={() => handleToggleDoh()}
+            aria-label="Enable secure DNS"
+          />
 
           {dohEnabled && (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "8px",
-                width: "200px",
-              }}
-            >
-              <select
+            <div className="doh-settings-fields">
+              <CustomSelect
                 value={dohProvider}
                 onChange={handleChangeDohProvider}
-                style={{
-                  backgroundColor: "rgba(255, 255, 255, 0.05)",
-                  color: "white",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: "6px",
-                  padding: "8px",
-                  outline: "none",
-                }}
-              >
-                <option
-                  value="cloudflare"
-                  style={{ backgroundColor: "#1a1a1a", color: "white" }}
-                >
-                  Cloudflare (1.1.1.1)
-                </option>
-                <option
-                  value="google"
-                  style={{ backgroundColor: "#1a1a1a", color: "white" }}
-                >
-                  Google (8.8.8.8)
-                </option>
-                <option
-                  value="adguard"
-                  style={{ backgroundColor: "#1a1a1a", color: "white" }}
-                >
-                  AdGuard
-                </option>
-                <option
-                  value="custom"
-                  style={{ backgroundColor: "#1a1a1a", color: "white" }}
-                >
-                  Custom URL
-                </option>
-              </select>
+                options={[
+                  { value: "cloudflare", label: "Cloudflare (1.1.1.1)" },
+                  { value: "google", label: "Google (8.8.8.8)" },
+                  { value: "adguard", label: "AdGuard" },
+                  { value: "custom", label: "Custom URL" },
+                ]}
+                className="doh-provider-select"
+              />
 
               {dohProvider === "custom" && (
-                <input
+                <Input
                   type="text"
                   placeholder="https://dns.example.com/dns-query"
                   value={dohCustomUrl}
                   onChange={handleChangeDohCustomUrl}
-                  style={{
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    color: "white",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "6px",
-                    padding: "8px",
-                    outline: "none",
-                    fontSize: "12px",
-                  }}
+                  aria-label="Custom DNS over HTTPS URL"
+                  className="doh-custom-url"
                 />
               )}
             </div>

@@ -12,7 +12,9 @@ import "./Layout.css";
 export const Layout: React.FC = () => {
   const location = useLocation();
   const isHomePage = location.pathname === "/";
-  const isContentPage = location.pathname.startsWith("/content/");
+  const isContentPage =
+    location.pathname.startsWith("/content/") ||
+    location.pathname.startsWith("/watchlist/content/");
   const tvMode = settingsStorage.isTvModeEnabled();
 
   const { ref, focusKey, focusSelf } = useFocusable({
@@ -30,8 +32,6 @@ export const Layout: React.FC = () => {
     }
   }, [tvMode, focusSelf, location.pathname]);
 
-  // Since Topbar has negative margin to hover over the hero image on home/meta pages,
-  // we need to push the content down manually on other pages so the topbar doesn't hide text.
   const needsTopPadding = !isHomePage && !isContentPage;
 
   return (
@@ -41,8 +41,7 @@ export const Layout: React.FC = () => {
         <div className="layout-main">
           <Topbar />
           <main
-            className="layout-content"
-            style={{ paddingTop: needsTopPadding ? "72px" : "0" }}
+            className={`layout-content ${needsTopPadding ? "layout-content-padded" : ""}`}
           >
             <Outlet />
           </main>

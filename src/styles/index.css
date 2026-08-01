@@ -1,5 +1,52 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
 @import "./variables.css";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-on-background: var(--on-background);
+  --color-surface: var(--surface);
+  --color-surface-dim: var(--surface-dim);
+  --color-surface-bright: var(--surface-bright);
+  --color-surface-container-lowest: var(--surface-container-lowest);
+  --color-surface-container-low: var(--surface-container-low);
+  --color-surface-container: var(--surface-container);
+  --color-surface-container-high: var(--surface-container-high);
+  --color-surface-container-highest: var(--surface-container-highest);
+  --color-on-surface: var(--on-surface);
+  --color-on-surface-variant: var(--on-surface-variant);
+  --color-outline: var(--outline);
+  --color-outline-variant: var(--outline-variant);
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-primary-container: var(--primary-container);
+  --color-on-primary-container: var(--on-primary-container);
+  --color-secondary: var(--secondary);
+  --color-on-secondary: var(--on-secondary);
+  --color-secondary-container: var(--secondary-container);
+  --color-on-secondary-container: var(--on-secondary-container);
+  --color-error: var(--error);
+  --color-on-error: var(--on-error);
+  --color-error-container: var(--error-container);
+  --color-on-error-container: var(--on-error-container);
+  --color-skeleton: var(--skeleton-base);
+  --color-skeleton-highlight: var(--skeleton-highlight);
+  --font-sans: var(--font-family);
+  --radius-sm: var(--rounded-sm);
+  --radius-md: var(--rounded-DEFAULT);
+  --radius-lg: var(--rounded-md);
+  --radius-xl: var(--rounded-lg);
+  --radius-2xl: var(--rounded-xl);
+}
+
+@keyframes themed-shimmer {
+  0% {
+    background-position: 180% 0;
+  }
+  100% {
+    background-position: -40% 0;
+  }
+}
 
 * {
   box-sizing: border-box;
@@ -25,7 +72,7 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--primary);
+  background: var(--primary-container);
 }
 
 html,
@@ -55,10 +102,11 @@ a {
   text-decoration: none;
 }
 
-button {
-  background: none;
-  border: none;
+:where(button:not(:disabled), [role="button"]:not([aria-disabled="true"]), a[href], summary, select) {
   cursor: pointer;
+}
+
+:where(button) {
   font-family: inherit;
   color: inherit;
 }

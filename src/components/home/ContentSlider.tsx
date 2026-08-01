@@ -11,6 +11,7 @@ import {
 import { settingsStorage } from "../../lib/storage";
 import { PostCardItem, Post } from "./PostCardItem";
 import { FocusableButton } from "../layout/FocusableButton";
+import { Skeleton } from "../ui/skeleton";
 import "./ContentSlider.css";
 
 interface ContentSliderProps {
@@ -76,13 +77,13 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
   if (isLoading) {
     return (
       <div className="slider-container">
-        <h2
-          className="slider-title headline-md skeleton-text"
-          style={{ width: "200px" }}
-        />
+        <Skeleton className="slider-title-skeleton" />
         <div className="slider-row skeleton-row">
           {[...Array(10)].map((_, i) => (
-            <div key={i} className="post-card skeleton-card" />
+            <div key={i} className="post-card">
+              <Skeleton className="skeleton-card" />
+              <Skeleton className="skeleton-card-title" />
+            </div>
           ))}
         </div>
       </div>
@@ -99,28 +100,11 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
         className={`slider-container ${hasFocusedChild ? "has-focused-child" : ""}`}
         ref={focusRef as any}
       >
-        <div
-          className="slider-header"
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "8px",
-          }}
-        >
-          <h2 className="slider-title headline-md" style={{ marginBottom: 0 }}>
-            {title}
-          </h2>
+        <div className="slider-header">
+          <h2 className="slider-title headline-md">{title}</h2>
           {(typeof filter === "string" || typeof searchQuery === "string") && (
             <FocusableButton
-              className="text-primary body-md"
-              style={{
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                padding: "0 16px",
-                outline: "none",
-              }}
+              className="slider-see-all"
               onClick={() => {
                 if (typeof searchQuery === "string") {
                   navigate(
@@ -133,14 +117,14 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
                 }
               }}
             >
-              More
+              View all
             </FocusableButton>
           )}
         </div>
 
         <div className="slider-wrapper">
           <button
-            className="slider-arrow left glass-overlay"
+            className="slider-arrow left"
             onClick={() => handleScroll("left")}
             aria-label="Scroll left"
           >
@@ -159,7 +143,7 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
           </div>
 
           <button
-            className="slider-arrow right glass-overlay"
+            className="slider-arrow right"
             onClick={() => handleScroll("right")}
             aria-label="Scroll right"
           >

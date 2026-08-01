@@ -1,5 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { LuChevronDown as ChevronDown, LuChevronUp as ChevronUp } from 'react-icons/lu';
+import {
+  LuCheck as Check,
+  LuChevronDown as ChevronDown,
+  LuChevronUp as ChevronUp,
+} from 'react-icons/lu';
 import { FocusableButton } from './layout/FocusableButton';
 import { useFocusable, FocusContext } from '@noriginmedia/norigin-spatial-navigation-react';
 import { settingsStorage } from '../lib/storage';
@@ -54,7 +58,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     <div className={`custom-select-container ${className}`} ref={containerRef}>
       <FocusableButton
         type="button"
-        className="custom-select-button glass-overlay"
+        className="custom-select-button"
         onClick={() => setIsOpen(!isOpen)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -69,7 +73,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
       {isOpen && (
         <FocusContext.Provider value={focusKey}>
-          <ul className="custom-select-list glass-overlay" role="listbox" ref={focusRef as any}>
+          <ul className="custom-select-list" role="listbox" ref={focusRef as any}>
             {options.map((option) => (
               <SelectOptionItem 
                 key={option.value}
@@ -106,7 +110,8 @@ const SelectOptionItem: React.FC<{option: Option, isSelected: boolean, onClick: 
       aria-selected={isSelected}
       onClick={onClick}
     >
-      {option.label}
+      <span>{option.label}</span>
+      {isSelected && <Check className="custom-select-check" aria-hidden="true" />}
     </li>
   );
 };

@@ -21,6 +21,7 @@ const OBSERVED_PROPERTIES = [
   ["paused-for-cache", "flag"],
   ["demuxer-cache-duration", "double", "none"],
   ["track-list/count", "int64"],
+  ["chapter-list/count", "int64", "none"],
   ["video-params/h", "double"],
 ] as const satisfies MpvObservableProperty[];
 
@@ -34,6 +35,11 @@ export interface MpvTrack {
   external: boolean;
   demuxW?: number;
   demuxH?: number;
+}
+
+export interface MpvChapter {
+  title: string;
+  time: number;
 }
 
 // Global state to prevent StrictMode race conditions
@@ -64,6 +70,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
   const [isBuffering, setIsBuffering] = useState(false);
   const [cacheDuration, setCacheDuration] = useState(0);
   const [tracks, setTracks] = useState<MpvTrack[]>([]);
+  const [chapters, setChapters] = useState<MpvChapter[]>([]);
   const [videoHeight, setVideoHeight] = useState(0);
 
   const unlistenPropsRef = useRef<(() => void) | null>(null);
@@ -138,6 +145,35 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     } catch (err: any) {
       if (String(err).includes("instance not found")) return;
       console.error("Failed to fetch tracks:", err);
+    }
+  }, []);
+
+  const fetchChapters = useCallback(async () => {
+    try {
+      const count = (await getProperty(
+        "chapter-list/count",
+        "int64",
+      )) as number | null;
+      if (!count || count <= 0) {
+        setChapters([]);
+        return;
+      }
+
+      const parsed: MpvChapter[] = [];
+      for (let index = 0; index < count; index++) {
+        const [title, time] = await Promise.all([
+          getProperty(`chapter-list/${index}/title`, "string").catch(() => ""),
+          getProperty(`chapter-list/${index}/time`, "double").catch(() => 0),
+        ]);
+        parsed.push({
+          title: (title as string) || `Chapter ${index + 1}`,
+          time: Number(time) || 0,
+        });
+      }
+      setChapters(parsed.sort((left, right) => left.time - right.time));
+    } catch (err: any) {
+      if (String(err).includes("instance not found")) return;
+      setChapters([]);
     }
   }, []);
 
@@ -235,6 +271,9 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
             case "track-list/count":
               fetchTracks();
               break;
+            case "chapter-list/count":
+              fetchChapters();
+              break;
             case "video-params/h":
               if (data !== null) setVideoHeight(data as number);
               break;
@@ -267,6 +306,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
           getProperty("pause", "flag")
             .then((p) => setIsPaused(p as boolean))
             .catch(() => {});
+          void fetchChapters();
 
           if (optsRef.current?.onFileLoaded) {
             optsRef.current.onFileLoaded();
@@ -308,6 +348,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
           setIsBuffering(false);
           setCurrentTime(0);
           setDuration(0);
+          setChapters([]);
         }
       });
 
@@ -322,7 +363,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     } catch (err) {
       console.error("Failed to attach listeners:", err);
     }
-  }, [fetchTracks]);
+  }, [fetchChapters, fetchTracks]);
 
   const destroyPlayer = useCallback(() => {
     initCounterRef.current++;
@@ -395,6 +436,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
 
       setIsBuffering(true);
       setTracks([]);
+      setChapters([]);
       pendingSubsRef.current = subtitles || [];
       try {
         let ua =
@@ -781,6 +823,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     isBuffering,
     cacheDuration,
     tracks,
+    chapters,
     videoHeight,
     videoTracks,
     audioTracks,
@@ -796,6 +839,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     addSubtitleFile,
     updateSubtitleSettings,
     fetchTracks,
+    fetchChapters,
     setProperty: async (prop: string, val: any) => {
       if (isInitialized) {
         try {

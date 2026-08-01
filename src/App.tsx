@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { client } from "./lib/client";
 import { Layout } from "./components/layout/Layout";
+import { WindowControls } from "./components/layout/WindowControls";
 import { ExtensionsPage } from "./pages/ExtensionsPage";
 import { HomePage } from "./pages/HomePage";
 import { MetaPage } from "./pages/MetaPage";
@@ -27,12 +28,7 @@ import {
   syncFromSharedFolder,
 } from "./lib/sync/syncService";
 
-function hexToRgb(hex: string) {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result
-    ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
-    : "255, 178, 190";
-}
+import { applyThemeTokens } from "./lib/theme";
 
 let isNavInitialized = false;
 
@@ -110,27 +106,14 @@ export default function App() {
     // Start auto provider updates on boot
     updateProvidersService.startAutomaticUpdateCheck();
 
-    // Apply background theme
-    document.documentElement.setAttribute("data-theme", themeBackground);
-
-    // Apply primary accent color
-    const root = document.documentElement;
-    root.style.setProperty("--primary", primary);
-    root.style.setProperty("--primary-rgb", hexToRgb(primary));
-
-    // For simplicity, we make the primary container a slightly transparent version of primary
-    // Or we could calculate a darkened/lightened version. Using rgba is easiest:
-    root.style.setProperty(
-      "--primary-container",
-      `rgba(${hexToRgb(primary)}, 0.2)`,
-    );
-    root.style.setProperty("--on-primary-container", primary);
+    applyThemeTokens(primary, themeBackground);
   }, [primary, themeBackground]);
 
   return (
     <QueryClientProvider client={client}>
       <WafDialog />
       <BrowserRouter>
+        <WindowControls />
         <Routes>
           {/* Player is outside Layout since it needs fullscreen without sidebar */}
           <Route path="player" element={<PlayerPage />} />
@@ -140,6 +123,7 @@ export default function App() {
             <Route path="/catalog" element={<CatalogPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/watchlist" element={<WatchlistPage />} />
+            <Route path="/watchlist/content/:url" element={<MetaPage />} />
             <Route path="/downloads" element={<DownloadsPage />} />
             <Route
               path="/downloads/series/:showName"

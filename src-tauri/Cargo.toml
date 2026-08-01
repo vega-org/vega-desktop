@@ -59,3 +59,5 @@ tauri-plugin-window-state = "2"
 tauri-plugin-libmpv = "0.3.2"
 tauri-plugin-updater = "2"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }

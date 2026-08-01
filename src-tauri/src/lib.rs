@@ -7,6 +7,19 @@ mod sync_manifest;
 
 use std::sync::Mutex;
 use tauri::Manager;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use tauri_plugin_window_state::StateFlags;
+#[cfg(target_os = "windows")]
+use windows::Win32::{
+    Foundation::HWND,
+    Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    },
+    UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, HWND_TOPMOST,
+        SWP_FRAMECHANGED, SWP_NOACTIVATE, WS_MAXIMIZE,
+    },
+};
 
 struct ProxyState {
     port: Mutex<Option<u16>>,
@@ -77,6 +90,50 @@ fn toggle_devtools(window: tauri::WebviewWindow) {
     }
 }
 
+#[tauri::command]
+fn set_player_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Result<(), String> {
+    let was_maximized = window.is_maximized().map_err(|error| error.to_string())?;
+    window
+        .set_fullscreen(fullscreen)
+        .map_err(|error| error.to_string())?;
+
+    #[cfg(target_os = "windows")]
+    if fullscreen && was_maximized {
+        let hwnd_value = window.hwnd().map_err(|error| error.to_string())?.0 as isize;
+        window
+            .run_on_main_thread(move || unsafe {
+                let hwnd = HWND(hwnd_value as _);
+                let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+
+                // Clear only the native maximized bit without calling
+                // SW_RESTORE, which would visibly shrink the window first.
+                SetWindowLongPtrW(hwnd, GWL_STYLE, style & !(WS_MAXIMIZE.0 as isize));
+
+                let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+                let mut monitor_info = MONITORINFO {
+                    cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                    ..Default::default()
+                };
+
+                if GetMonitorInfoW(monitor, &mut monitor_info).as_bool() {
+                    let bounds = monitor_info.rcMonitor;
+                    let _ = SetWindowPos(
+                        hwnd,
+                        Some(HWND_TOPMOST),
+                        bounds.left,
+                        bounds.top,
+                        bounds.right - bounds.left,
+                        bounds.bottom - bounds.top,
+                        SWP_FRAMECHANGED | SWP_NOACTIVATE,
+                    );
+                }
+            })
+            .map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()
@@ -91,7 +148,11 @@ pub fn run() {
     {
         builder = builder
             .plugin(tauri_plugin_updater::Builder::new().build())
-            .plugin(tauri_plugin_window_state::Builder::new().build())
+            .plugin(
+                tauri_plugin_window_state::Builder::new()
+                    .with_state_flags(StateFlags::all() & !StateFlags::DECORATIONS)
+                    .build(),
+            )
             .plugin(tauri_plugin_libmpv::init());
     }
 
@@ -99,6 +160,11 @@ pub fn run() {
         .manage(ProxyState { port: Mutex::new(None) })
         .manage(download_manager::DownloadState::new())
         .setup(|app| {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_decorations(false)?;
+            }
+
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 println!("[stream_proxy] Starting proxy server...");
@@ -140,6 +206,7 @@ pub fn run() {
             cookie_manager::clear_cookies_for_url,
             open_external_player,
             toggle_devtools,
+            set_player_fullscreen,
             doh_client::doh_fetch,
             sync_manifest::read_sync_manifests,
             sync_manifest::write_sync_manifest,

@@ -57,7 +57,11 @@ export const useContentInfo = (link: string, providerValue: string) => {
 };
 
 // Hook for fetching enhanced metadata from Stremio
-export const useEnhancedMetadata = (imdbId: string, type: string) => {
+export const useEnhancedMetadata = (
+  imdbId: string,
+  type: string,
+  enabled = false,
+) => {
   const cacheKey = getEnhancedMetadataCacheKey(imdbId, type);
   const query = useQuery({
     queryKey: ['enhancedMeta', imdbId, type],
@@ -66,23 +70,26 @@ export const useEnhancedMetadata = (imdbId: string, type: string) => {
       try {
         // Validate imdbId and type
         if (!imdbId || !type) {
-          return undefined;
+          return null;
         }
         const response = await axios.get(
           `https://v3-cinemeta.strem.io/meta/${type}/${imdbId}.json`,
           {timeout: 10000},
         );
-        return response.data?.meta;
+        return response.data?.meta ?? null;
       } catch (error) {
         console.log('Error fetching enhanced metadata:', error);
-        return undefined; // Fallback to undefined instead of throwing
+        return null;
       }
     },
-    enabled: !!imdbId && !!type,
+    enabled: enabled && !!imdbId && !!type,
     staleTime: 30 * 60 * 1000, // 30 minutes - metadata changes rarely
     gcTime: 2 * 60 * 60 * 1000, // 2 hours
     retry: 1, // Don't retry too much for external API
     initialData: () => {
+      if (!enabled) {
+        return undefined;
+      }
       const cached =
         cacheStorage.getString(cacheKey) || cacheStorage.getString(imdbId);
       if (cached) {
@@ -117,13 +124,20 @@ export const useContentDetails = (link: string, providerValue: string) => {
     refetch: refetchInfo,
   } = useContentInfo(link, providerValue);
 
-  // Then, get enhanced metadata if imdbId is available
+  const imdbId = info?.imdbId || '';
+  const contentType = info?.type || '';
+  const shouldPopulateMeta = info?.populateMeta === true;
+
+  // Only enrich providers that explicitly opt in to Cinemeta metadata.
   const {
-    data: meta,
-    isLoading: metaLoading,
-    isFetching: metaFetching,
+    data: enhancedMeta,
+    isLoading: enhancedMetaLoading,
+    isFetching: enhancedMetaFetching,
     refetch: refetchMeta,
-  } = useEnhancedMetadata(info?.imdbId || '', info?.type || '');
+  } = useEnhancedMetadata(imdbId, contentType, shouldPopulateMeta);
+  const meta = shouldPopulateMeta ? enhancedMeta : null;
+  const metaLoading = shouldPopulateMeta && enhancedMetaLoading;
+  const metaFetching = shouldPopulateMeta && enhancedMetaFetching;
 
   return {
     info,
@@ -132,7 +146,10 @@ export const useContentDetails = (link: string, providerValue: string) => {
     isRefetching: infoFetching || metaFetching,
     error: infoError,
     refetch: async () => {
-      await Promise.all([refetchInfo(), refetchMeta()]);
+      await refetchInfo();
+      if (shouldPopulateMeta && imdbId && contentType) {
+        await refetchMeta();
+      }
     },
   };
 };

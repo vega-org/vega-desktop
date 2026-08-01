@@ -282,6 +282,10 @@
   z-index: 10;
 }
 
+.player-controls-wrapper.visible .player-center-controls {
+  pointer-events: none;
+}
+
 .center-btn {
   width: 44px;
   height: 44px;
@@ -294,6 +298,7 @@
     transform 0.12s ease,
     opacity 0.12s;
   opacity: 0.8;
+  pointer-events: auto;
 }
 .center-btn:hover {
   opacity: 1;
@@ -380,6 +385,27 @@
   transform: translateY(-50%) scale(1.25);
 }
 
+.timeline-chapter-marker {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  width: 3px;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  transition: height 0.12s ease, background-color 0.12s ease;
+}
+
+.timeline-chapter-marker:hover {
+  height: 14px;
+  background: var(--primary);
+}
+
 /* ---- Bottom Actions ---- */
 .player-actions-row {
   display: flex;
@@ -436,6 +462,11 @@
 
 .inline-menu.wide {
   min-width: 200px;
+}
+
+.inline-menu.chapters-menu {
+  width: min(320px, 42vw);
+  max-height: 300px;
 }
 
 @keyframes menuFadeIn {
@@ -505,6 +536,35 @@
 .track-lang {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
+}
+
+.chapter-action {
+  max-width: 190px;
+}
+
+.chapter-action-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapter-menu-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 14px;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+}
+
+.chapter-menu-title {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.88);
+  text-overflow: ellipsis;
+}
+
+.chapter-menu-time {
+  color: rgba(255, 255, 255, 0.48);
+  font-variant-numeric: tabular-nums;
 }
 
 .action-btn.text-btn {

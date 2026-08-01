@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState, useEffect } from 'react';
-import { LuArrowLeft as ArrowLeft, LuPlay as Play, LuPause as Pause, LuSkipBack as SkipBack, LuSkipForward as SkipForward, LuRewind as Rewind, LuFastForward as FastForward, LuMaximize as Maximize, LuMinimize as Minimize, LuSkipForward as NextIcon, LuCaptions as Subtitles, LuGauge as Gauge, LuPictureInPicture as PictureInPicture, LuRectangleHorizontal as RectangleHorizontal, LuCheck as Check, LuServer as ServerIcon, LuTv as Tv, LuAudioLines } from 'react-icons/lu';
+import { LuArrowLeft as ArrowLeft, LuPlay as Play, LuPause as Pause, LuSkipBack as SkipBack, LuSkipForward as SkipForward, LuRewind as Rewind, LuFastForward as FastForward, LuMaximize as Maximize, LuMinimize as Minimize, LuSkipForward as NextIcon, LuCaptions as Subtitles, LuGauge as Gauge, LuPictureInPicture as PictureInPicture, LuRectangleHorizontal as RectangleHorizontal, LuCheck as Check, LuServer as ServerIcon, LuTv as Tv, LuAudioLines, LuList as ChaptersIcon } from 'react-icons/lu';
 import { MdVideoSettings, Md4K, Md8K, MdHd, MdSd, MdHighQuality } from 'react-icons/md';
-import type { MpvTrack } from '../lib/hooks/useMpvPlayer';
+import type { MpvChapter, MpvTrack } from '../lib/hooks/useMpvPlayer';
 import { SearchSubtitlesModal } from '../components/SearchSubtitlesModal';
 
 interface PlayerControlsProps {
@@ -13,6 +13,7 @@ interface PlayerControlsProps {
   cacheDuration?: number;
   primaryTitle: string;
   secondaryTitle?: string;
+  nextEpisodeTitle?: string;
   showNextEpisode: boolean;
   onBack: () => void;
   onTogglePause: () => void;
@@ -28,6 +29,7 @@ interface PlayerControlsProps {
   audioTracks: MpvTrack[];
   subtitleTracks: MpvTrack[];
   videoTracks?: MpvTrack[];
+  chapters?: MpvChapter[];
   videoHeight?: number;
   playbackRate: number;
   streamData?: any;
@@ -90,6 +92,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   cacheDuration,
   primaryTitle,
   secondaryTitle,
+  nextEpisodeTitle,
   showNextEpisode,
   onBack,
   onTogglePause,
@@ -105,6 +108,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   audioTracks,
   subtitleTracks,
   videoTracks = [],
+  chapters = [],
   videoHeight = 0,
   playbackRate,
   streamData,
@@ -122,7 +126,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   onPlayNative,
 }) => {
   const trackRef = useRef<HTMLDivElement>(null);
-  const [openMenu, setOpenMenu] = useState<'audio' | 'subtitle' | 'speed' | 'quality' | 'server' | null>(null);
+  const [openMenu, setOpenMenu] = useState<'audio' | 'subtitle' | 'speed' | 'quality' | 'server' | 'chapters' | null>(null);
   const [showOnlineSearch, setShowOnlineSearch] = useState(false);
 
   // Close menus when clicking outside
@@ -132,7 +136,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     return () => document.removeEventListener('click', handleDocClick);
   }, [openMenu]);
 
-  const toggleMenu = (e: React.MouseEvent, menu: 'audio' | 'subtitle' | 'speed' | 'quality' | 'server') => {
+  const toggleMenu = (e: React.MouseEvent, menu: 'audio' | 'subtitle' | 'speed' | 'quality' | 'server' | 'chapters') => {
     e.stopPropagation();
     setOpenMenu(openMenu === menu ? null : menu);
   };
@@ -158,6 +162,12 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const cachePercent = duration > 0 ? Math.min(((currentTime + (cacheDuration || 0)) / duration) * 100, 100) : 0;
+  let activeChapterIndex = -1;
+  for (let index = 0; index < chapters.length; index++) {
+    if (chapters[index].time <= currentTime + 0.25) activeChapterIndex = index;
+    else break;
+  }
+  const activeChapter = chapters[activeChapterIndex];
 
   const seekFromMouse = useCallback((e: MouseEvent | React.MouseEvent) => {
     if (!trackRef.current || !duration) return;
@@ -221,7 +231,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
       <div className="controls-gradient-bottom" />
 
       {/* Top bar */}
-      <div className="player-top-bar" onClick={stop} onDoubleClick={stop}>
+      <div className="player-top-bar">
         <button className="player-back-btn" onClick={onBack}>
           <ArrowLeft size={22} />
         </button>
@@ -267,20 +277,68 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
       </div>
 
       {/* Bottom bar */}
-      <div className="player-bottom-bar" onClick={stop} onDoubleClick={stop}>
-        <div className="player-timeline">
+      <div className="player-bottom-bar">
+        <div className="player-timeline" onClick={stop} onDoubleClick={stop}>
           <span className="timeline-time">{formatTime(currentTime)}</span>
           <div ref={trackRef} className="timeline-track" onMouseDown={handleTrackMouseDown}>
             <div className="timeline-cache" style={{ width: `${cachePercent}%`, position: 'absolute', top: 0, left: 0, height: '100%', backgroundColor: 'rgba(255, 255, 255, 0.3)', borderRadius: '2px', pointerEvents: 'none' }} />
             <div className="timeline-progress" style={{ width: `${progressPercent}%` }}>
               <div className="timeline-thumb" />
             </div>
+            {duration > 0 && chapters.slice(1).map((chapter, index) => (
+              <button
+                key={`${chapter.time}-${index}`}
+                type="button"
+                className="timeline-chapter-marker"
+                style={{ left: `${Math.min(100, Math.max(0, (chapter.time / duration) * 100))}%` }}
+                title={`${chapter.title} · ${formatTime(chapter.time)}`}
+                aria-label={`Seek to ${chapter.title}`}
+                onMouseDown={(event) => event.stopPropagation()}
+                onDoubleClick={stop}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSeek(chapter.time);
+                }}
+              />
+            ))}
           </div>
           <span className="timeline-time right">{formatTime(duration)}</span>
         </div>
 
         <div className="player-actions-row">
-          <div className="player-actions-left">
+          <div className="player-actions-left" onClick={stop} onDoubleClick={stop}>
+            {chapters.length > 0 && (
+              <div className="inline-menu-container">
+                <button
+                  className={`action-btn text-btn chapter-action ${openMenu === 'chapters' ? 'active' : ''}`}
+                  onClick={(event) => toggleMenu(event, 'chapters')}
+                  title={activeChapter?.title || `${chapters.length} chapters`}
+                >
+                  <ChaptersIcon size={20} />
+                  <span className="chapter-action-label">
+                    {activeChapter?.title || 'Chapters'}
+                  </span>
+                </button>
+                {openMenu === 'chapters' && (
+                  <div className="inline-menu left chapters-menu" onClick={stop}>
+                    {chapters.map((chapter, index) => (
+                      <button
+                        key={`${chapter.time}-${index}`}
+                        className={`inline-menu-item chapter-menu-item ${index === activeChapterIndex ? 'selected' : ''}`}
+                        onClick={() => {
+                          onSeek(chapter.time);
+                          setOpenMenu(null);
+                        }}
+                      >
+                        <span className="chapter-menu-title">{chapter.title}</span>
+                        <span className="chapter-menu-time">{formatTime(chapter.time)}</span>
+                        {index === activeChapterIndex && <Check size={14} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="inline-menu-container">
               <button className={`action-btn text-btn ${openMenu === 'audio' ? 'active' : ''}`} onClick={(e) => toggleMenu(e, 'audio')}>
                 <LuAudioLines size={20} />
@@ -356,16 +414,16 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
             </div>
           </div>
 
-          <div className="player-actions-right">
+          <div className="player-actions-right" onClick={stop} onDoubleClick={stop}>
             {onPlayNative && (
               <button className="action-btn text-btn" onClick={onPlayNative}>
                 <Tv size={20} />
                 <span>Native</span>
               </button>
             )}
-            {showNextEpisode && secondaryTitle && (
+            {showNextEpisode && nextEpisodeTitle && (
               <button className="next-episode-pill" onClick={onNextEpisode}>
-                <span>Next: {secondaryTitle}</span>
+                <span>Next: {nextEpisodeTitle}</span>
                 <NextIcon size={16} />
               </button>
             )}

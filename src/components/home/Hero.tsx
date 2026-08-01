@@ -1,11 +1,13 @@
-import React from 'react';
-import { LuPlay as Play } from 'react-icons/lu';
-import { useHeroMetadata } from '../../lib/hooks/useHomePageData';
-import { useNavigate } from 'react-router-dom';
-import useContentStore from '../../lib/zustand/contentStore';
-import { useFocusable } from '@noriginmedia/norigin-spatial-navigation-react';
-import { settingsStorage } from '../../lib/storage';
-import './Hero.css';
+import React from "react";
+import { LuPlay as Play } from "react-icons/lu";
+import { useHeroMetadata } from "../../lib/hooks/useHomePageData";
+import { prefetchArtworkPalette, useArtworkPalette } from "../../lib/hooks/useArtworkPalette";
+import { useNavigate } from "react-router-dom";
+import useContentStore from "../../lib/zustand/contentStore";
+import { useFocusable } from "@noriginmedia/norigin-spatial-navigation-react";
+import { settingsStorage } from "../../lib/storage";
+import { Skeleton } from "../ui/skeleton";
+import "./Hero.css";
 
 interface HeroProps {
   post: {
@@ -21,13 +23,29 @@ export const Hero: React.FC<HeroProps> = ({ post }) => {
   const tvMode = settingsStorage.isTvModeEnabled();
 
   const { data: meta, isLoading: metaLoading } = useHeroMetadata(
-    post?.link || '',
-    provider?.value || ''
+    post?.link || "",
+    provider?.value || "",
   );
+  const heroArtwork = meta?.background || meta?.image || post?.image;
+  const artworkPaletteStyle = useArtworkPalette(heroArtwork);
+  const heroButtonStyle = {
+    "--primary": "#ffffff",
+    "--on-primary": "#171717",
+    ...artworkPaletteStyle,
+  } as React.CSSProperties;
+
+  React.useEffect(() => {
+    if (post?.image && settingsStorage.isInfoPageDynamicThemeEnabled()) {
+      void prefetchArtworkPalette(post.image);
+    }
+  }, [post?.image]);
 
   const handlePlayClick = () => {
     if (post) {
-      navigate(`/content/${encodeURIComponent(post.link)}`);
+      const params = new URLSearchParams();
+      if (provider?.value) params.set("provider", provider.value);
+      if (post.image) params.set("poster", post.image);
+      navigate(`/content/${encodeURIComponent(post.link)}?${params.toString()}`);
     }
   };
 
@@ -35,8 +53,8 @@ export const Hero: React.FC<HeroProps> = ({ post }) => {
     focusable: tvMode && !!post,
     onEnterPress: handlePlayClick,
     onFocus: (layout) => {
-      layout.node.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
+      layout.node.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    },
   });
 
   if (!post || metaLoading) {
@@ -48,24 +66,25 @@ export const Hero: React.FC<HeroProps> = ({ post }) => {
             style={{ backgroundImage: `url(${post.image})` }}
           />
         ) : (
-          <div className="hero-skeleton-bg" />
+          <Skeleton className="hero-skeleton-bg" />
         )}
         <div className="hero-vignette" />
         <div className="hero-content">
-          <div className="skeleton-title" style={{ width: '60%', height: '48px', marginBottom: '16px' }} />
-          <div className="skeleton-text" style={{ width: '80%', height: '24px', marginBottom: '8px' }} />
-          <div className="skeleton-text" style={{ width: '70%', height: '24px', marginBottom: '24px' }} />
-          <div className="skeleton-button" style={{ width: '120px', height: '48px', borderRadius: '12px' }} />
+          <Skeleton className="hero-skeleton-title" />
+          <Skeleton className="hero-skeleton-copy hero-skeleton-copy-wide" />
+          <Skeleton className="hero-skeleton-copy" />
+          <Skeleton className="hero-skeleton-button" />
         </div>
       </div>
     );
   }
 
-  // Use high-res background from meta if available, otherwise use post.image
-  const bgImage = meta?.background || post.image;
+  // Prefer enriched artwork when requested, then provider metadata and the post.
+  const bgImage = meta?.background || meta?.image || post.image;
   // Use logo if available, otherwise just text
   const logoUrl = meta?.logo;
-  const description = meta?.description || meta?.plot || '';
+  const displayTitle = meta?.name || meta?.title || post.title;
+  const description = meta?.description || meta?.plot || meta?.synopsis || "";
 
   return (
     <div className="hero-container">
@@ -77,22 +96,20 @@ export const Hero: React.FC<HeroProps> = ({ post }) => {
 
       <div className="hero-content">
         {logoUrl ? (
-          <img src={logoUrl} alt={post.title} className="hero-logo" />
+          <img src={logoUrl} alt={displayTitle} className="hero-logo" />
         ) : (
-          <h1 className="hero-title display-lg">{post.title}</h1>
+          <h1 className="hero-title display-lg">{displayTitle}</h1>
         )}
 
         {description && (
-          <p className="hero-description body-lg">
-            {description}
-          </p>
+          <p className="hero-description body-lg">{description}</p>
         )}
 
         <div className="hero-actions">
-          <button 
-            // @ts-ignore
+          <button
             ref={playRef}
-            className={`btn-play ${playFocused ? 'tv-focus' : ''}`} 
+            className={`btn-play ${playFocused ? "tv-focus" : ""}`}
+            style={heroButtonStyle}
             onClick={handlePlayClick}
           >
             <Play size={24} fill="currentColor" />
@@ -103,4 +120,3 @@ export const Hero: React.FC<HeroProps> = ({ post }) => {
     </div>
   );
 };
-

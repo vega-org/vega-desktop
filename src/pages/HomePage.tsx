@@ -8,13 +8,11 @@ import { useSearch } from "../lib/hooks/useSearch";
 import useContentStore from "../lib/zustand/contentStore";
 import { Hero } from "../components/home/Hero";
 import { ContentSlider } from "../components/home/ContentSlider";
-import {
-  LuRefreshCw as RefreshCw,
-  LuPlay as Play,
-  LuLoaderCircle as Loader2,
-} from "react-icons/lu";
+import { LuRefreshCw as RefreshCw } from "react-icons/lu";
 import useWatchHistoryStore from "../lib/zustand/watchHistrory";
 import { FocusableButton } from "../components/layout/FocusableButton";
+import { PostCardItem } from "../components/home/PostCardItem";
+import { Spinner } from "../components/ui/spinner";
 import "./HomePage.css";
 import "../pages/SearchPage.css";
 
@@ -53,6 +51,16 @@ export const HomePage: React.FC = () => {
 
   const continueWatchingPosts = useMemo(() => {
     const latestByLink = new Map<string, (typeof history)[number]>();
+    const catalogPosters = new Map<string, string>();
+    if (provider?.value) {
+      homeData.forEach((category) => {
+        category.Posts.forEach((post) => {
+          if (post.link && post.image && !catalogPosters.has(post.link)) {
+            catalogPosters.set(post.link, post.image);
+          }
+        });
+      });
+    }
     history
       .filter((item) => item.provider !== "local")
       .filter(
@@ -72,13 +80,18 @@ export const HomePage: React.FC = () => {
     return [...latestByLink.values()].slice(0, 10).map((item) => ({
       title: item.title,
       link: item.link,
-      image: item.poster || "",
+      image:
+        (item.provider === provider?.value
+          ? catalogPosters.get(item.link)
+          : undefined) ||
+        item.poster ||
+        "",
       progress: item.progress! / item.duration!,
       providerValue: item.provider,
       type: item.isSeries ? "series" : "movie",
       episodeTitle: item.episodeTitle,
     }));
-  }, [history]);
+  }, [history, homeData, provider?.value]);
 
   if (!installedProviders || installedProviders.length === 0) {
     return (
@@ -103,7 +116,7 @@ export const HomePage: React.FC = () => {
 
         {isSearchLoading && (
           <div className="search-loading flex justify-center py-xl">
-            <Loader2 size={48} className="spin text-primary" />
+            <Spinner size={48} label="Searching provider" />
           </div>
         )}
 
@@ -133,9 +146,9 @@ export const HomePage: React.FC = () => {
           searchResults.length > 0 && (
             <div className="search-grid pb-xl">
               {searchResults.map((post, index) => (
-                <FocusableButton
+                <PostCardItem
                   key={`${post.link}-${index}`}
-                  className="search-card"
+                  post={post}
                   onClick={() => {
                     const params = new URLSearchParams();
                     if (provider?.value)
@@ -145,26 +158,7 @@ export const HomePage: React.FC = () => {
                       `/content/${encodeURIComponent(post.link)}?${params.toString()}`,
                     );
                   }}
-                  style={{
-                    textAlign: "left",
-                    background: "transparent",
-                    border: "none",
-                    padding: 0,
-                  }}
-                >
-                  <div className="search-poster-container">
-                    <img
-                      src={post.image}
-                      alt={post.title}
-                      className="search-poster"
-                      loading="lazy"
-                    />
-                    <div className="search-hover-overlay">
-                      <Play size={48} fill="currentColor" />
-                    </div>
-                  </div>
-                  <h3 className="search-title label-md">{post.title}</h3>
-                </FocusableButton>
+                />
               ))}
             </div>
           )}

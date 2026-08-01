@@ -44,9 +44,19 @@ export interface Stream {
 export interface Info {
   title: string;
   image: string;
+  logo?: string;
+  background?: string;
+  poster?: string;
   synopsis: string;
-  imdbId: string;
+  description?: string;
+  year?: string | number;
+  runtime?: string;
+  imdbId?: string;
+  tmdbId?: number | string;
   type: string;
+  populateMeta?: boolean;
+  webUrl?: string;
+  trailerUrl?: string;
   tags?: string[];
   cast?: string[];
   rating?: string;
@@ -54,8 +64,12 @@ export interface Info {
 }
 // getEpisodeLinks
 export interface EpisodeLink {
+  id?: string;
   title: string;
   link: string;
+  sourceLink?: string;
+  description?: string;
+  image?: string;
 }
 
 export interface Link {
@@ -66,6 +80,8 @@ export interface Link {
     title: string;
     link: string;
     type?: "movie" | "series";
+    description?: string;
+    image?: string;
   }[];
 }
 

@@ -5,6 +5,8 @@ import { openWebView } from "../../platform/waf";
 import { extensionManager } from "./ExtensionManager";
 import { getErrorMessage } from "./providerErrors";
 
+const MAX_PROVIDER_STATE_SIZE = 1_000_000;
+
 export class ProviderManager {
   private readonly providerState = new Map<string, Record<string, unknown>>();
 
@@ -21,8 +23,8 @@ export class ProviderManager {
       throw new Error("Provider state must be an object");
     }
     const serialized = JSON.stringify(value);
-    if (serialized === undefined || serialized.length > 256_000) {
-      throw new Error("Provider state exceeds the 256 KB limit");
+    if (serialized === undefined || serialized.length > MAX_PROVIDER_STATE_SIZE) {
+      throw new Error("Provider state exceeds the 1 MB limit");
     }
     this.providerState.set(
       providerValue,

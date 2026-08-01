@@ -14,7 +14,8 @@ import useWatchHistoryStore from "../lib/zustand/watchHistrory";
 import { cacheStorage } from "../lib/storage";
 import { PlayerControls } from "./PlayerControls";
 import { PlayerInitError } from "./PlayerInitError";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import { LogicalSize } from "@tauri-apps/api/dpi";
 import {
   FocusContext,
@@ -489,6 +490,24 @@ const DesktopPlayer: React.FC<any> = ({
   const controlsTimerRef = useRef<number | null>(null);
   const prevStreamLinkRef = useRef<string | null>(null);
   const prePipStateRef = useRef<{ size: any; pos: any } | null>(null);
+  const preFullscreenStateRef = useRef<{
+    size: any;
+    pos: any;
+    maximized: boolean;
+    alwaysOnTop: boolean;
+  } | null>(null);
+  const manualFullscreenRef = useRef(false);
+  const isWindows = navigator.userAgent.toLowerCase().includes("windows");
+
+  useEffect(() => {
+    document.body.classList.toggle("player-window-fullscreen", isFullscreen);
+    return () => document.body.classList.remove("player-window-fullscreen");
+  }, [isFullscreen]);
+
+  useEffect(() => {
+    document.body.classList.toggle("player-controls-hidden", !showControls);
+    return () => document.body.classList.remove("player-controls-hidden");
+  }, [showControls]);
 
   const toast = useCallback((msg: string) => {
     const id = ++toastIdRef.current;
@@ -560,9 +579,26 @@ const DesktopPlayer: React.FC<any> = ({
       document.documentElement.style.background = "";
       document.body.style.background = "";
       if (root) root.style.background = "";
-      getCurrentWindow()
-        .setFullscreen(false)
-        .catch(() => {});
+      const win = getCurrentWindow();
+      const previousState = preFullscreenStateRef.current;
+      void (async () => {
+        await win.setFullscreen(false).catch(() => {});
+        if (previousState) {
+          await win
+            .setAlwaysOnTop(previousState.alwaysOnTop)
+            .catch(() => {});
+          if (manualFullscreenRef.current) {
+            if (previousState.maximized) {
+              await win.maximize().catch(() => {});
+            } else {
+              await win.setPosition(previousState.pos).catch(() => {});
+              await win.setSize(previousState.size).catch(() => {});
+            }
+          }
+        }
+        manualFullscreenRef.current = false;
+        preFullscreenStateRef.current = null;
+      })();
     };
   }, []);
 
@@ -734,13 +770,85 @@ const DesktopPlayer: React.FC<any> = ({
   }, [mpv, isFullscreen, handleNextEpisode, revealControls, toast]);
 
   const toggleFullscreen = async () => {
+    const win = getCurrentWindow();
     try {
-      const win = getCurrentWindow();
-      const isFull = await win.isFullscreen();
-      await win.setFullscreen(!isFull);
-      setIsFullscreen(!isFull);
+      const nativeFullscreen = await win.isFullscreen();
+      const currentlyFullscreen =
+        nativeFullscreen || manualFullscreenRef.current;
+
+      if (currentlyFullscreen) {
+        const previousState = preFullscreenStateRef.current;
+        if (nativeFullscreen) await win.setFullscreen(false);
+        await win.setAlwaysOnTop(previousState?.alwaysOnTop ?? false);
+
+        if (manualFullscreenRef.current && previousState) {
+          if (previousState.maximized) {
+            await win.maximize();
+          } else {
+            await win.setPosition(previousState.pos);
+            await win.setSize(previousState.size);
+          }
+        } else if (
+          previousState?.maximized &&
+          !(await win.isMaximized())
+        ) {
+          await win.maximize();
+        }
+
+        manualFullscreenRef.current = false;
+        preFullscreenStateRef.current = null;
+        setIsFullscreen(false);
+        return;
+      }
+
+      preFullscreenStateRef.current = {
+        size: await win.outerSize(),
+        pos: await win.outerPosition(),
+        maximized: await win.isMaximized(),
+        alwaysOnTop: await win.isAlwaysOnTop(),
+      };
+
+      if (isWindows) {
+        await invoke("set_player_fullscreen", { fullscreen: true });
+      } else {
+        await win.setFullscreen(true);
+      }
+
+      const monitor = await currentMonitor();
+      const actualFullscreen = await win.isFullscreen();
+
+      if (!actualFullscreen) {
+        // Windows-safe borderless fallback: use the monitor's full bounds,
+        // not its taskbar-reduced work area.
+        if (!monitor) throw new Error("Unable to determine the active monitor");
+        if (await win.isMaximized()) await win.unmaximize();
+        await win.setDecorations(false);
+        await win.setPosition(monitor.position);
+        await win.setSize(monitor.size);
+        await win.setAlwaysOnTop(true);
+        manualFullscreenRef.current = true;
+      } else {
+        // Keeps Windows' taskbar below the verified fullscreen window.
+        await win.setAlwaysOnTop(true);
+      }
+
+      setIsFullscreen(true);
     } catch (e) {
       console.error(e);
+      const previousState = preFullscreenStateRef.current;
+      await win.setFullscreen(false).catch(() => {});
+      await win
+        .setAlwaysOnTop(previousState?.alwaysOnTop ?? false)
+        .catch(() => {});
+      if (previousState?.maximized) {
+        await win.maximize().catch(() => {});
+      } else if (previousState) {
+        await win.setPosition(previousState.pos).catch(() => {});
+        await win.setSize(previousState.size).catch(() => {});
+      }
+      manualFullscreenRef.current = false;
+      preFullscreenStateRef.current = null;
+      setIsFullscreen(false);
     }
   };
 
@@ -755,7 +863,7 @@ const DesktopPlayer: React.FC<any> = ({
         prePipStateRef.current = { size, pos };
       }
       await win.setAlwaysOnTop(nextPip);
-      await win.setDecorations(!nextPip);
+      await win.setDecorations(false);
       setIsPip(nextPip);
       if (nextPip) {
         await win.setSize(new LogicalSize(480, 270));
@@ -796,6 +904,11 @@ const DesktopPlayer: React.FC<any> = ({
     mpv.duration,
     state.episodeList.length,
   ]);
+  const nextEpisodeTitle =
+    state.episodeList[activeEpisodeIndex + 1]?.title ||
+    (activeEpisodeIndex < state.episodeList.length - 1
+      ? `Episode ${activeEpisodeIndex + 2}`
+      : undefined);
 
   if (streamLoading) {
     const bgUrl = state.poster?.background || state.poster?.poster;
@@ -898,6 +1011,7 @@ const DesktopPlayer: React.FC<any> = ({
         cacheDuration={mpv.cacheDuration}
         primaryTitle={state.primaryTitle}
         secondaryTitle={activeEpisode?.title || state.secondaryTitle}
+        nextEpisodeTitle={nextEpisodeTitle}
         showNextEpisode={showNextBtn}
         onBack={() => navigate(-1)}
         onTogglePause={() => {
@@ -926,6 +1040,7 @@ const DesktopPlayer: React.FC<any> = ({
         audioTracks={mpv.audioTracks}
         subtitleTracks={mpv.subtitleTracks}
         videoTracks={mpv.videoTracks}
+        chapters={mpv.chapters}
         videoHeight={mpv.videoHeight}
         playbackRate={playbackRate}
         streamData={streamData}

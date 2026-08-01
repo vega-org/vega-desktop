@@ -1,40 +1,74 @@
 .topbar {
-  height: 72px;
+  height: 80px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--spacing-md);
+  gap: 20px;
+  padding: 12px 162px 12px 24px;
   background-color: transparent;
   position: sticky;
   top: 0;
   z-index: 100;
-  margin-bottom: -72px; /* Pull content up underneath topbar */
-  pointer-events: none; /* Let clicks pass through empty spaces to the hero below */
+  margin-bottom: -80px;
+  pointer-events: none;
 }
 
-/* Re-enable pointer events for interactive elements */
-.search-container, .topbar-actions {
+.search-container,
+.topbar-actions {
   pointer-events: auto;
 }
 
 .search-container {
   display: flex;
   align-items: center;
-  background-color: rgba(0, 0, 0, 0.4); /* Make it translucent over hero bg */
-  backdrop-filter: blur(8px);
+  width: min(460px, 52vw);
+  min-width: 260px;
+  min-height: 52px;
+  padding: 5px 8px 5px 18px;
+  border: 1px solid color-mix(in srgb, var(--outline-variant) 78%, transparent);
   border-radius: var(--rounded-full);
-  padding: 8px 16px;
-  width: 400px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.2s ease;
+  background-color: color-mix(
+    in srgb,
+    var(--surface-container-high) 86%,
+    transparent
+  );
+  box-shadow: 0 8px 30px
+    color-mix(in srgb, var(--surface-container-lowest) 34%, transparent);
+  backdrop-filter: blur(18px) saturate(1.2);
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .search-container:focus-within {
   border-color: var(--primary);
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: color-mix(
+    in srgb,
+    var(--surface-container-highest) 92%,
+    transparent
+  );
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.search-form-inner {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  cursor: text;
+  outline: none;
+}
+
+.search-form-inner.tv-focus {
+  border-radius: var(--rounded-full);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 7px;
 }
 
 .search-icon {
+  flex: 0 0 auto;
   color: var(--on-surface-variant);
   margin-right: 12px;
 }
@@ -44,9 +78,59 @@
   border: none;
   color: var(--on-surface);
   flex: 1;
+  min-width: 0;
+  height: 40px;
   outline: none;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
 }
 
 .search-input::placeholder {
   color: var(--on-surface-variant);
+}
+
+.search-clear {
+  display: grid;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--on-surface-variant);
+  transition:
+    color 180ms ease,
+    background-color 180ms ease;
+}
+
+.search-clear:hover {
+  color: var(--on-surface);
+  background-color: var(--surface-container-highest);
+}
+
+.topbar-actions {
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    padding-right: 154px;
+    padding-left: 16px;
+  }
+
+  .search-container {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .topbar-actions {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-container,
+  .search-clear {
+    transition: none;
+  }
 }

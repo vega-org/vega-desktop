@@ -7,6 +7,8 @@ import { PreferencesSettings } from "../components/settings/PreferencesSettings"
 import { GitHubStarButton } from "../components/settings/GitHubStarButton";
 import { checkAppUpdates } from "../lib/hooks/useAppUpdater";
 import { FocusableButton } from "../components/layout/FocusableButton";
+import { Switch } from "../components/ui/switch";
+import { settingsStorage } from "../lib/storage";
 
 import "./SettingsPage.css";
 
@@ -14,6 +16,9 @@ export const SettingsPage: React.FC = () => {
   const { primary, themeBackground, setPrimary, setThemeBackground } =
     useThemeStore();
   const [appVersion, setAppVersion] = React.useState("Loading...");
+  const [infoPageDynamicTheme, setInfoPageDynamicTheme] = React.useState(() =>
+    settingsStorage.isInfoPageDynamicThemeEnabled(),
+  );
 
   React.useEffect(() => {
     import("@tauri-apps/api/app")
@@ -59,6 +64,12 @@ export const SettingsPage: React.FC = () => {
                 >
                   Gray
                 </FocusableButton>
+                <FocusableButton
+                  className={`theme-toggle-btn ${themeBackground === "white" ? "active" : ""}`}
+                  onClick={() => setThemeBackground("white")}
+                >
+                  White
+                </FocusableButton>
               </div>
             </div>
 
@@ -95,6 +106,25 @@ export const SettingsPage: React.FC = () => {
                   );
                 })}
               </div>
+            </div>
+
+            <div className="settings-divider" />
+
+            <div className="settings-row">
+              <div className="settings-info">
+                <h3 className="label-lg">Dynamic Info Page Theme</h3>
+                <p className="body-md text-muted">
+                  Derive the info page colors from the title artwork
+                </p>
+              </div>
+              <Switch
+                checked={infoPageDynamicTheme}
+                onCheckedChange={(enabled) => {
+                  setInfoPageDynamicTheme(enabled);
+                  settingsStorage.setInfoPageDynamicThemeEnabled(enabled);
+                }}
+                aria-label="Use artwork colors on info pages"
+              />
             </div>
           </div>
         </section>

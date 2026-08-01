@@ -26,18 +26,19 @@
   width: 100%;
   height: 100%;
   /* Fade into the background color at the bottom so there is no sharp edge */
-  background: linear-gradient(
-    to right,
-    rgba(0, 0, 0, 0.9) 0%,
-    rgba(0, 0, 0, 0.4) 40%,
-    rgba(0, 0, 0, 0) 100%
-  ),
-  linear-gradient(
-    to top,
-    var(--background) 0%,
-    rgba(0, 0, 0, 0.5) 30%,
-    rgba(0, 0, 0, 0) 100%
-  );
+  background:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--surface-container-lowest) 94%, transparent) 0%,
+      color-mix(in srgb, var(--surface-container-lowest) 48%, transparent) 42%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to top,
+      var(--background) 0%,
+      color-mix(in srgb, var(--surface-container-lowest) 55%, transparent) 30%,
+      transparent 100%
+    );
 }
 
 .hero-content {
@@ -61,13 +62,15 @@
 
 .hero-title {
   color: var(--on-surface);
-  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 4px 16px
+    color-mix(in srgb, var(--surface-container-lowest) 70%, transparent);
   margin-bottom: var(--spacing-xs);
 }
 
 .hero-description {
   color: var(--on-surface-variant);
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 2px 10px
+    color-mix(in srgb, var(--surface-container-lowest) 70%, transparent);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -88,7 +91,7 @@
   background-color: var(--primary);
   color: var(--on-primary);
   padding: 12px 28px;
-  border-radius: var(--rounded-lg);
+  border-radius: var(--rounded-full);
   border: none;
   cursor: pointer;
   font-weight: 600;
@@ -96,9 +99,15 @@
 }
 
 .btn-play:hover {
-  background-color: var(--primary-container);
-  color: var(--on-primary-container);
+  background-color: var(--primary);
+  color: var(--on-primary);
+  filter: brightness(1.08);
   transform: scale(1.05);
+}
+
+.btn-play.tv-focus {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
 }
 
 .btn-info {
@@ -127,19 +136,28 @@
 .hero-skeleton-bg {
   width: 100%;
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    var(--surface-container) 0%,
-    var(--surface-container-high) 50%,
-    var(--surface-container) 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 2s infinite linear;
+  border-radius: 0;
 }
 
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+.hero-skeleton-title {
+  width: min(420px, 70%);
+  height: 48px;
+}
+
+.hero-skeleton-copy {
+  width: min(360px, 62%);
+  height: 20px;
+}
+
+.hero-skeleton-copy-wide {
+  width: min(500px, 82%);
+}
+
+.hero-skeleton-button {
+  width: 132px;
+  height: 48px;
+  margin-top: 8px;
+  border-radius: var(--rounded-full);
 }
 
 @media (max-width: 768px) {
