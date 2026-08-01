@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { FocusContext, useFocusable } from "@noriginmedia/norigin-spatial-navigation-react";
-import { LuArrowDownUp, LuArrowLeft, LuCircleAlert, LuRefreshCw, LuSearch } from "react-icons/lu";
+import { LuArrowDownNarrowWide, LuArrowDownWideNarrow, LuArrowLeft, LuCircleAlert, LuRefreshCw, LuSearch } from "react-icons/lu";
 import { ContentDetailSkeleton } from "../components/content/ContentDetailSkeleton";
 import { ContentHero } from "../components/content/ContentHero";
 import { ContentOverview } from "../components/content/ContentOverview";
@@ -17,12 +17,14 @@ import { useContentDetails } from "../lib/hooks/useContentInfo";
 import { useEpisodes } from "../lib/hooks/useEpisodes";
 import type { Link, Stream } from "../lib/providers/types";
 import { providerManager } from "../lib/services/ProviderManager";
-import { cacheStorage, mainStorage } from "../lib/storage";
+import { cacheStorage } from "../lib/storage";
 import { settingsStorage } from "../lib/storage/SettingsStorage";
 import useContentStore from "../lib/zustand/contentStore";
 import { useDownloadStore } from "../lib/zustand/downloadStore";
 import useWatchListStore from "../lib/zustand/watchListStore";
 import "./MetaPage.css";
+
+const EPISODE_SORT_ORDER_KEY = "episodeSortOrder";
 
 interface DialogContext {
   id: string;
@@ -58,7 +60,7 @@ export const MetaPage: React.FC = () => {
   const [episodeSearch, setEpisodeSearch] = useState("");
   const [storyOpen, setStoryOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">(() =>
-    mainStorage.getString("episodeSortOrder") === "desc" ? "desc" : "asc",
+    localStorage.getItem(EPISODE_SORT_ORDER_KEY) === "desc" ? "desc" : "asc",
   );
 
   const excludedQualities = useMemo(() => settingsStorage.getExcludedQualities(), []);
@@ -240,7 +242,8 @@ export const MetaPage: React.FC = () => {
     );
   if (sortOrder === "desc") displayedRows.reverse();
   const playableRows = displayedRows.map(({ episode }) => episode);
-  const showEpisodeTools = rows.length > 8 || Boolean(episodeSearch);
+  const showEpisodeSearch = rows.length > 8 || Boolean(episodeSearch);
+  const showEpisodeSort = rows.length > 1;
 
   return (
     <FocusContext.Provider value={focusKey}>
@@ -282,28 +285,37 @@ export const MetaPage: React.FC = () => {
               />
             </div>
 
-            {showEpisodeTools && (
+            {(showEpisodeSearch || showEpisodeSort) && (
               <div className="episode-tools">
-                <label className="episode-search-field">
-                  <LuSearch size={21} />
-                  <input
-                    aria-label="Find episode"
-                    placeholder="Find episode"
-                    value={episodeSearch}
-                    onChange={(event) => setEpisodeSearch(event.target.value)}
-                  />
-                </label>
-                <FocusableButton
-                  className="episode-sort-button"
-                  title={sortOrder === "asc" ? "Sort episodes descending" : "Sort episodes ascending"}
-                  onClick={() => {
-                    const nextOrder = sortOrder === "asc" ? "desc" : "asc";
-                    setSortOrder(nextOrder);
-                    mainStorage.setString("episodeSortOrder", nextOrder);
-                  }}
-                >
-                  <LuArrowDownUp size={22} />
-                </FocusableButton>
+                {showEpisodeSearch && (
+                  <label className="episode-search-field">
+                    <LuSearch size={21} />
+                    <input
+                      aria-label="Find episode"
+                      placeholder="Find episode"
+                      value={episodeSearch}
+                      onChange={(event) => setEpisodeSearch(event.target.value)}
+                    />
+                  </label>
+                )}
+                {showEpisodeSort && (
+                  <FocusableButton
+                    className="episode-sort-button"
+                    aria-label={sortOrder === "asc" ? "Sort episodes descending" : "Sort episodes ascending"}
+                    title={sortOrder === "asc" ? "Sort episodes descending" : "Sort episodes ascending"}
+                    onClick={() => {
+                      const nextOrder = sortOrder === "asc" ? "desc" : "asc";
+                      setSortOrder(nextOrder);
+                      localStorage.setItem(EPISODE_SORT_ORDER_KEY, nextOrder);
+                    }}
+                  >
+                    {sortOrder === "asc" ? (
+                      <LuArrowDownNarrowWide size={22} />
+                    ) : (
+                      <LuArrowDownWideNarrow size={22} />
+                    )}
+                  </FocusableButton>
+                )}
               </div>
             )}
 

@@ -384,6 +384,7 @@
   display: grid;
   width: 48px;
   height: 48px;
+  margin-left: auto;
   flex: 0 0 48px;
   place-items: center;
   border-radius: 18px;

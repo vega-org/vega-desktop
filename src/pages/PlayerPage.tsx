@@ -9,6 +9,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useMpvPlayer } from "../lib/hooks/useMpvPlayer";
 import { useStream } from "../lib/hooks/useStream";
 import { usePlayerProgress } from "../lib/hooks/usePlayerSettings";
+import { useMediaSession } from "../lib/hooks/useMediaSession";
 import useContentStore from "../lib/zustand/contentStore";
 import useWatchHistoryStore from "../lib/zustand/watchHistrory";
 import { cacheStorage } from "../lib/storage";
@@ -588,6 +589,41 @@ const DesktopPlayer: React.FC<any> = ({
     routeParams,
     playbackRate,
     updatePlaybackInfo,
+  });
+
+  const mediaArtwork = useMemo(
+    () =>
+      [state.poster?.poster, state.poster?.background].filter(
+        (source): source is string => Boolean(source),
+      ),
+    [state.poster?.background, state.poster?.poster],
+  );
+  const handleMediaSeekRelative = useCallback(
+    (offset: number) => mpv.seek(offset, "relative"),
+    [mpv.seek],
+  );
+
+  useMediaSession({
+    enabled: mpv.isInitialized && Boolean(selectedStream?.link),
+    title:
+      state.type === "series"
+        ? activeEpisode?.title || state.primaryTitle
+        : state.primaryTitle,
+    artist: state.type === "series" ? state.primaryTitle : "Vega",
+    album: state.secondaryTitle,
+    artwork: mediaArtwork,
+    isPaused: mpv.isPaused,
+    currentTime: mpv.currentTime,
+    duration: mpv.duration,
+    playbackRate,
+    onTogglePause: mpv.togglePause,
+    onSeek: mpv.seek,
+    onSeekRelative: handleMediaSeekRelative,
+    onNext:
+      activeEpisodeIndex < state.episodeList.length - 1
+        ? handleNextEpisode
+        : undefined,
+    onPrevious: activeEpisodeIndex > 0 ? handlePrevEpisode : undefined,
   });
 
   useEffect(() => {
