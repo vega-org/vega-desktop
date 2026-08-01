@@ -28,6 +28,7 @@ export interface SyncedHistory {
   id: string;
   title: string;
   poster?: string;
+  background?: string;
   provider?: string;
   link: string;
   duration?: number;
@@ -37,6 +38,15 @@ export interface SyncedHistory {
   currentTime?: number;
   playbackRate?: number;
   episodeTitle?: string;
+  episode?: {
+    id?: string;
+    title: string;
+    link: string;
+    sourceLink?: string;
+    description?: string;
+    image?: string;
+  };
+  type?: string;
   cachedInfoData?: unknown;
   updatedAt: number;
 }
@@ -197,7 +207,7 @@ export const mergeSyncManifests = (
       const existing = history[id];
       if (!existing) {
         history[id] = item;
-      } else if (item.updatedAt > existing.updatedAt) {
+      } else if (item.updatedAt >= existing.updatedAt) {
         history[id] = {
           ...item,
           progress: item.progress ?? existing.progress,
@@ -207,7 +217,7 @@ export const mergeSyncManifests = (
       }
     }
     for (const [link, item] of Object.entries(manifest.watchlist || {})) {
-      if (!watchlist[link] || item.updatedAt > watchlist[link].updatedAt) {
+      if (!watchlist[link] || item.updatedAt >= watchlist[link].updatedAt) {
         watchlist[link] = item;
       }
     }
@@ -243,5 +253,11 @@ export const mergeSyncManifests = (
     }
   }
 
-  return { downloads, history, watchlist, tombstones };
+  const limitedHistory = Object.fromEntries(
+    Object.entries(history)
+      .sort(([, a], [, b]) => b.updatedAt - a.updatedAt)
+      .slice(0, 100),
+  );
+
+  return { downloads, history: limitedHistory, watchlist, tombstones };
 };

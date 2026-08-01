@@ -28,15 +28,22 @@ const useWatchHistoryStore = create<History>((set) => ({
 
   addItem: (item) => {
     try {
+      const existing = watchHistoryStorage
+        .getWatchHistory()
+        .find((historyItem) => historyItem.id === (item.id || item.link));
       // Format item for our storage service
       const storageItem: WatchHistoryItem = {
         id: item.id || item.link || item.title,
         title: item.title,
         poster: item.poster,
+        background: item.background,
         provider: item.provider,
         link: item.link,
-        timestamp: Date.now(),
+        timestamp: existing?.timestamp || item.timestamp || 0,
         episodeTitle: item.episodeTitle,
+        episode: item.episode,
+        type: item.type,
+        isSeries: item.isSeries ?? item.type === "series",
         cachedInfoData: item.cachedInfoData,
       };
 
@@ -68,6 +75,8 @@ const useWatchHistoryStore = create<History>((set) => ({
           ...existingItem,
           progress: playbackInfo.currentTime,
           duration: playbackInfo.duration || existingItem.duration,
+          playbackRate:
+            playbackInfo.playbackRate || existingItem.playbackRate || 1,
           timestamp: Date.now(),
         };
 

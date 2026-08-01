@@ -43,11 +43,18 @@ export const PlayerPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const state = location.state as PlayerLocationState | undefined;
+  const [syncReady, setSyncReady] = useState(false);
 
   useEffect(() => {
-    syncFromSharedFolder().catch((error) =>
-      console.warn("[VegaSync] Player sync failed:", error),
-    );
+    let mounted = true;
+    syncFromSharedFolder()
+      .catch((error) => console.warn("[VegaSync] Player sync failed:", error))
+      .finally(() => {
+        if (mounted) setSyncReady(true);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   if (!state) {
@@ -56,6 +63,16 @@ export const PlayerPage: React.FC = () => {
         <div className="player-error">
           <p>No playback data provided.</p>
           <button onClick={() => navigate(-1)}>Go Back</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!syncReady) {
+    return (
+      <div className="player-page">
+        <div className="player-loading">
+          <div className="loading-spinner" />
         </div>
       </div>
     );
@@ -177,14 +194,17 @@ const TvPlayer: React.FC<any> = ({
     if (state.primaryTitle && !state.doNotTrack) {
       addItem({
         id:
-          activeEpisode?.id || activeEpisode?.sourceLink || activeEpisode?.link,
+          activeEpisode?.sourceLink || activeEpisode?.id || activeEpisode?.link,
         title: state.primaryTitle,
         poster: state.poster?.poster || state.poster?.background || "",
+        background: state.poster?.background,
         link: state.infoUrl || "",
         provider: state.providerValue || "",
         lastPlayed: Date.now(),
         playbackRate: 1,
         episodeTitle: state.secondaryTitle,
+        episode: activeEpisode,
+        type: state.type,
       });
     }
   }, [state, activeEpisode?.link, addItem]);
@@ -584,9 +604,7 @@ const DesktopPlayer: React.FC<any> = ({
       void (async () => {
         await win.setFullscreen(false).catch(() => {});
         if (previousState) {
-          await win
-            .setAlwaysOnTop(previousState.alwaysOnTop)
-            .catch(() => {});
+          await win.setAlwaysOnTop(previousState.alwaysOnTop).catch(() => {});
           if (manualFullscreenRef.current) {
             if (previousState.maximized) {
               await win.maximize().catch(() => {});
@@ -652,11 +670,14 @@ const DesktopPlayer: React.FC<any> = ({
       id: activeEpisode?.sourceLink || activeEpisode?.id || activeEpisode?.link,
       title: state.primaryTitle,
       poster: state.poster?.poster || state.poster?.background || "",
+      background: state.poster?.background,
       link: state.infoUrl || "",
       provider: state.providerValue || provider?.value || "",
       lastPlayed: Date.now(),
       playbackRate: 1,
       episodeTitle: activeEpisode?.title || state.secondaryTitle,
+      episode: activeEpisode,
+      type: state.type,
     });
   }, [
     state,
@@ -788,10 +809,7 @@ const DesktopPlayer: React.FC<any> = ({
             await win.setPosition(previousState.pos);
             await win.setSize(previousState.size);
           }
-        } else if (
-          previousState?.maximized &&
-          !(await win.isMaximized())
-        ) {
+        } else if (previousState?.maximized && !(await win.isMaximized())) {
           await win.maximize();
         }
 

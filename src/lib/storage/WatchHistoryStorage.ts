@@ -15,6 +15,7 @@ export interface WatchHistoryItem {
   id: string;
   title: string;
   poster?: string;
+  background?: string;
   provider?: string;
   link: string;
   timestamp?: number;
@@ -25,6 +26,15 @@ export interface WatchHistoryItem {
   currentTime?: number;
   playbackRate?: number;
   episodeTitle?: string;
+  episode?: {
+    id?: string;
+    title: string;
+    link: string;
+    sourceLink?: string;
+    description?: string;
+    image?: string;
+  };
+  type?: string;
   cachedInfoData?: any; // Add cached info data
 }
 
@@ -65,18 +75,20 @@ export class WatchHistoryStorage {
       history[existingIndex] = {
         ...history[existingIndex],
         ...item,
-        timestamp: Date.now(), // Always update timestamp
+        timestamp: item.timestamp ?? Date.now(),
       };
     } else {
       // Add new item
       history.unshift({
         ...item,
-        timestamp: Date.now(),
+        timestamp: item.timestamp ?? Date.now(),
       });
     }
 
     // Limit history to 100 items
-    const limitedHistory = history.slice(0, 100);
+    const limitedHistory = history
+      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+      .slice(0, 100);
 
     mainStorage.setArray(WatchHistoryKeys.WATCH_HISTORY, limitedHistory);
   }

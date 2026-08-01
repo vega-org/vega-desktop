@@ -304,6 +304,10 @@ const applyTombstones = (tombstones: Record<string, SyncTombstone>) => {
 };
 
 const runSharedFolderSync = async (): Promise<void> => {
+  if (publishTimer) {
+    clearTimeout(publishTimer);
+    publishTimer = undefined;
+  }
   const baseDir = await getDesktopSyncRoot();
   const manifests = await readDesktopSyncManifests(baseDir);
   const localManifest = await buildManifest();
