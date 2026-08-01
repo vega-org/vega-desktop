@@ -13,8 +13,7 @@ import { settingsStorage } from "../lib/storage";
 import "./SettingsPage.css";
 
 export const SettingsPage: React.FC = () => {
-  const { primary, themeBackground, setPrimary, setThemeBackground } =
-    useThemeStore();
+  const { primary, setPrimary } = useThemeStore();
   const [appVersion, setAppVersion] = React.useState("Loading...");
   const [infoPageDynamicTheme, setInfoPageDynamicTheme] = React.useState(() =>
     settingsStorage.isInfoPageDynamicThemeEnabled(),
@@ -43,38 +42,6 @@ export const SettingsPage: React.FC = () => {
             <Monitor size={20} /> Appearance
           </h2>
           <div className="settings-card">
-            {/* Background Theme */}
-            <div className="settings-row">
-              <div className="settings-info">
-                <h3 className="label-lg">Background Theme</h3>
-                <p className="body-md text-muted">
-                  Choose the overall background color of the app
-                </p>
-              </div>
-              <div className="theme-toggle-group">
-                <FocusableButton
-                  className={`theme-toggle-btn ${themeBackground === "oled" ? "active" : ""}`}
-                  onClick={() => setThemeBackground("oled")}
-                >
-                  Black
-                </FocusableButton>
-                <FocusableButton
-                  className={`theme-toggle-btn ${themeBackground === "gray" ? "active" : ""}`}
-                  onClick={() => setThemeBackground("gray")}
-                >
-                  Gray
-                </FocusableButton>
-                <FocusableButton
-                  className={`theme-toggle-btn ${themeBackground === "white" ? "active" : ""}`}
-                  onClick={() => setThemeBackground("white")}
-                >
-                  White
-                </FocusableButton>
-              </div>
-            </div>
-
-            <div className="settings-divider" />
-
             {/* Accent Color */}
             <div className="settings-row">
               <div className="settings-info">

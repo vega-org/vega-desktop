@@ -6,6 +6,7 @@ import {
   LuX as Close,
 } from "react-icons/lu";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import "./WindowControls.css";
 
 const appWindow = getCurrentWindow();
@@ -13,27 +14,38 @@ const appWindow = getCurrentWindow();
 export const WindowControls: React.FC = () => {
   const [maximized, setMaximized] = React.useState(false);
   const [fullscreen, setFullscreen] = React.useState(false);
+  const maximizedRef = React.useRef(false);
 
   React.useEffect(() => {
     let unlisten: (() => void) | undefined;
 
-    const updateWindowState = async () => {
+    const updateWindowState = async (ensureVisible = false) => {
       try {
         const [isMaximized, isFullscreen] = await Promise.all([
           appWindow.isMaximized(),
           appWindow.isFullscreen(),
         ]);
+        const enteredMaximized = isMaximized && !maximizedRef.current;
+        maximizedRef.current = isMaximized;
         setMaximized(isMaximized);
         setFullscreen(isFullscreen);
+        if (!isFullscreen && (enteredMaximized || ensureVisible)) {
+          await invoke("ensure_window_in_work_area", {
+            maximized: isMaximized,
+          });
+        }
       } catch {
         // The browser preview does not expose a native Tauri window.
       }
     };
 
-    void updateWindowState();
-    appWindow.onResized(updateWindowState).then((stopListening) => {
-      unlisten = stopListening;
-    }).catch(() => {});
+    void updateWindowState(true);
+    appWindow
+      .onResized(() => void updateWindowState())
+      .then((stopListening) => {
+        unlisten = stopListening;
+      })
+      .catch(() => {});
 
     return () => unlisten?.();
   }, []);
@@ -43,7 +55,12 @@ export const WindowControls: React.FC = () => {
   const toggleMaximize = async () => {
     try {
       await appWindow.toggleMaximize();
-      setMaximized(await appWindow.isMaximized());
+      const isMaximized = await appWindow.isMaximized();
+      maximizedRef.current = isMaximized;
+      setMaximized(isMaximized);
+      await invoke("ensure_window_in_work_area", {
+        maximized: isMaximized,
+      });
     } catch (error) {
       console.error("Failed to toggle window maximize state", error);
     }

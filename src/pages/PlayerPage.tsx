@@ -605,13 +605,14 @@ const DesktopPlayer: React.FC<any> = ({
         await win.setFullscreen(false).catch(() => {});
         if (previousState) {
           await win.setAlwaysOnTop(previousState.alwaysOnTop).catch(() => {});
-          if (manualFullscreenRef.current) {
-            if (previousState.maximized) {
-              await win.maximize().catch(() => {});
-            } else {
-              await win.setPosition(previousState.pos).catch(() => {});
-              await win.setSize(previousState.size).catch(() => {});
-            }
+          if (previousState.maximized) {
+            await win.maximize().catch(() => {});
+            await invoke("ensure_window_in_work_area", {
+              maximized: true,
+            }).catch(() => {});
+          } else if (manualFullscreenRef.current) {
+            await win.setPosition(previousState.pos).catch(() => {});
+            await win.setSize(previousState.size).catch(() => {});
           }
         }
         manualFullscreenRef.current = false;
@@ -802,15 +803,12 @@ const DesktopPlayer: React.FC<any> = ({
         if (nativeFullscreen) await win.setFullscreen(false);
         await win.setAlwaysOnTop(previousState?.alwaysOnTop ?? false);
 
-        if (manualFullscreenRef.current && previousState) {
-          if (previousState.maximized) {
-            await win.maximize();
-          } else {
-            await win.setPosition(previousState.pos);
-            await win.setSize(previousState.size);
-          }
-        } else if (previousState?.maximized && !(await win.isMaximized())) {
-          await win.maximize();
+        if (previousState?.maximized) {
+          if (!(await win.isMaximized())) await win.maximize();
+          await invoke("ensure_window_in_work_area", { maximized: true });
+        } else if (manualFullscreenRef.current && previousState) {
+          await win.setPosition(previousState.pos);
+          await win.setSize(previousState.size);
         }
 
         manualFullscreenRef.current = false;
@@ -860,6 +858,9 @@ const DesktopPlayer: React.FC<any> = ({
         .catch(() => {});
       if (previousState?.maximized) {
         await win.maximize().catch(() => {});
+        await invoke("ensure_window_in_work_area", { maximized: true }).catch(
+          () => {},
+        );
       } else if (previousState) {
         await win.setPosition(previousState.pos).catch(() => {});
         await win.setSize(previousState.size).catch(() => {});

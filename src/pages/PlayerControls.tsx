@@ -286,19 +286,12 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
               <div className="timeline-thumb" />
             </div>
             {duration > 0 && chapters.slice(1).map((chapter, index) => (
-              <button
+              <span
                 key={`${chapter.time}-${index}`}
-                type="button"
-                className="timeline-chapter-marker"
+                className="timeline-chapter-gap"
                 style={{ left: `${Math.min(100, Math.max(0, (chapter.time / duration) * 100))}%` }}
                 title={`${chapter.title} · ${formatTime(chapter.time)}`}
-                aria-label={`Seek to ${chapter.title}`}
-                onMouseDown={(event) => event.stopPropagation()}
-                onDoubleClick={stop}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSeek(chapter.time);
-                }}
+                aria-hidden="true"
               />
             ))}
           </div>

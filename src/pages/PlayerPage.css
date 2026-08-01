@@ -370,6 +370,7 @@
   position: absolute;
   right: -6px;
   top: 50%;
+  z-index: 4;
   transform: translateY(-50%);
   width: 12px;
   height: 12px;
@@ -385,25 +386,16 @@
   transform: translateY(-50%) scale(1.25);
 }
 
-.timeline-chapter-marker {
+.timeline-chapter-gap {
   position: absolute;
-  top: 50%;
+  top: 0;
   z-index: 3;
   width: 3px;
-  height: 10px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
-  transform: translate(-50%, -50%);
-  cursor: pointer;
-  transition: height 0.12s ease, background-color 0.12s ease;
-}
-
-.timeline-chapter-marker:hover {
-  height: 14px;
-  background: var(--primary);
+  height: 100%;
+  border-radius: 1px;
+  background: #000;
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
 /* ---- Bottom Actions ---- */

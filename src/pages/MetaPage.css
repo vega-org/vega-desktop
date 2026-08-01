@@ -606,32 +606,6 @@
   font-size: 14px;
 }
 
-.episode-skeleton-list {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  align-items: flex-start;
-  padding: 10px;
-}
-
-.episode-skeleton-row {
-  width: 85%;
-  height: 48px;
-  border-radius: 12px;
-  background: linear-gradient(
-    90deg,
-    var(--surface-container-high) 0%,
-    var(--surface-container-highest) 50%,
-    var(--surface-container-high) 100%
-  );
-  background-size: 200% 100%;
-  animation: skeleton-shimmer 1.2s ease-in-out infinite;
-}
-
-@keyframes skeleton-shimmer {
-  to { background-position: -200% 0; }
-}
-
 .episodes-inline-state.error {
   color: var(--on-error-container);
   background: var(--error-container);

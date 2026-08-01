@@ -11,6 +11,7 @@ import { InfoStoryDialog } from "../components/content/InfoStoryDialog";
 import { SeasonSelector } from "../components/content/SeasonSelector";
 import { DownloadServerDialog } from "../components/DownloadServerDialog";
 import { FocusableButton } from "../components/layout/FocusableButton";
+import { Skeleton } from "../components/ui/skeleton";
 import { useArtworkPalette, useArtworkPaletteReady } from "../lib/hooks/useArtworkPalette";
 import { useContentDetails } from "../lib/hooks/useContentInfo";
 import { useEpisodes } from "../lib/hooks/useEpisodes";
@@ -307,8 +308,17 @@ export const MetaPage: React.FC = () => {
             )}
 
             {episodeLoading ? (
-              <div className="episode-skeleton-list" aria-label="Loading episodes">
-                {Array.from({ length: 6 }, (_, index) => <span className="episode-skeleton-row" key={index} />)}
+              <div className="content-skeleton-episode-grid" aria-label="Loading episodes">
+                {Array.from({ length: 6 }, (_, index) => (
+                  <div className="content-skeleton-episode-card" key={index}>
+                    <Skeleton className="content-skeleton-thumbnail" />
+                    <div className="content-skeleton-episode-copy">
+                      <Skeleton />
+                      <Skeleton />
+                    </div>
+                    <Skeleton className="content-skeleton-download" />
+                  </div>
+                ))}
               </div>
             ) : episodeError ? (
               <div className="episodes-inline-state error"><LuCircleAlert size={22} /><span>Episodes could not be loaded.</span></div>

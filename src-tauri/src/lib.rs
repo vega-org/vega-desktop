@@ -11,13 +11,11 @@ use tauri::Manager;
 use tauri_plugin_window_state::StateFlags;
 #[cfg(target_os = "windows")]
 use windows::Win32::{
-    Foundation::HWND,
-    Graphics::Gdi::{
-        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
-    },
+    Foundation::{HWND, RECT},
+    Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST},
     UI::WindowsAndMessaging::{
-        GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, HWND_TOPMOST,
-        SWP_FRAMECHANGED, SWP_NOACTIVATE, WS_MAXIMIZE,
+        GetWindowLongPtrW, GetWindowRect, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, HWND_TOPMOST,
+        SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, WS_MAXIMIZE,
     },
 };
 
@@ -141,6 +139,67 @@ fn set_player_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Resu
     Ok(())
 }
 
+#[tauri::command]
+fn ensure_window_in_work_area(window: tauri::WebviewWindow, maximized: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let hwnd_value = window.hwnd().map_err(|error| error.to_string())?.0 as isize;
+        window
+            .run_on_main_thread(move || unsafe {
+                let hwnd = HWND(hwnd_value as _);
+                let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+                let mut monitor_info = MONITORINFO {
+                    cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                    ..Default::default()
+                };
+                let mut window_rect = RECT::default();
+
+                if !GetMonitorInfoW(monitor, &mut monitor_info).as_bool()
+                    || GetWindowRect(hwnd, &mut window_rect).is_err()
+                {
+                    return;
+                }
+
+                let work = monitor_info.rcWork;
+                let work_width = work.right - work.left;
+                let work_height = work.bottom - work.top;
+                let (x, y, width, height) = if maximized {
+                    (work.left, work.top, work_width, work_height)
+                } else {
+                    let width = (window_rect.right - window_rect.left)
+                        .min(work_width)
+                        .max(1);
+                    let height = (window_rect.bottom - window_rect.top)
+                        .min(work_height)
+                        .max(1);
+                    let x = window_rect
+                        .left
+                        .clamp(work.left, work.right.saturating_sub(width));
+                    let y = window_rect
+                        .top
+                        .clamp(work.top, work.bottom.saturating_sub(height));
+                    (x, y, width, height)
+                };
+
+                let _ = SetWindowPos(
+                    hwnd,
+                    None,
+                    x,
+                    y,
+                    width,
+                    height,
+                    SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOZORDER,
+                );
+            })
+            .map_err(|error| error.to_string())?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    let _ = (window, maximized);
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -212,6 +271,7 @@ pub fn run() {
             open_external_player,
             toggle_devtools,
             set_player_fullscreen,
+            ensure_window_in_work_area,
             doh_client::doh_fetch,
             sync_manifest::read_sync_manifests,
             sync_manifest::write_sync_manifest,

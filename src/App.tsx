@@ -36,7 +36,7 @@ export default function App() {
   initDownloadListeners();
   useAppUpdater();
 
-  const { primary, themeBackground } = useThemeStore();
+  const { primary } = useThemeStore();
   const tvMode = settingsStorage.isTvModeEnabled();
 
   useEffect(() => {
@@ -106,8 +106,8 @@ export default function App() {
     // Start auto provider updates on boot
     updateProvidersService.startAutomaticUpdateCheck();
 
-    applyThemeTokens(primary, themeBackground);
-  }, [primary, themeBackground]);
+    applyThemeTokens(primary);
+  }, [primary]);
 
   return (
     <QueryClientProvider client={client}>

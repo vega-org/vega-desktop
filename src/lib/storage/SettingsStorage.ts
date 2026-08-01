@@ -7,7 +7,6 @@ export enum SettingsKeys {
   // UI preferences
   PRIMARY_COLOR = "primaryColor",
   IS_CUSTOM_THEME = "isCustomTheme",
-  THEME_BACKGROUND = "themeBackground",
   SHOW_TAB_BAR_LABELS = "showTabBarLabels",
   CUSTOM_COLOR = "customColor",
   TV_MODE_ENABLED = "tvModeEnabled",
@@ -58,14 +57,6 @@ export enum SettingsKeys {
  */
 export class SettingsStorage {
   // Theme settings
-  getThemeBackground(): string {
-    return mainStorage.getString(SettingsKeys.THEME_BACKGROUND) || "oled";
-  }
-
-  setThemeBackground(theme: string): void {
-    mainStorage.setString(SettingsKeys.THEME_BACKGROUND, theme);
-  }
-
   getPrimaryColor(): string {
     return mainStorage.getString(SettingsKeys.PRIMARY_COLOR) || "#FF6347";
   }
