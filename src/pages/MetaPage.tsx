@@ -172,10 +172,10 @@ export const MetaPage: React.FC = () => {
     episode: { title: string; link: string },
     index: number,
     type: string,
-    seasonTitle?: string,
+    groupTitle: string,
     exactId?: string,
   ) => {
-    const id = exactId || (seasonTitle ? `${title}_S${seasonTitle}_E${index + 1}` : `${title}_direct_${index}`);
+    const id = exactId || `${title}_S${groupTitle}_E${index + 1}`;
     try {
       setDownloadingId(id);
       const streams = await providerManager.getStream({
@@ -185,7 +185,7 @@ export const MetaPage: React.FC = () => {
         providerValue: activeProviderValue,
       });
       if (!streams?.length) return;
-      const finalTitle = seasonTitle ? `${title} S${seasonTitle} E${index + 1}` : episode.title || title;
+      const finalTitle = `${title} S${groupTitle} E${index + 1}`;
       setDialogStreams(streams);
       setDialogEpisodeTitle(finalTitle);
       setDialogContext({
@@ -194,7 +194,7 @@ export const MetaPage: React.FC = () => {
         poster: posterImage,
         showName: title,
         episodeName: episode.title,
-        seasonTitle,
+        seasonTitle: groupTitle,
         type: type as "movie" | "series",
         imdbId: info.imdbId || meta?.imdbId,
         sourceLink: episode.link,
@@ -340,9 +340,12 @@ export const MetaPage: React.FC = () => {
                   const progressKey = activeSeason?.episodesLink ? String(sourceIndex) : `direct_${sourceIndex}`;
                   const progressData = episodesProgress[progressKey];
                   const progressPercent = progressData?.duration ? Math.min((progressData.position / progressData.duration) * 100, 100) : 0;
-                  const id = activeSeason?.episodesLink
-                    ? `${title}_S${activeSeason.title}_E${sourceIndex + 1}`
-                    : `${title}_direct_${sourceIndex}`;
+                  const groupTitle = activeSeason?.title || "Default";
+                  const id = `${title}_S${groupTitle}_E${sourceIndex + 1}`;
+                  const storedDownload = downloads[id] || Object.values(downloads).find(
+                    (item) => item.infoUrl === link && item.sourceLink === episode.link,
+                  );
+                  const storedDownloadId = storedDownload?.id || id;
                   const displayTitle = !activeSeason?.episodesLink && rows.length === 1 ? "Play" : episode.title;
                   return (
                     <EpisodeRow
@@ -353,11 +356,11 @@ export const MetaPage: React.FC = () => {
                       image={episode.image}
                       progressPercent={progressPercent}
                       watched={progressPercent > 80}
-                      download={downloads[id]}
+                      download={storedDownload}
                       extracting={downloadingId === id}
                       onPlay={() => play(playableRows, index, rowType)}
-                      onDownload={() => void prepareDownload(episode, sourceIndex, rowType, activeSeason?.episodesLink ? activeSeason.title : undefined, id)}
-                      onDeleteDownload={() => void cancelDownload(id)}
+                      onDownload={() => void prepareDownload(episode, sourceIndex, rowType, groupTitle, id)}
+                      onDeleteDownload={() => void cancelDownload(storedDownloadId)}
                     />
                   );
                 })}

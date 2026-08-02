@@ -195,22 +195,17 @@ export const useDownloadStore = create<DownloadState>()(
           let filePath;
           const isTorrent = item.isTorrent || item.url.startsWith("magnet:");
 
+          const groupDir = safeSeason
+            ? await join(safeDir, safeSeason)
+            : safeDir;
+
           if (isTorrent) {
-            filePath = safeDir; // Torrents download into the directory directly
-          } else if (item.type === "series") {
-            const epFile = (item.episodeName || item.id).replace(
-              /[^a-z0-9]/gi,
-              "_",
-            );
-            const episodeDir = safeSeason
-              ? await join(safeDir, safeSeason)
-              : safeDir;
-            filePath = await join(episodeDir, `${epFile}.mp4`);
+            filePath = groupDir; // Each dropdown group gets its own torrent directory.
           } else if (item.episodeName) {
             const itemFile = item.episodeName.replace(/[^a-z0-9]/gi, "_");
-            filePath = await join(safeDir, `${itemFile}.mp4`);
+            filePath = await join(groupDir, `${itemFile}.mp4`);
           } else {
-            filePath = await join(safeDir, `${safeTitle}.mp4`);
+            filePath = await join(groupDir, `${safeTitle}.mp4`);
           }
 
           const newItem: DownloadItem = {

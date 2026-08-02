@@ -100,30 +100,23 @@ const getEpisodeKey = (item: SyncedDownload): string => {
     item.id.match(/_E(\d+)$/i)?.[1] ||
     item.episodeName?.match(/(?:episode|ep|e)[\s_.-]*(\d+)/i)?.[1];
   if (episodeNumber) {
-    return `e${Number(episodeNumber)}`;
+    return `i${Math.max(Number(episodeNumber) - 1, 0)}`;
   }
   const directIndex = item.id.match(/_direct_(\d+)$/i)?.[1];
-  return directIndex ? `d${Number(directIndex)}` : "e0";
+  return directIndex ? `i${Number(directIndex)}` : "i0";
 };
 
-const getDirectIndex = (item: SyncedDownload): string =>
-  String(Number(item.id.match(/_direct_(\d+)$/i)?.[1] || "0"));
-
 const getSeasonKey = (item: SyncedDownload): string => {
-  const seasonNumber = item.seasonTitle?.match(/\d+/)?.[0];
-  return seasonNumber
-    ? String(Number(seasonNumber))
-    : normalizeKeyPart(item.seasonTitle);
+  const normalized = normalizeKeyPart(item.seasonTitle);
+  const plainSeason = normalized.match(/^season-?(\d+)$/)?.[1];
+  return plainSeason ? String(Number(plainSeason)) : normalized;
 };
 
 export const getDownloadMediaKey = (item: SyncedDownload): string => {
   const identity = item.imdbId
     ? normalizeKeyPart(item.imdbId)
     : normalizeKeyPart(item.showName || item.title);
-  if (item.type === "series") {
-    return `series:${identity}:${getSeasonKey(item)}:${getEpisodeKey(item)}`;
-  }
-  return `movie:${identity}:${getDirectIndex(item)}`;
+  return `${item.type}:${identity}:${getSeasonKey(item)}:${getEpisodeKey(item)}`;
 };
 
 const isManifest = (value: unknown): value is VegaSyncManifest => {
