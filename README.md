@@ -92,8 +92,8 @@ ___
 
 <a href="https://www.star-history.com/?repos=vega-org%2Fvega-desktop&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=vega-org/vega-desktop&type=date&theme=dark&legend=top-left&sealed_token=SwfgCYQUvYOEmyBxBuqg6TRnKYUC--tE4ofeMPffwgFhWcUQeelSwQv9ZBbt-MX45r5kYl6ZewH2hJOXyrvg1UijYGv_f8nGVjAiHdQ5mUvbfplgWWnMpG4CnOFXx1ZaIn_BCvOdNR93_wU3JQ3IwCeLQOM4SrjrqhL9UOOxINUclpgvJCUGxNoyqqrG" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=vega-org/vega-desktop&type=date&legend=top-left&sealed_token=SwfgCYQUvYOEmyBxBuqg6TRnKYUC--tE4ofeMPffwgFhWcUQeelSwQv9ZBbt-MX45r5kYl6ZewH2hJOXyrvg1UijYGv_f8nGVjAiHdQ5mUvbfplgWWnMpG4CnOFXx1ZaIn_BCvOdNR93_wU3JQ3IwCeLQOM4SrjrqhL9UOOxINUclpgvJCUGxNoyqqrG" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=vega-org/vega-desktop&type=date&legend=top-left&sealed_token=SwfgCYQUvYOEmyBxBuqg6TRnKYUC--tE4ofeMPffwgFhWcUQeelSwQv9ZBbt-MX45r5kYl6ZewH2hJOXyrvg1UijYGv_f8nGVjAiHdQ5mUvbfplgWWnMpG4CnOFXx1ZaIn_BCvOdNR93_wU3JQ3IwCeLQOM4SrjrqhL9UOOxINUclpgvJCUGxNoyqqrG" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=vega-org/vega-desktop&type=date&theme=dark&legend=top-left&sealed_token=Mc7MDJCA35XmRx1ycfPVcXq4cnRqiQX_7PruvIWc6XGQhApqIDC79vStshevTXUwV5VoBB63uYI1HQQF2L7zvc4jBzX7NYHYo4k9fW2pPLbuMbk_hfLD_w" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=vega-org/vega-desktop&type=date&legend=top-left&sealed_token=Mc7MDJCA35XmRx1ycfPVcXq4cnRqiQX_7PruvIWc6XGQhApqIDC79vStshevTXUwV5VoBB63uYI1HQQF2L7zvc4jBzX7NYHYo4k9fW2pPLbuMbk_hfLD_w" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=vega-org/vega-desktop&type=date&legend=top-left&sealed_token=Mc7MDJCA35XmRx1ycfPVcXq4cnRqiQX_7PruvIWc6XGQhApqIDC79vStshevTXUwV5VoBB63uYI1HQQF2L7zvc4jBzX7NYHYo4k9fW2pPLbuMbk_hfLD_w" />
  </picture>
 </a>
