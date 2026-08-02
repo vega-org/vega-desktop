@@ -266,6 +266,7 @@ pub fn run() {
             download_manager::pause_download,
             download_manager::cancel_download,
             download_manager::save_subtitle,
+            download_manager::list_download_subtitles,
             cookie_manager::get_cookies_for_url,
             cookie_manager::clear_cookies_for_url,
             open_external_player,

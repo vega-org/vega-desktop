@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useMemo } from "react";
+import { invoke } from "@tauri-apps/api/core";
 
 import { providerManager } from "../services/ProviderManager";
 import { settingsStorage } from "../storage";
@@ -50,41 +51,23 @@ const createLocalStream = (
   subtitles,
 });
 
-const loadLocalStream = async (filePath: string): Promise<Stream> => {
+const loadLocalStream = async (
+  filePath: string,
+  baseDir?: string,
+): Promise<Stream> => {
   const subtitles: any[] = [];
-  try {
-    const { readDir } = await import("@tauri-apps/plugin-fs");
-    const slashIndex = Math.max(
-      filePath.lastIndexOf("\\"),
-      filePath.lastIndexOf("/"),
-    );
-    const directoryPath = filePath.substring(0, slashIndex);
-    const baseName = filePath.substring(
-      slashIndex + 1,
-      filePath.lastIndexOf("."),
-    );
-    const files = await readDir(directoryPath);
-    for (const file of files) {
-      if (
-        file.name?.startsWith(`${baseName}.`) &&
-        (file.name.endsWith(".vtt") || file.name.endsWith(".srt"))
-      ) {
-        const language = file.name.substring(
-          baseName.length + 1,
-          file.name.lastIndexOf("."),
-        );
-        const separator =
-          directoryPath.endsWith("\\") || directoryPath.endsWith("/")
-            ? ""
-            : "/";
-        subtitles.push({
-          url: `${directoryPath}${separator}${file.name}`,
-          language,
-        });
+  if (baseDir) {
+    try {
+      const files = await invoke<{ path: string; language: string }[]>(
+        "list_download_subtitles",
+        { baseDir, filePath },
+      );
+      for (const file of files) {
+        subtitles.push({ url: file.path, language: file.language });
       }
+    } catch (error) {
+      console.error("Failed to load local subtitles:", error);
     }
-  } catch (error) {
-    console.error("Failed to load local subtitles:", error);
   }
   return createLocalStream(filePath, subtitles);
 };
@@ -130,7 +113,7 @@ export const useStream = ({
 
       console.log("Fetching stream for:", activeEpisode);
       const localStream = localFilePath
-        ? await loadLocalStream(localFilePath)
+        ? await loadLocalStream(localFilePath, downloadedItem?.baseDir)
         : null;
       const remoteLink = activeEpisode?.localFile
         ? activeEpisode.sourceLink || downloadedItem?.sourceLink

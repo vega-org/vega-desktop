@@ -25,6 +25,13 @@ pub struct CompletePayload {
     pub final_path: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalSubtitle {
+    pub path: String,
+    pub language: String,
+}
+
 // Global state for download manager
 pub struct DownloadState {
     pub active_downloads: Arc<Mutex<HashMap<String, Sender<()>>>>,
@@ -84,6 +91,53 @@ pub async fn save_subtitle(base_dir: String, path: String, content: String) -> R
         let _ = std::fs::create_dir_all(parent);
     }
     std::fs::write(path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_download_subtitles(
+    base_dir: String,
+    file_path: String,
+) -> Result<Vec<LocalSubtitle>, String> {
+    let path = validate_download_path(&base_dir, &file_path)?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Invalid download path".to_string())?;
+    let base_name = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "Invalid download filename".to_string())?;
+    let prefix = format!("{base_name}.");
+    let mut subtitles = Vec::new();
+
+    for entry in std::fs::read_dir(parent).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let entry_path = entry.path();
+        let extension = entry_path
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default();
+        if !extension.eq_ignore_ascii_case("srt") && !extension.eq_ignore_ascii_case("vtt") {
+            continue;
+        }
+
+        let file_name = entry.file_name();
+        let Some(file_name) = file_name.to_str() else {
+            continue;
+        };
+        let Some(language) = file_name
+            .strip_prefix(&prefix)
+            .and_then(|value| value.strip_suffix(&format!(".{extension}")))
+        else {
+            continue;
+        };
+
+        subtitles.push(LocalSubtitle {
+            path: entry_path.to_string_lossy().into_owned(),
+            language: language.to_string(),
+        });
+    }
+
+    Ok(subtitles)
 }
 
 #[tauri::command]
