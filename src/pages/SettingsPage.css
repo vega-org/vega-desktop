@@ -54,12 +54,39 @@
 .tmdb-key-input { width: 100%; height: 44px; }
 .tmdb-key-actions { display: flex; justify-content: flex-end; gap: 7px; }
 
-.quality-options { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
-.quality-option { display: inline-flex; min-height: 38px; align-items: center; padding: 0 11px; border: 1px solid var(--outline-variant); border-radius: 13px; color: var(--on-surface-variant); background: var(--surface-container-high); font-size: 12px; font-weight: 670; }
+.quality-options { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; margin-top: 8px; }
+.quality-option { display: inline-flex; min-height: 38px; align-items: center; padding: 0 11px; border: 1px solid var(--outline-variant); border-radius: 13px; color: var(--on-surface-variant); background: var(--surface-container-high); cursor: pointer; font-size: 12px; font-weight: 670; transition: border-color 150ms ease, background 150ms ease, color 150ms ease; }
+.quality-option:hover,
+.quality-option.tv-focus { outline: none; border-color: var(--outline); color: var(--on-surface); background: var(--surface-container-highest); }
 .quality-option.active { border-color: var(--outline); color: var(--on-primary-container); background: var(--primary-container); }
 
 .slider-control { display: flex; min-width: min(370px, 42vw); align-items: center; justify-content: flex-end; gap: 14px; }
 .slider-value { min-width: 74px; padding: 7px 9px; border-radius: 11px; color: var(--on-primary-container); background: var(--primary-container); font-size: 12px; font-weight: 720; text-align: center; }
+
+.github-star-row { display: flex; min-height: 82px; align-items: center; padding: 17px 21px; border-radius: 0 0 25px 25px; }
+.github-star-row:hover { background: color-mix(in srgb, var(--primary) 3%, transparent); }
+.github-star-btn { position: relative; display: inline-flex; min-height: 46px; align-items: center; gap: 10px; padding: 0 16px; border: 1px solid var(--outline-variant); border-radius: 15px; color: var(--on-surface); background: var(--surface-container-high); cursor: pointer; font-size: 13px; font-weight: 700; user-select: none; transition: transform 150ms ease, border-color 150ms ease, background 150ms ease, color 150ms ease; }
+.github-star-btn:hover,
+.github-star-btn.tv-focus { outline: none; border-color: var(--outline); color: var(--on-primary-container); background: var(--primary-container); transform: translateY(-1px); }
+.github-star-btn.is-celebrating { border-color: var(--outline); color: var(--on-primary-container); background: var(--primary-container); transform: scale(.98); }
+.github-star-icon { position: relative; display: grid; flex: 0 0 auto; place-items: center; }
+.github-star-external { flex: 0 0 auto; opacity: .72; }
+.github-star-particles { position: absolute; top: 50%; left: 50%; width: 0; height: 0; pointer-events: none; }
+.github-star-particles .particle { --star-x: 0px; --star-y: -25px; position: absolute; top: -5px; left: -5px; color: var(--primary); opacity: 0; }
+.github-star-particles .particle-0 { --star-x: -28px; --star-y: -20px; }
+.github-star-particles .particle-1 { --star-x: 0px; --star-y: -31px; }
+.github-star-particles .particle-2 { --star-x: 28px; --star-y: -18px; }
+.github-star-particles .particle-3 { --star-x: 28px; --star-y: 20px; }
+.github-star-particles .particle-4 { --star-x: 0px; --star-y: 30px; }
+.github-star-particles .particle-5 { --star-x: -28px; --star-y: 19px; }
+.github-star-btn.is-celebrating .particle { animation: github-star-burst 620ms cubic-bezier(.2, .8, .2, 1) both; }
+.github-star-btn.is-celebrating .particle:nth-child(2n) { animation-delay: 35ms; }
+
+@keyframes github-star-burst {
+  0% { opacity: 0; transform: translate(0, 0) scale(.35) rotate(0deg); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--star-x), var(--star-y)) scale(1) rotate(110deg); }
+}
 
 .settings-footer { margin-top: 3px; padding: 20px; border: 1px solid var(--outline-variant); border-radius: 24px; color: var(--on-surface-variant); background: var(--surface-container-low); }
 .settings-footer p { margin: 0; }
@@ -77,4 +104,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .settings-page *, .accent-color-btn { scroll-behavior: auto !important; transition: none !important; }
+  .github-star-particles .particle { animation: none !important; }
 }

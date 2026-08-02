@@ -17,7 +17,7 @@ import { PlayerControls } from "./PlayerControls";
 import { PlayerInitError } from "./PlayerInitError";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
-import { LogicalSize } from "@tauri-apps/api/dpi";
+import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
 import {
   FocusContext,
   useFocusable,
@@ -526,6 +526,11 @@ const DesktopPlayer: React.FC<any> = ({
   }, [isFullscreen]);
 
   useEffect(() => {
+    document.body.classList.toggle("player-window-pip", isPip);
+    return () => document.body.classList.remove("player-window-pip");
+  }, [isPip]);
+
+  useEffect(() => {
     document.body.classList.toggle("player-controls-hidden", !showControls);
     return () => document.body.classList.remove("player-controls-hidden");
   }, [showControls]);
@@ -921,7 +926,27 @@ const DesktopPlayer: React.FC<any> = ({
       await win.setDecorations(false);
       setIsPip(nextPip);
       if (nextPip) {
+        const monitor = await currentMonitor();
         await win.setSize(new LogicalSize(480, 270));
+        if (monitor) {
+          const pipSize = await win.outerSize();
+          const margin = Math.round(16 * monitor.scaleFactor);
+          await win.setPosition(
+            new PhysicalPosition(
+              Math.max(
+                monitor.position.x,
+                monitor.position.x + monitor.size.width - pipSize.width - margin,
+              ),
+              Math.max(
+                monitor.position.y,
+                monitor.position.y + monitor.size.height - pipSize.height - margin,
+              ),
+            ),
+          );
+          if (isWindows) {
+            await invoke("ensure_window_in_work_area", { maximized: false });
+          }
+        }
       } else {
         if (prePipStateRef.current) {
           await win.setSize(prePipStateRef.current.size);
@@ -1075,10 +1100,6 @@ const DesktopPlayer: React.FC<any> = ({
         }}
         onSeek={(t) => {
           mpv.seek(t);
-          revealControls();
-        }}
-        onSeekRelative={(d) => {
-          mpv.seek(d, "relative");
           revealControls();
         }}
         onNextEpisode={handleNextEpisode}

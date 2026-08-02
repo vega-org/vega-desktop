@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 interface UseMediaSessionOptions {
   enabled: boolean;
@@ -22,6 +22,42 @@ const getMediaSession = () =>
     ? navigator.mediaSession
     : null;
 
+const createSilentAudioUrl = () => {
+  // MPV renders outside the WebView, so Chromium needs an inaudible media
+  // element before it will publish navigator.mediaSession to the OS.
+  const sampleRate = 8_000;
+  const durationSeconds = 30;
+  const dataSize = sampleRate * durationSeconds;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  const writeAscii = (offset: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(offset + index, value.charCodeAt(index));
+    }
+  };
+
+  writeAscii(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(8, "WAVE");
+  writeAscii(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate, true);
+  view.setUint16(32, 1, true);
+  view.setUint16(34, 8, true);
+  writeAscii(36, "data");
+  view.setUint32(40, dataSize, true);
+
+  const samples = new Uint8Array(buffer, 44);
+  for (let index = 0; index < samples.length; index += 1) {
+    samples[index] = index % 18 < 9 ? 127 : 129;
+  }
+  return URL.createObjectURL(new Blob([buffer], { type: "audio/wav" }));
+};
+
 export const useMediaSession = ({
   enabled,
   title,
@@ -38,6 +74,67 @@ export const useMediaSession = ({
   onNext,
   onPrevious,
 }: UseMediaSessionOptions) => {
+  const carrierRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (!getMediaSession() || typeof Audio === "undefined") return;
+
+    const sourceUrl = createSilentAudioUrl();
+    const carrier = new Audio(sourceUrl);
+    carrier.loop = true;
+    carrier.preload = "auto";
+    carrier.volume = 0.001;
+    carrier.load();
+    carrierRef.current = carrier;
+
+    return () => {
+      carrier.pause();
+      carrier.removeAttribute("src");
+      carrier.load();
+      URL.revokeObjectURL(sourceUrl);
+      carrierRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const carrier = carrierRef.current;
+    if (!carrier) return;
+
+    if (!enabled) {
+      carrier.pause();
+      carrier.currentTime = 0;
+      return;
+    }
+
+    if (isPaused) {
+      carrier.pause();
+      return;
+    }
+
+    let cancelled = false;
+    const resume = () => {
+      if (!cancelled) void carrier.play().catch(() => {});
+    };
+
+    void carrier.play().catch(() => {
+      if (cancelled) return;
+      window.addEventListener("pointerdown", resume, {
+        capture: true,
+        once: true,
+      });
+      window.addEventListener("keydown", resume, {
+        capture: true,
+        once: true,
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("pointerdown", resume, true);
+      window.removeEventListener("keydown", resume, true);
+    };
+  }, [enabled, isPaused]);
+
   useEffect(() => {
     const mediaSession = getMediaSession();
     if (!enabled || !mediaSession || typeof MediaMetadata === "undefined") {

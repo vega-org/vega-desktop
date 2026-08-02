@@ -10,7 +10,8 @@
   transition: opacity 180ms ease;
 }
 
-body.player-window-fullscreen .window-titlebar-overlay {
+body.player-window-fullscreen .window-titlebar-overlay,
+body.player-window-pip .window-titlebar-overlay {
   display: none;
 }
 

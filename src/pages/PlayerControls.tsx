@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState, useEffect } from 'react';
-import { LuArrowLeft as ArrowLeft, LuPlay as Play, LuPause as Pause, LuSkipBack as SkipBack, LuSkipForward as SkipForward, LuRewind as Rewind, LuFastForward as FastForward, LuMaximize as Maximize, LuMinimize as Minimize, LuSkipForward as NextIcon, LuCaptions as Subtitles, LuGauge as Gauge, LuPictureInPicture as PictureInPicture, LuRectangleHorizontal as RectangleHorizontal, LuCheck as Check, LuServer as ServerIcon, LuTv as Tv, LuAudioLines, LuList as ChaptersIcon } from 'react-icons/lu';
+import { LuArrowLeft as ArrowLeft, LuPlay as Play, LuPause as Pause, LuSkipBack as SkipBack, LuSkipForward as SkipForward, LuMaximize as Maximize, LuMinimize as Minimize, LuSkipForward as NextIcon, LuCaptions as Subtitles, LuGauge as Gauge, LuPictureInPicture as PictureInPicture, LuRectangleHorizontal as RectangleHorizontal, LuCheck as Check, LuServer as ServerIcon, LuTv as Tv, LuAudioLines, LuList as ChaptersIcon } from 'react-icons/lu';
 import { MdVideoSettings, Md4K, Md8K, MdHd, MdSd, MdHighQuality } from 'react-icons/md';
 import type { MpvChapter, MpvTrack } from '../lib/hooks/useMpvPlayer';
 import { SearchSubtitlesModal } from '../components/SearchSubtitlesModal';
@@ -18,7 +18,6 @@ interface PlayerControlsProps {
   onBack: () => void;
   onTogglePause: () => void;
   onSeek: (time: number) => void;
-  onSeekRelative: (delta: number) => void;
   onNextEpisode?: () => void;
   onPrevEpisode?: () => void;
   hasNextEpisode?: boolean;
@@ -97,7 +96,6 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   onBack,
   onTogglePause,
   onSeek,
-  onSeekRelative,
   onNextEpisode,
   onPrevEpisode,
   hasNextEpisode,
@@ -243,17 +241,13 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
         </div>
       </div>
 
-      {/* Center play/pause + skip */}
+      {/* Center playback controls */}
       <div className="player-center-controls" onClick={stop} onDoubleClick={stop}>
         {hasPrevEpisode && onPrevEpisode ? (
           <button className="center-btn" onClick={onPrevEpisode}>
             <SkipBack size={24} />
           </button>
         ) : <div style={{ width: 44 }} />}
-
-        <button className="center-btn" onClick={() => onSeekRelative(-10)}>
-          <Rewind size={24} />
-        </button>
 
         {!isBuffering ? (
           <button className="center-btn play-pause" onClick={onTogglePause}>
@@ -264,10 +258,6 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
             <div className="loading-spinner" style={{ width: 28, height: 28, borderWidth: 2 }} />
           </div>
         )}
-
-        <button className="center-btn" onClick={() => onSeekRelative(10)}>
-          <FastForward size={24} />
-        </button>
 
         {hasNextEpisode && onNextEpisode ? (
           <button className="center-btn" onClick={onNextEpisode}>

@@ -374,20 +374,18 @@ export const PreferencesSettings: React.FC = () => {
           </p>
 
           <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "8px",
-              marginTop: "8px",
-            }}
+            className="quality-options"
+            role="group"
+            aria-label="Excluded playback qualities"
           >
             {QUALITIES.map((q) => {
               const isExcluded = excludedQualities.includes(q);
               return (
                 <FocusableButton
                   key={q}
-                  className={`quality-toggle-btn ${isExcluded ? "excluded" : ""}`}
+                  className={`quality-option ${isExcluded ? "active" : ""}`}
                   onClick={() => handleToggleQuality(q)}
+                  aria-pressed={isExcluded}
                   title={isExcluded ? "Click to Include" : "Click to Exclude"}
                 >
                   {q}
