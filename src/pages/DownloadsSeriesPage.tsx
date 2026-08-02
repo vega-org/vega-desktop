@@ -127,7 +127,7 @@ export const DownloadsSeriesPage = () => {
               <p className="downloads-section-kicker">Ready offline</p>
               <h2 id="downloaded-episodes-title">Episodes</h2>
             </div>
-            {seasons.length > 1 && (
+            {seasons.length > 0 && (
               <CustomSelect
                 options={seasons.map((season) => ({ value: season, label: season }))}
                 value={activeSeason}
