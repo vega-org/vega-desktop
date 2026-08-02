@@ -687,6 +687,7 @@ const DesktopPlayer: React.FC<any> = ({
         selectedStream.headers,
         subs,
         selectedStream.type,
+        selectedStream.localBaseDir,
       );
     })();
   }, [

@@ -45,7 +45,7 @@ impl DownloadState {
     }
 }
 
-fn validate_download_path(base_dir: &str, file_path: &str) -> Result<PathBuf, String> {
+pub(crate) fn validate_download_path(base_dir: &str, file_path: &str) -> Result<PathBuf, String> {
     let base = PathBuf::from(base_dir);
     let target = PathBuf::from(file_path);
     if !base.is_absolute() || !target.is_absolute() {

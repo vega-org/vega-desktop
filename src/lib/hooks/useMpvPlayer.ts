@@ -411,6 +411,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
       headers?: Record<string, string>,
       subtitles?: any[],
       type?: string,
+      localBaseDir?: string,
     ) => {
       if (!isInitialized) return;
 
@@ -590,6 +591,13 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
             console.error("Failed torrent stream", e);
             throw e;
           }
+        } else if (localBaseDir) {
+          const { invoke } = await import("@tauri-apps/api/core");
+          finalUrl = await invoke<string>("get_local_stream_url", {
+            baseDir: localBaseDir,
+            filePath: url,
+          });
+          isProxied = true;
         } else if (url.startsWith("http")) {
           try {
             const { invoke } = await import("@tauri-apps/api/core");

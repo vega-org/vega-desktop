@@ -1,18 +1,30 @@
 use axum::{
-    extract::{Query, State},
-    http::StatusCode,
+    body::{Body, Bytes},
+    extract::{Path as AxumPath, Query, State},
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
     Router,
 };
+use futures_util::stream;
 use reqwest::Client;
 use serde::Deserialize;
+use std::{
+    collections::HashMap,
+    io::SeekFrom,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::net::TcpListener;
+
+pub type LocalFileRegistry = Arc<Mutex<HashMap<String, PathBuf>>>;
 
 #[derive(Clone)]
 pub struct ProxyState {
     pub client: Client,
     pub port: u16,
+    pub local_files: LocalFileRegistry,
 }
 
 #[derive(Deserialize)]
@@ -33,7 +45,7 @@ pub struct SegmentQuery {
     ua: Option<String>,
 }
 
-pub async fn start_server() -> Result<u16, String> {
+pub async fn start_server(local_files: LocalFileRegistry) -> Result<u16, String> {
     let client = Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))
         .redirect(reqwest::redirect::Policy::limited(10))
@@ -47,11 +59,16 @@ pub async fn start_server() -> Result<u16, String> {
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     println!("[stream_proxy] Starting on port {}", port);
 
-    let state = ProxyState { client, port };
+    let state = ProxyState {
+        client,
+        port,
+        local_files,
+    };
 
     let app = Router::new()
         .route("/playlist.m3u8", get(handle_proxy))
         .route("/segment.ts", get(handle_segment))
+        .route("/local/{token}/{file_name}", get(handle_local_file))
         .with_state(state);
 
     tokio::spawn(async move {
@@ -61,6 +78,112 @@ pub async fn start_server() -> Result<u16, String> {
     });
 
     Ok(port)
+}
+
+fn parse_byte_range(value: &str, file_size: u64) -> Result<(u64, u64), StatusCode> {
+    let value = value
+        .strip_prefix("bytes=")
+        .ok_or(StatusCode::RANGE_NOT_SATISFIABLE)?;
+    if value.contains(',') || file_size == 0 {
+        return Err(StatusCode::RANGE_NOT_SATISFIABLE);
+    }
+    let (start, end) = value
+        .split_once('-')
+        .ok_or(StatusCode::RANGE_NOT_SATISFIABLE)?;
+
+    if start.is_empty() {
+        let suffix = end
+            .parse::<u64>()
+            .map_err(|_| StatusCode::RANGE_NOT_SATISFIABLE)?;
+        if suffix == 0 {
+            return Err(StatusCode::RANGE_NOT_SATISFIABLE);
+        }
+        return Ok((file_size.saturating_sub(suffix), file_size - 1));
+    }
+
+    let start = start
+        .parse::<u64>()
+        .map_err(|_| StatusCode::RANGE_NOT_SATISFIABLE)?;
+    let end = if end.is_empty() {
+        file_size - 1
+    } else {
+        end.parse::<u64>()
+            .map_err(|_| StatusCode::RANGE_NOT_SATISFIABLE)?
+            .min(file_size - 1)
+    };
+    if start >= file_size || end < start {
+        return Err(StatusCode::RANGE_NOT_SATISFIABLE);
+    }
+    Ok((start, end))
+}
+
+async fn handle_local_file(
+    State(state): State<ProxyState>,
+    AxumPath((token, _file_name)): AxumPath<(String, String)>,
+    headers: HeaderMap,
+) -> Result<Response, StatusCode> {
+    let path = state
+        .local_files
+        .lock()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .get(&token)
+        .cloned()
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let mut file = tokio::fs::File::open(path)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+    let file_size = file
+        .metadata()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .len();
+
+    let requested_range = headers
+        .get(header::RANGE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| parse_byte_range(value, file_size))
+        .transpose()?;
+    let (start, end, status) = match requested_range {
+        Some((start, end)) => (start, end, StatusCode::PARTIAL_CONTENT),
+        None if file_size > 0 => (0, file_size - 1, StatusCode::OK),
+        None => (0, 0, StatusCode::OK),
+    };
+    let content_length = if file_size == 0 { 0 } else { end - start + 1 };
+
+    file.seek(SeekFrom::Start(start))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let body_stream =
+        stream::try_unfold((file, content_length), |(mut file, remaining)| async move {
+            if remaining == 0 {
+                return Ok::<_, std::io::Error>(None);
+            }
+            let mut buffer = vec![0; remaining.min(64 * 1024) as usize];
+            let read = file.read(&mut buffer).await?;
+            if read == 0 {
+                return Ok(None);
+            }
+            buffer.truncate(read);
+            Ok(Some((
+                Bytes::from(buffer),
+                (file, remaining.saturating_sub(read as u64)),
+            )))
+        });
+
+    let mut response = Response::builder()
+        .status(status)
+        .header(header::ACCEPT_RANGES, "bytes")
+        .header(header::CONTENT_LENGTH, content_length)
+        .header(header::CONTENT_TYPE, "application/octet-stream");
+    if status == StatusCode::PARTIAL_CONTENT {
+        response = response.header(
+            header::CONTENT_RANGE,
+            format!("bytes {start}-{end}/{file_size}"),
+        );
+    }
+    response
+        .body(Body::from_stream(body_stream))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 fn encode_url(s: &str) -> String {
@@ -313,4 +436,52 @@ async fn handle_segment(
     }
 
     Ok(([(axum::http::header::CONTENT_TYPE, content_type)], data).into_response())
+}
+
+#[cfg(test)]
+mod local_file_tests {
+    use super::{parse_byte_range, start_server, LocalFileRegistry};
+    use reqwest::header::RANGE;
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    };
+
+    #[test]
+    fn parses_local_file_ranges() {
+        assert_eq!(parse_byte_range("bytes=10-19", 100).unwrap(), (10, 19));
+        assert_eq!(parse_byte_range("bytes=90-", 100).unwrap(), (90, 99));
+        assert_eq!(parse_byte_range("bytes=-10", 100).unwrap(), (90, 99));
+        assert!(parse_byte_range("bytes=100-", 100).is_err());
+    }
+
+    #[tokio::test]
+    async fn streams_registered_local_file_ranges() {
+        let path = std::env::temp_dir().join(format!(
+            "vega-local-stream-{}-{}.mkv",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&path, b"0123456789abcdef").unwrap();
+        let registry: LocalFileRegistry = Arc::new(Mutex::new(HashMap::new()));
+        registry
+            .lock()
+            .unwrap()
+            .insert("test".to_string(), path.clone());
+        let port = start_server(registry).await.unwrap();
+
+        let response = reqwest::Client::new()
+            .get(format!("http://127.0.0.1:{port}/local/test/video.mkv"))
+            .header(RANGE, "bytes=4-7")
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), reqwest::StatusCode::PARTIAL_CONTENT);
+        assert_eq!(response.bytes().await.unwrap(), b"4567".as_slice());
+        std::fs::remove_file(path).unwrap();
+    }
 }

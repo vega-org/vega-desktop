@@ -67,6 +67,24 @@ const getDownloadBaseDir = async () => {
 
 const ACTIVE_DOWNLOAD_STATUSES = new Set(["downloading"]);
 
+const shortPathHash = (value: string) => {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+};
+
+const safePathSegment = (value: string, maxLength: number) => {
+  const normalized = value
+    .replace(/[^a-z0-9]+/gi, "_")
+    .replace(/^_+|_+$/g, "") || "media";
+  if (normalized.length <= maxLength) return normalized;
+  const suffix = shortPathHash(value);
+  return `${normalized.slice(0, maxLength - suffix.length - 1)}_${suffix}`;
+};
+
 export const useDownloadStore = create<DownloadState>()(
   persist(
     (set, get) => {
@@ -185,12 +203,12 @@ export const useDownloadStore = create<DownloadState>()(
           const baseDir = await getDownloadBaseDir();
 
           const cleanName = item.showName || item.title;
-          const safeTitle = cleanName.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+          const safeTitle = safePathSegment(cleanName, 64).toLowerCase();
 
           // Always create a folder for the show/movie
           const safeDir = await join(baseDir, safeTitle);
           const safeSeason = item.seasonTitle
-            ? item.seasonTitle.replace(/[^a-z0-9]/gi, "_").toLowerCase()
+            ? safePathSegment(item.seasonTitle, 48).toLowerCase()
             : undefined;
           let filePath;
           const isTorrent = item.isTorrent || item.url.startsWith("magnet:");
@@ -202,7 +220,7 @@ export const useDownloadStore = create<DownloadState>()(
           if (isTorrent) {
             filePath = groupDir; // Each dropdown group gets its own torrent directory.
           } else if (item.episodeName) {
-            const itemFile = item.episodeName.replace(/[^a-z0-9]/gi, "_");
+            const itemFile = safePathSegment(item.episodeName, 72);
             filePath = await join(groupDir, `${itemFile}.mp4`);
           } else {
             filePath = await join(groupDir, `${safeTitle}.mp4`);

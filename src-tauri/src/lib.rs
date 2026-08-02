@@ -5,7 +5,13 @@ mod doh_client;
 mod torrent;
 mod sync_manifest;
 
-use std::sync::Mutex;
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
+};
 use tauri::Manager;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_window_state::StateFlags;
@@ -21,7 +27,10 @@ use windows::Win32::{
 
 struct ProxyState {
     port: Mutex<Option<u16>>,
+    local_files: stream_server::LocalFileRegistry,
 }
+
+static NEXT_LOCAL_FILE_TOKEN: AtomicU64 = AtomicU64::new(1);
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -31,6 +40,40 @@ fn greet(name: &str) -> String {
 #[tauri::command]
 fn get_stream_proxy_port(state: tauri::State<'_, ProxyState>) -> Option<u16> {
     *state.port.lock().unwrap()
+}
+
+#[tauri::command]
+fn get_local_stream_url(
+    state: tauri::State<'_, ProxyState>,
+    base_dir: String,
+    file_path: String,
+) -> Result<String, String> {
+    let path = download_manager::validate_download_path(&base_dir, &file_path)?;
+    if !path.is_file() {
+        return Err("Downloaded media file does not exist".into());
+    }
+    let path = std::fs::canonicalize(path).map_err(|error| error.to_string())?;
+    let port = state
+        .port
+        .lock()
+        .map_err(|_| "Stream proxy is unavailable".to_string())?
+        .ok_or_else(|| "Stream proxy has not started".to_string())?;
+    let token = NEXT_LOCAL_FILE_TOKEN.fetch_add(1, Ordering::Relaxed).to_string();
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("media")
+        .to_string();
+    let mut files = state
+        .local_files
+        .lock()
+        .map_err(|_| "Stream proxy is unavailable".to_string())?;
+    files.clear();
+    files.insert(token.clone(), path);
+    Ok(format!(
+        "http://127.0.0.1:{port}/local/{token}/{}",
+        urlencoding::encode(&file_name)
+    ))
 }
 
 #[tauri::command]
@@ -202,6 +245,7 @@ fn ensure_window_in_work_area(window: tauri::WebviewWindow, maximized: bool) -> 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let local_files = Arc::new(Mutex::new(HashMap::new()));
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -221,7 +265,10 @@ pub fn run() {
         .plugin(tauri_plugin_libmpv::init());
 
     builder
-        .manage(ProxyState { port: Mutex::new(None) })
+        .manage(ProxyState {
+            port: Mutex::new(None),
+            local_files: local_files.clone(),
+        })
         .manage(download_manager::DownloadState::new())
         .setup(|app| {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -232,7 +279,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 println!("[stream_proxy] Starting proxy server...");
-                match stream_server::start_server().await {
+                match stream_server::start_server(local_files).await {
                     Ok(port) => {
                         println!("[stream_proxy] Server started on port {}", port);
                         let state: tauri::State<ProxyState> = app_handle.state();
@@ -261,6 +308,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             get_stream_proxy_port,
+            get_local_stream_url,
             get_torrent_api_port,
             download_manager::start_download,
             download_manager::pause_download,

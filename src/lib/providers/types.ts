@@ -35,6 +35,7 @@ export interface Stream {
   server: string;
   link: string;
   type: string;
+  localBaseDir?: string;
   quality?: "360" | "480" | "720" | "1080" | "2160";
   subtitles?: TextTracks;
   headers?: any;

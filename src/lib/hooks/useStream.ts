@@ -44,11 +44,13 @@ const getCompletedDownload = (activeEpisode: any, routeParams: any) => {
 const createLocalStream = (
   filePath: string,
   subtitles: any[] = [],
+  baseDir?: string,
 ): Stream => ({
   server: "Local File",
   link: filePath,
   type: "mp4",
   subtitles,
+  localBaseDir: baseDir,
 });
 
 const loadLocalStream = async (
@@ -69,7 +71,7 @@ const loadLocalStream = async (
       console.error("Failed to load local subtitles:", error);
     }
   }
-  return createLocalStream(filePath, subtitles);
+  return createLocalStream(filePath, subtitles, baseDir);
 };
 
 export const useStream = ({
@@ -89,7 +91,7 @@ export const useStream = ({
     ? activeEpisode.link
     : downloadedItem?.filePath;
   const localPlaceholder = localFilePath
-    ? [createLocalStream(localFilePath)]
+    ? [createLocalStream(localFilePath, [], downloadedItem?.baseDir)]
     : undefined;
 
   const {
