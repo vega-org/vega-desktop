@@ -10,6 +10,8 @@ jobs:
   release:
     permissions:
       contents: write
+    env:
+      VITE_TMDB_API_KEY: ${{ secrets.VITE_TMDB_API_KEY || secrets.TMDB_API_KEY }}
     strategy:
       fail-fast: false
       matrix:
@@ -116,6 +118,8 @@ jobs:
   release-android:
     permissions:
       contents: write
+    env:
+      VITE_TMDB_API_KEY: ${{ secrets.VITE_TMDB_API_KEY || secrets.TMDB_API_KEY }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
