@@ -2,6 +2,8 @@ package com.vega.desktop
 
 import android.net.Uri
 import android.os.Bundle
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
@@ -13,18 +15,45 @@ class NativePlayerActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private lateinit var playerView: PlayerView
 
+    private fun isExternalRequest(): Boolean =
+        intent.data?.getQueryParameter("external") == "1"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_native_player)
-
-        playerView = findViewById(R.id.player_view)
 
         val videoUrl = intent.data?.getQueryParameter("url") ?: intent.getStringExtra("videoUrl")
 
-        if (videoUrl != null) {
-            initializePlayer(videoUrl)
-        } else {
+        if (videoUrl == null) {
             finish()
+            return
+        }
+
+        if (isExternalRequest()) {
+            openExternalPlayer(videoUrl)
+            finish()
+            return
+        }
+
+        setContentView(R.layout.activity_native_player)
+        playerView = findViewById(R.id.player_view)
+        initializePlayer(videoUrl)
+    }
+
+    private fun openExternalPlayer(url: String) {
+        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(Uri.parse(url), "video/*")
+            addCategory(Intent.CATEGORY_DEFAULT)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        try {
+            startActivity(Intent.createChooser(viewIntent, "Open stream with"))
+        } catch (_: ActivityNotFoundException) {
+            android.widget.Toast.makeText(
+                this,
+                "No external video player is installed",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
         }
     }
 
@@ -77,6 +106,7 @@ class NativePlayerActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        if (isExternalRequest()) return
         if (androidx.media3.common.util.Util.SDK_INT > 23) {
             val videoUrl = intent.data?.getQueryParameter("url") ?: intent.getStringExtra("videoUrl")
             if (player == null && videoUrl != null) {
@@ -87,6 +117,7 @@ class NativePlayerActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (isExternalRequest()) return
         if (androidx.media3.common.util.Util.SDK_INT <= 23 || player == null) {
             val videoUrl = intent.data?.getQueryParameter("url") ?: intent.getStringExtra("videoUrl")
             if (player == null && videoUrl != null) {

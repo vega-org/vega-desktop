@@ -145,6 +145,8 @@ const PlayerInner: React.FC<PlayerInnerProps> = ({ state }) => {
   const isAndroid = navigator.userAgent.toLowerCase().includes("android");
   const isLinux =
     navigator.userAgent.toLowerCase().includes("linux") && !isAndroid;
+  const useExternalPlayer =
+    isAndroid && settingsStorage.isExternalPlayerEnabled();
   const useVlc = !isAndroid && settingsStorage.isVlcEnabled();
 
   if (isAndroid || isLinux || useVlc) {
@@ -159,6 +161,7 @@ const PlayerInner: React.FC<PlayerInnerProps> = ({ state }) => {
         setSelectedStream={setSelectedStream}
         isAndroid={isAndroid}
         isLinux={isLinux}
+        useExternalPlayer={useExternalPlayer}
         useVlc={useVlc}
       />
     );
@@ -191,6 +194,7 @@ const TvPlayer: React.FC<any> = ({
   setSelectedStream,
   isAndroid,
   isLinux,
+  useExternalPlayer,
   useVlc,
 }) => {
   const navigate = useNavigate();
@@ -288,7 +292,8 @@ const TvPlayer: React.FC<any> = ({
         if (isAndroid) {
           const { openUrl } = await import("@tauri-apps/plugin-opener");
           const headers = stream.headers ? JSON.stringify(stream.headers) : "";
-          const intentUrl = `vega://play?url=${encodeURIComponent(playUrl)}&headers=${encodeURIComponent(headers)}`;
+          const external = useExternalPlayer ? "&external=1" : "";
+          const intentUrl = `vega://play?url=${encodeURIComponent(playUrl)}&headers=${encodeURIComponent(headers)}${external}`;
           await openUrl(intentUrl);
         } else if (isLinux || useVlc) {
           const { invoke } = await import("@tauri-apps/api/core");
@@ -305,7 +310,7 @@ const TvPlayer: React.FC<any> = ({
         setTimeout(() => setIsLaunching(false), 2000);
       }
     },
-    [isAndroid, isLinux, useVlc],
+    [isAndroid, isLinux, useExternalPlayer, useVlc],
   );
 
   if (streamLoading) {
@@ -402,7 +407,13 @@ const TvPlayer: React.FC<any> = ({
               <ArrowLeft size={24} />
             </FocusableButton>
             <div className="tv-server-title-copy">
-              <span className="tv-server-eyebrow">Open in VLC</span>
+              <span className="tv-server-eyebrow">
+                {isAndroid
+                  ? useExternalPlayer
+                    ? "Open in external player"
+                    : "Play in Vega"
+                  : "Open in VLC"}
+              </span>
               <h1>{state.primaryTitle}</h1>
               {activeEpisode?.title && <p>{activeEpisode.title}</p>}
             </div>
@@ -411,7 +422,13 @@ const TvPlayer: React.FC<any> = ({
           {isLaunching ? (
             <div className="tv-server-launching">
               <div className="loading-spinner" />
-              <span>Opening VLC…</span>
+              <span>
+                {isAndroid && useExternalPlayer
+                  ? "Opening app chooser…"
+                  : isAndroid
+                    ? "Opening Vega player…"
+                    : "Opening VLC…"}
+              </span>
             </div>
           ) : (
             <section className="tv-server-panel">

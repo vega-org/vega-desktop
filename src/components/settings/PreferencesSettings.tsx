@@ -26,6 +26,7 @@ export const PreferencesSettings: React.FC = () => {
   const [downloadConcurrency, setDownloadConcurrency] = useState<number>(2);
   const [tmdbApiKey, setTmdbApiKey] = useState<string>("");
   const [tmdbKeySaved, setTmdbKeySaved] = useState(false);
+  const [externalPlayerEnabled, setExternalPlayerEnabled] = useState(false);
   const [vlcEnabled, setVlcEnabled] = useState(false);
   const [vlcPath, setVlcPath] = useState("");
 
@@ -43,6 +44,7 @@ export const PreferencesSettings: React.FC = () => {
     setDohCustomUrl(settingsStorage.getDohCustomUrl());
     setDownloadConcurrency(settingsStorage.getDownloadConcurrency());
     setTmdbApiKey(settingsStorage.getTmdbApiKey());
+    setExternalPlayerEnabled(settingsStorage.isExternalPlayerEnabled());
     setVlcEnabled(settingsStorage.isVlcEnabled());
     setVlcPath(settingsStorage.getVlcPath());
   }, []);
@@ -165,6 +167,11 @@ export const PreferencesSettings: React.FC = () => {
     settingsStorage.setVlcEnabled(enabled);
   };
 
+  const handleToggleExternalPlayer = (enabled: boolean) => {
+    setExternalPlayerEnabled(enabled);
+    settingsStorage.setExternalPlayerEnabled(enabled);
+  };
+
   const saveTmdbApiKey = () => {
     settingsStorage.setTmdbApiKey(tmdbApiKey);
     setTmdbApiKey(settingsStorage.getTmdbApiKey());
@@ -244,6 +251,26 @@ export const PreferencesSettings: React.FC = () => {
       </div>
 
       <div className="settings-divider" />
+
+      {isAndroid && (
+        <>
+          <div className="settings-row">
+            <div className="settings-info">
+              <h3 className="label-lg">External Player</h3>
+              <p className="body-md text-muted">
+                Show Android&apos;s app chooser for network streams instead of
+                playing them inside Vega.
+              </p>
+            </div>
+            <Switch
+              checked={externalPlayerEnabled}
+              onCheckedChange={handleToggleExternalPlayer}
+              aria-label="Use an external player"
+            />
+          </div>
+          <div className="settings-divider" />
+        </>
+      )}
 
       {!isAndroid && (
         <>

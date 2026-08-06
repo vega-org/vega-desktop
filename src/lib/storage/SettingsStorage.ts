@@ -50,6 +50,7 @@ export enum SettingsKeys {
   DEVTOOLS_SHORTCUTS_ENABLED = "devtoolsShortcutsEnabled",
   TMDB_API_KEY = "tmdbApiKey",
   TMDB_API_KEY_REVISION = "tmdbApiKeyRevision",
+  EXTERNAL_PLAYER_ENABLED = "externalPlayerEnabled",
   VLC_ENABLED = "vlcEnabled",
   VLC_PATH = "vlcPath",
 }
@@ -146,6 +147,14 @@ export class SettingsStorage {
 
   isVlcEnabled(): boolean {
     return mainStorage.getBool(SettingsKeys.VLC_ENABLED, false);
+  }
+
+  isExternalPlayerEnabled(): boolean {
+    return mainStorage.getBool(SettingsKeys.EXTERNAL_PLAYER_ENABLED, false);
+  }
+
+  setExternalPlayerEnabled(enabled: boolean): void {
+    mainStorage.setBool(SettingsKeys.EXTERNAL_PLAYER_ENABLED, enabled);
   }
 
   setVlcEnabled(enabled: boolean): void {
