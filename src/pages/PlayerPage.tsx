@@ -539,6 +539,17 @@ const DesktopPlayer: React.FC<any> = ({
     }
   }, [selectedStream, toast]);
 
+  const copyStreamLink = useCallback(async () => {
+    if (!selectedStream?.link) return;
+    try {
+      await navigator.clipboard.writeText(selectedStream.link);
+      toast("Stream link copied");
+    } catch (error) {
+      console.error("Failed to copy stream link:", error);
+      toast("Could not copy stream link");
+    }
+  }, [selectedStream?.link, toast]);
+
   const handleNextEpisode = useCallback(() => {
     if (activeEpisodeIndex < state.episodeList.length - 1) {
       prevStreamLinkRef.current = null;
@@ -1237,6 +1248,8 @@ const DesktopPlayer: React.FC<any> = ({
         }}
         showShortcuts={showShortcuts}
         onToggleShortcuts={() => setShowShortcuts((current) => !current)}
+        onOpenVlc={openInVlc}
+        onCopyLink={selectedStream?.link ? copyStreamLink : undefined}
       />
       {toasts.map((t) => (
         <div key={t.id} className="player-toast">

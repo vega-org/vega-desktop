@@ -491,7 +491,8 @@
 .inline-menu-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: start;
+  gap: 8px;
   padding: 8px 12px;
   border-radius: 6px;
   color: rgba(255, 255, 255, 0.7);

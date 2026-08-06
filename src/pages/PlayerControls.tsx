@@ -17,6 +17,9 @@ import {
   LuList as ChaptersIcon,
   LuKeyboard as Keyboard,
   LuX as X,
+  LuEllipsisVertical as MoreVertical,
+  LuExternalLink as ExternalLink,
+  LuCopy as Copy,
 } from "react-icons/lu";
 import {
   MdVideoSettings,
@@ -72,6 +75,8 @@ interface PlayerControlsProps {
   onToggleCrop: () => void;
   isCropped: boolean;
   onPlayNative?: () => void;
+  onOpenVlc?: () => void;
+  onCopyLink?: () => void;
   showShortcuts?: boolean;
   onToggleShortcuts?: () => void;
   isTV?: boolean;
@@ -156,12 +161,21 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   onToggleCrop,
   isCropped,
   onPlayNative,
+  onOpenVlc,
+  onCopyLink,
   showShortcuts = false,
   onToggleShortcuts,
 }) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<
-    "audio" | "subtitle" | "speed" | "quality" | "server" | "chapters" | null
+    | "audio"
+    | "subtitle"
+    | "speed"
+    | "quality"
+    | "server"
+    | "chapters"
+    | "more"
+    | null
   >(null);
   const [showOnlineSearch, setShowOnlineSearch] = useState(false);
   const showSeekButtons = !settingsStorage.hideSeekButtons();
@@ -175,7 +189,14 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
 
   const toggleMenu = (
     e: React.MouseEvent,
-    menu: "audio" | "subtitle" | "speed" | "quality" | "server" | "chapters",
+    menu:
+      | "audio"
+      | "subtitle"
+      | "speed"
+      | "quality"
+      | "server"
+      | "chapters"
+      | "more",
   ) => {
     e.stopPropagation();
     setOpenMenu(openMenu === menu ? null : menu);
@@ -605,16 +626,6 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
             onClick={stop}
             onDoubleClick={stop}
           >
-            {onToggleShortcuts && (
-              <button
-                className={`action-btn text-btn ${showShortcuts ? "active" : ""}`}
-                onClick={onToggleShortcuts}
-                title="Keyboard shortcuts (?)"
-                aria-label="Show keyboard shortcuts"
-              >
-                <Keyboard size={20} />
-              </button>
-            )}
             {onPlayNative && (
               <button className="action-btn text-btn" onClick={onPlayNative}>
                 <Tv size={20} />
@@ -775,6 +786,57 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
             >
               {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
             </button>
+
+            <div className="inline-menu-container">
+              <button
+                className={`action-btn text-btn ${openMenu === "more" ? "active" : ""}`}
+                onClick={(event) => toggleMenu(event, "more")}
+                title="More actions"
+                aria-label="More player actions"
+              >
+                <MoreVertical size={21} />
+              </button>
+              {openMenu === "more" && (
+                <div className="inline-menu right wide" onClick={stop}>
+                  {onToggleShortcuts && (
+                    <button
+                      className="inline-menu-item"
+                      onClick={() => {
+                        setOpenMenu(null);
+                        onToggleShortcuts();
+                      }}
+                    >
+                      <Keyboard size={18} />
+                      <span>Keyboard shortcuts</span>
+                    </button>
+                  )}
+                  {onOpenVlc && (
+                    <button
+                      className="inline-menu-item"
+                      onClick={() => {
+                        setOpenMenu(null);
+                        onOpenVlc();
+                      }}
+                    >
+                      <ExternalLink size={18} />
+                      <span>Open in VLC</span>
+                    </button>
+                  )}
+                  {onCopyLink && (
+                    <button
+                      className="inline-menu-item"
+                      onClick={() => {
+                        setOpenMenu(null);
+                        onCopyLink();
+                      }}
+                    >
+                      <Copy size={18} />
+                      <span>Copy stream link</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
