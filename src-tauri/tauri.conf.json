@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Vega",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "identifier": "com.vega.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -36,7 +36,7 @@
       }
     },
     "android": {
-      "versionCode": 11
+      "versionCode": 12
     },
     "icon": [
       "icons/32x32.png",
