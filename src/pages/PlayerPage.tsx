@@ -46,6 +46,23 @@ interface PlayerLocationState {
   doNotTrack?: boolean;
 }
 
+const formatTrackLabel = (track: {
+  id: number;
+  title?: string;
+  lang?: string;
+}) => {
+  const title = track.title?.trim();
+  const language = track.lang?.trim();
+  if (
+    title &&
+    language &&
+    title.toLocaleLowerCase() !== language.toLocaleLowerCase()
+  ) {
+    return `${title} · ${language.toUpperCase()}`;
+  }
+  return title || language?.toUpperCase() || `Track ${track.id}`;
+};
+
 export const PlayerPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -310,6 +327,13 @@ const TvPlayer: React.FC<any> = ({
             backdropFilter: "blur(20px)",
           }}
         />
+        <FocusableButton
+          className="player-loading-back"
+          onClick={() => navigate(-1)}
+          aria-label="Go back"
+        >
+          <ArrowLeft size={23} />
+        </FocusableButton>
         <div className="player-loading" style={{ background: "transparent" }}>
           <div className="loading-spinner" />
           <span className="loading-text">Fetching Stream...</span>
@@ -460,6 +484,7 @@ const DesktopPlayer: React.FC<any> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPip, setIsPip] = useState(false);
   const [isCropped, setIsCropped] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
   const toastIdRef = useRef(0);
   const controlsTimerRef = useRef<number | null>(null);
@@ -701,7 +726,9 @@ const DesktopPlayer: React.FC<any> = ({
     provider?.value,
   ]);
 
-  const hideControls = useCallback(() => setShowControls(false), []);
+  const hideControls = useCallback(() => {
+    if (!showShortcuts) setShowControls(false);
+  }, [showShortcuts]);
   const scheduleHide = useCallback(() => {
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
     controlsTimerRef.current = window.setTimeout(hideControls, 3500);
@@ -746,28 +773,38 @@ const DesktopPlayer: React.FC<any> = ({
     const onMouseMoveEvent = () => revealControls();
     const onTouch = () => revealControls();
     const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.isContentEditable ||
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT"
+      ) {
+        return;
+      }
       revealControls();
-      switch (e.key) {
+      const key = e.key.toLowerCase();
+      switch (key) {
         case " ":
         case "k":
-        case "Enter":
+        case "enter":
           e.preventDefault();
           mpv.togglePause();
           break;
-        case "ArrowLeft":
+        case "arrowleft":
           e.preventDefault();
           mpv.seek(-10, "relative");
           break;
-        case "ArrowRight":
+        case "arrowright":
           e.preventDefault();
           mpv.seek(10, "relative");
           break;
-        case "ArrowUp":
+        case "arrowup":
           e.preventDefault();
           mpv.setVolumeLevel(Math.min(150, mpv.volume + 5));
           toast(`Volume: ${Math.min(150, Math.round(mpv.volume + 5))}%`);
           break;
-        case "ArrowDown":
+        case "arrowdown":
           e.preventDefault();
           mpv.setVolumeLevel(Math.max(0, mpv.volume - 5));
           toast(`Volume: ${Math.max(0, Math.round(mpv.volume - 5))}%`);
@@ -775,8 +812,9 @@ const DesktopPlayer: React.FC<any> = ({
         case "f":
           toggleFullscreen();
           break;
-        case "Escape":
-          if (isFullscreen) toggleFullscreen();
+        case "escape":
+          if (showShortcuts) setShowShortcuts(false);
+          else if (isFullscreen) toggleFullscreen();
           else navigate(-1);
           break;
         case "m":
@@ -785,6 +823,66 @@ const DesktopPlayer: React.FC<any> = ({
           break;
         case "n":
           handleNextEpisode();
+          break;
+        case "a": {
+          if (!mpv.audioTracks.length) break;
+          e.preventDefault();
+          const selectedIndex = mpv.audioTracks.findIndex(
+            (track) => track.selected,
+          );
+          const nextTrack =
+            mpv.audioTracks[(selectedIndex + 1) % mpv.audioTracks.length];
+          mpv.selectTrack("aid", nextTrack.id);
+          toast(`Audio: ${formatTrackLabel(nextTrack)}`);
+          break;
+        }
+        case "t": {
+          e.preventDefault();
+          const selectedIndex = mpv.subtitleTracks.findIndex(
+            (track) => track.selected,
+          );
+          if (
+            !mpv.subtitleTracks.length ||
+            selectedIndex === mpv.subtitleTracks.length - 1
+          ) {
+            mpv.selectTrack("sid", "no");
+            toast("Subtitles: Off");
+          } else {
+            const nextTrack = mpv.subtitleTracks[selectedIndex + 1];
+            mpv.selectTrack("sid", nextTrack.id);
+            toast(`Subtitles: ${formatTrackLabel(nextTrack)}`);
+          }
+          break;
+        }
+        case "<":
+        case ">": {
+          e.preventDefault();
+          const step = key === "<" ? -0.25 : 0.25;
+          const nextRate = Math.min(
+            4,
+            Math.max(0.25, Math.round((playbackRate + step) * 100) / 100),
+          );
+          setPlaybackRate(nextRate);
+          mpv.setPlaybackSpeed(nextRate);
+          toast(`Speed: ${nextRate.toFixed(2)}x`);
+          break;
+        }
+        case "s": {
+          e.preventDefault();
+          const nextChapter = mpv.chapters.find(
+            (chapter) => chapter.time > mpv.currentTime + 1,
+          );
+          if (nextChapter) {
+            mpv.seek(nextChapter.time);
+            toast(`Chapter: ${nextChapter.title}`);
+          } else {
+            toast("No next chapter");
+          }
+          break;
+        }
+        case "?":
+          e.preventDefault();
+          setShowShortcuts((current) => !current);
           break;
       }
     };
@@ -801,7 +899,15 @@ const DesktopPlayer: React.FC<any> = ({
         .then(({ resume }) => resume())
         .catch(() => {});
     };
-  }, [mpv, isFullscreen, handleNextEpisode, revealControls, toast]);
+  }, [
+    mpv,
+    isFullscreen,
+    handleNextEpisode,
+    revealControls,
+    toast,
+    playbackRate,
+    showShortcuts,
+  ]);
 
   const toggleFullscreen = async () => {
     const win = getCurrentWindow();
@@ -994,6 +1100,13 @@ const DesktopPlayer: React.FC<any> = ({
             />
           </>
         )}
+        <FocusableButton
+          className="player-loading-back"
+          onClick={() => navigate(-1)}
+          aria-label="Go back"
+        >
+          <ArrowLeft size={23} />
+        </FocusableButton>
         <div
           className="player-loading"
           style={{ background: bgUrl ? "transparent" : "#000" }}
@@ -1102,9 +1215,17 @@ const DesktopPlayer: React.FC<any> = ({
         onSelectStream={handleStreamSelect}
         onSelectAudioTrack={(id) => {
           mpv.selectTrack("aid", id);
+          const track = mpv.audioTracks.find((item) => item.id === id);
+          toast(`Audio: ${track ? formatTrackLabel(track) : String(id)}`);
         }}
         onSelectSubtitleTrack={(id) => {
           mpv.selectTrack("sid", id);
+          if (id === "no") {
+            toast("Subtitles: Off");
+          } else {
+            const track = mpv.subtitleTracks.find((item) => item.id === id);
+            toast(`Subtitles: ${track ? formatTrackLabel(track) : String(id)}`);
+          }
         }}
         onSelectVideoTrack={(id) => {
           mpv.selectTrack("vid", id);
@@ -1114,7 +1235,8 @@ const DesktopPlayer: React.FC<any> = ({
           setPlaybackRate(rate);
           mpv.setPlaybackSpeed(rate);
         }}
-        onOpenVlc={openInVlc}
+        showShortcuts={showShortcuts}
+        onToggleShortcuts={() => setShowShortcuts((current) => !current)}
       />
       {toasts.map((t) => (
         <div key={t.id} className="player-toast">

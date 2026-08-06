@@ -16,6 +16,7 @@ export const PreferencesSettings: React.FC = () => {
   const [autoInstallUpdates, setAutoInstallUpdates] = useState<boolean>(true);
   const [autoCheckUpdates, setAutoCheckUpdates] = useState<boolean>(true);
   const [tvModeEnabled, setTvModeEnabled] = useState<boolean>(false);
+  const [showSeekButtons, setShowSeekButtons] = useState<boolean>(true);
   const [hwAccelEnabled, setHwAccelEnabled] = useState<boolean>(false);
   const [devtoolsShortcutsEnabled, setDevtoolsShortcutsEnabled] =
     useState<boolean>(false);
@@ -34,6 +35,7 @@ export const PreferencesSettings: React.FC = () => {
     setAutoInstallUpdates(settingsStorage.isAutoDownloadEnabled());
     setAutoCheckUpdates(settingsStorage.isAutoCheckUpdateEnabled());
     setTvModeEnabled(settingsStorage.isTvModeEnabled());
+    setShowSeekButtons(!settingsStorage.hideSeekButtons());
     setHwAccelEnabled(settingsStorage.isHardwareAccelerationEnabled());
     setDevtoolsShortcutsEnabled(settingsStorage.areDevtoolsShortcutsEnabled());
     setDohEnabled(settingsStorage.isDohEnabled());
@@ -90,6 +92,11 @@ export const PreferencesSettings: React.FC = () => {
     const nextState = !tvModeEnabled;
     setTvModeEnabled(nextState);
     settingsStorage.setTvModeEnabled(nextState);
+  };
+
+  const handleToggleSeekButtons = (enabled: boolean) => {
+    setShowSeekButtons(enabled);
+    settingsStorage.setHideSeekButtons(!enabled);
   };
 
   const handleToggleHwAccel = () => {
@@ -332,6 +339,22 @@ export const PreferencesSettings: React.FC = () => {
           checked={tvModeEnabled}
           onCheckedChange={() => handleToggleTvMode()}
           aria-label="Enable TV mode"
+        />
+      </div>
+
+      <div className="settings-divider" />
+
+      <div className="settings-row">
+        <div className="settings-info">
+          <h3 className="label-lg">Player Seek Buttons</h3>
+          <p className="body-md text-muted">
+            Show 10-second rewind and forward buttons in the player
+          </p>
+        </div>
+        <Switch
+          checked={showSeekButtons}
+          onCheckedChange={handleToggleSeekButtons}
+          aria-label="Show player seek buttons"
         />
       </div>
 
