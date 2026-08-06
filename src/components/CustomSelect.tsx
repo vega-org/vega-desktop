@@ -1,13 +1,16 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from "react";
 import {
   LuCheck as Check,
   LuChevronDown as ChevronDown,
   LuChevronUp as ChevronUp,
-} from 'react-icons/lu';
-import { FocusableButton } from './layout/FocusableButton';
-import { useFocusable, FocusContext } from '@noriginmedia/norigin-spatial-navigation-react';
-import { settingsStorage } from '../lib/storage';
-import './CustomSelect.css';
+} from "react-icons/lu";
+import { FocusableButton } from "./layout/FocusableButton";
+import {
+  useFocusable,
+  FocusContext,
+} from "@noriginmedia/norigin-spatial-navigation-react";
+import { settingsStorage } from "../lib/storage";
+import "./CustomSelect.css";
 
 interface Option {
   value: string;
@@ -26,33 +29,54 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   options,
   value,
   onChange,
-  className = '',
-  placeholder = 'Select...'
+  className = "",
+  placeholder = "Select...",
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const instanceId = useId().replace(/:/g, "");
 
-  const selectedOption = options.find(opt => opt.value === value);
+  const selectedOption = options.find((opt) => opt.value === value);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
 
   const tvMode = settingsStorage.isTvModeEnabled();
-  const { ref: focusRef, focusKey } = useFocusable({
+  const selectedIndex = Math.max(
+    options.findIndex((option) => option.value === value),
+    0,
+  );
+  const optionFocusKey = (index: number) =>
+    `CUSTOM_SELECT_${instanceId}_${index}`;
+  const {
+    ref: focusRef,
+    focusKey,
+    focusSelf,
+  } = useFocusable({
     focusable: tvMode && isOpen,
     isFocusBoundary: true,
     trackChildren: true,
+    preferredChildFocusKey: optionFocusKey(selectedIndex),
   });
+
+  useEffect(() => {
+    if (!isOpen || !tvMode) return;
+    const timer = window.setTimeout(() => focusSelf(), 0);
+    return () => window.clearTimeout(timer);
+  }, [focusSelf, isOpen, tvMode]);
 
   return (
     <div className={`custom-select-container ${className}`} ref={containerRef}>
@@ -73,10 +97,15 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
       {isOpen && (
         <FocusContext.Provider value={focusKey}>
-          <ul className="custom-select-list" role="listbox" ref={focusRef as any}>
-            {options.map((option) => (
-              <SelectOptionItem 
+          <ul
+            className="custom-select-list"
+            role="listbox"
+            ref={focusRef as any}
+          >
+            {options.map((option, index) => (
+              <SelectOptionItem
                 key={option.value}
+                focusKey={optionFocusKey(index)}
                 option={option}
                 isSelected={option.value === value}
                 onClick={() => {
@@ -92,26 +121,34 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   );
 };
 
-const SelectOptionItem: React.FC<{option: Option, isSelected: boolean, onClick: () => void}> = ({option, isSelected, onClick}) => {
+const SelectOptionItem: React.FC<{
+  option: Option;
+  isSelected: boolean;
+  onClick: () => void;
+  focusKey: string;
+}> = ({ option, isSelected, onClick, focusKey }) => {
   const tvMode = settingsStorage.isTvModeEnabled();
   const { ref, focused } = useFocusable({
     focusable: tvMode,
+    focusKey,
     onEnterPress: onClick,
     onFocus: (layout) => {
-      layout.node.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
+      layout.node.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    },
   });
 
   return (
     <li
       ref={ref as any}
-      className={`custom-select-option ${isSelected ? 'selected' : ''} ${focused ? 'tv-focus' : ''}`}
+      className={`custom-select-option ${isSelected ? "selected" : ""} ${focused ? "tv-focus" : ""}`}
       role="option"
       aria-selected={isSelected}
       onClick={onClick}
     >
       <span>{option.label}</span>
-      {isSelected && <Check className="custom-select-check" aria-hidden="true" />}
+      {isSelected && (
+        <Check className="custom-select-check" aria-hidden="true" />
+      )}
     </li>
   );
 };

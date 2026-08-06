@@ -102,7 +102,13 @@ a {
   text-decoration: none;
 }
 
-:where(button:not(:disabled), [role="button"]:not([aria-disabled="true"]), a[href], summary, select) {
+:where(
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href],
+  summary,
+  select
+) {
   cursor: pointer;
 }
 
@@ -182,4 +188,11 @@ a {
   transition: all 0.2s ease-in-out;
   z-index: 100;
   border-radius: 8px; /* Safe default, can be overridden by specific components if needed */
+}
+
+.vega-switch.tv-focus {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 4px;
+  transform: none;
+  box-shadow: none;
 }

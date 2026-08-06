@@ -50,6 +50,8 @@ export enum SettingsKeys {
   DEVTOOLS_SHORTCUTS_ENABLED = "devtoolsShortcutsEnabled",
   TMDB_API_KEY = "tmdbApiKey",
   TMDB_API_KEY_REVISION = "tmdbApiKeyRevision",
+  VLC_ENABLED = "vlcEnabled",
+  VLC_PATH = "vlcPath",
 }
 
 /**
@@ -125,6 +127,37 @@ export class SettingsStorage {
       SettingsKeys.TMDB_API_KEY_REVISION,
       this.getTmdbApiKeyRevision() + 1,
     );
+  }
+
+  getDefaultVlcPath(): string {
+    const userAgent = navigator.userAgent.toLowerCase();
+    if (userAgent.includes("windows")) {
+      return "C:\\Program Files\\VideoLAN\\VLC\\vlc.exe";
+    }
+    if (userAgent.includes("mac")) {
+      return "/Applications/VLC.app/Contents/MacOS/VLC";
+    }
+    return "/usr/bin/vlc";
+  }
+
+  getVlcPath(): string {
+    return mainStorage.getString(SettingsKeys.VLC_PATH) || this.getDefaultVlcPath();
+  }
+
+  isVlcEnabled(): boolean {
+    return mainStorage.getBool(SettingsKeys.VLC_ENABLED, false);
+  }
+
+  setVlcEnabled(enabled: boolean): void {
+    mainStorage.setBool(SettingsKeys.VLC_ENABLED, enabled);
+  }
+
+  setVlcPath(path: string): void {
+    mainStorage.setString(SettingsKeys.VLC_PATH, path.trim());
+  }
+
+  resetVlcPath(): void {
+    mainStorage.delete(SettingsKeys.VLC_PATH);
   }
 
   getTmdbApiKeyRevision(): number {

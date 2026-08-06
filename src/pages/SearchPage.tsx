@@ -5,6 +5,9 @@ import { useGlobalSearch } from "../lib/hooks/useGlobalSearch";
 import { ContentSlider } from "../components/home/ContentSlider";
 import { FocusableButton } from "../components/layout/FocusableButton";
 import { Spinner } from "../components/ui/spinner";
+import { useFocusable } from "@noriginmedia/norigin-spatial-navigation-react";
+import { resume } from "@noriginmedia/norigin-spatial-navigation-core";
+import { settingsStorage } from "../lib/storage";
 import "./SearchPage.css";
 
 export const SearchPage: React.FC = () => {
@@ -12,8 +15,22 @@ export const SearchPage: React.FC = () => {
   const query = searchParams.get("q") || "";
   const navigate = useNavigate();
   const [localQuery, setLocalQuery] = useState(query);
+  const [isTyping, setIsTyping] = useState(false);
 
   const nativeInputRef = useRef<HTMLInputElement>(null);
+  const isAndroid = navigator.userAgent.toLowerCase().includes("android");
+  const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
+  const {
+    ref: searchFocusRef,
+    focused: searchFocused,
+    focusSelf: focusSearch,
+  } = useFocusable({
+    focusable: tvMode,
+    onEnterPress: () => {
+      setIsTyping(true);
+      window.setTimeout(() => nativeInputRef.current?.focus(), 0);
+    },
+  });
 
   const { searchData, emptyResults, loading, isAllLoaded } =
     useGlobalSearch(query);
@@ -40,6 +57,14 @@ export const SearchPage: React.FC = () => {
     nativeInputRef.current?.focus();
   };
 
+  const stopTyping = () => {
+    setIsTyping(false);
+    window.setTimeout(() => {
+      resume();
+      focusSearch();
+    }, 0);
+  };
+
   const hasAnyResults = searchData.length > 0;
   const isCurrentlyLoading = loading.some((l) => l.isLoading);
 
@@ -47,7 +72,14 @@ export const SearchPage: React.FC = () => {
     <div className="search-page">
       <div className="search-page-header-container">
         <form className="search-page-form" onSubmit={handleSearch}>
-          <div className="search-page-form-inner">
+          <div
+            ref={searchFocusRef}
+            className={`search-page-form-inner ${searchFocused ? "tv-focus" : ""}`}
+            onClick={() => {
+              setIsTyping(true);
+              window.setTimeout(() => nativeInputRef.current?.focus(), 0);
+            }}
+          >
             <Search size={23} className="search-page-icon" aria-hidden="true" />
             <input
               ref={nativeInputRef}
@@ -55,16 +87,23 @@ export const SearchPage: React.FC = () => {
               placeholder="Search all providers..."
               aria-label="Search all providers"
               className="search-page-input"
+              tabIndex={tvMode ? -1 : 0}
+              readOnly={tvMode ? !isTyping : false}
               value={localQuery}
               onChange={(event) => setLocalQuery(event.target.value)}
+              onBlur={stopTyping}
               onKeyDown={(e) => {
                 e.stopPropagation();
-                if (e.key === "Escape") {
+                if (
+                  e.key === "Escape" ||
+                  e.key === "ArrowDown" ||
+                  e.key === "ArrowUp"
+                ) {
                   e.preventDefault();
-                  clearSearch();
+                  nativeInputRef.current?.blur();
                 }
               }}
-              autoFocus
+              autoFocus={!tvMode}
             />
             {localQuery && (
               <button

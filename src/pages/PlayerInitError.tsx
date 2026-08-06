@@ -4,6 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 interface PlayerInitErrorProps {
   error: string;
   onBack: () => void;
+  onOpenVlc?: () => void;
 }
 
 // Signals that typically indicate a missing/broken VC++ runtime or libmpv DLL
@@ -29,6 +30,7 @@ const looksLikeRuntimeError = (error: string): boolean => {
 export const PlayerInitError: React.FC<PlayerInitErrorProps> = ({
   error,
   onBack,
+  onOpenVlc,
 }) => {
   const [copied, setCopied] = useState(false);
   const isRuntimeError = looksLikeRuntimeError(error);
@@ -56,6 +58,7 @@ export const PlayerInitError: React.FC<PlayerInitErrorProps> = ({
           </p>
         )}
         <div className="player-error-actions">
+          {onOpenVlc && <button onClick={onOpenVlc}>Open in VLC</button>}
           <button onClick={handleCopy}>
             {copied ? "Copied" : "Copy Error"}
           </button>

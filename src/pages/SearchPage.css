@@ -44,6 +44,13 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
+.search-page-form-inner.tv-focus {
+  outline: none;
+  border-color: var(--primary);
+  transform: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
 .search-page-icon {
   flex: 0 0 auto;
   margin-right: 12px;
@@ -95,7 +102,9 @@
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
-  transition: filter 160ms ease, transform 160ms ease;
+  transition:
+    filter 160ms ease,
+    transform 160ms ease;
 }
 
 .search-page-submit:hover {

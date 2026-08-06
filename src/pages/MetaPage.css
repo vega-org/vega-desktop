@@ -42,7 +42,12 @@
 }
 
 .content-hero-scrim {
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.12) 0%, rgba(0, 0, 0, 0.1) 58%, var(--detail-background) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.12) 0%,
+    rgba(0, 0, 0, 0.1) 58%,
+    var(--detail-background) 100%
+  );
 }
 
 .content-back-button {
@@ -58,7 +63,10 @@
   border-radius: 50%;
   color: var(--primary);
   background: transparent;
-  transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
 }
 
 .content-back-button:hover,
@@ -242,7 +250,10 @@
   color: var(--on-surface-variant);
   font-size: 12px;
   font-weight: 690;
-  transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
 }
 
 .content-info-action svg {
@@ -300,6 +311,13 @@
   border-color: var(--primary);
 }
 
+.season-select-trigger.tv-focus {
+  outline: none;
+  border-color: var(--primary);
+  transform: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
 .season-select-content {
   z-index: 700;
   min-width: var(--radix-select-trigger-width);
@@ -332,6 +350,14 @@
 .season-select-item[data-highlighted] {
   color: var(--primary);
   background: var(--surface-container-highest);
+}
+
+.season-select-item.tv-focus {
+  outline: none;
+  color: var(--primary);
+  background: var(--surface-container-highest);
+  transform: none;
+  box-shadow: none;
 }
 
 .season-select-item[data-state="checked"] {
@@ -414,7 +440,10 @@
   border: 1px solid color-mix(in srgb, #000 72%, var(--outline-variant));
   border-radius: 14px;
   background: #171717;
-  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
 }
 
 .content-episode-row:hover {
@@ -516,7 +545,10 @@
   border-radius: 50%;
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 10%, #171717);
-  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
 }
 
 .episode-action-button.error {
@@ -917,7 +949,11 @@
   padding: 8px;
   border: 1px solid var(--outline-variant);
   border-radius: 28px;
-  background: color-mix(in srgb, var(--surface-container-high) 92%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--surface-container-high) 92%,
+    transparent
+  );
   box-shadow: 0 12px 36px color-mix(in srgb, #000 40%, transparent);
   backdrop-filter: blur(18px);
   transform: translateX(-50%);
@@ -1306,8 +1342,12 @@
   border-radius: 8px;
 }
 
-.content-skeleton-facts > div:nth-child(2) { width: 92px; }
-.content-skeleton-facts > div:nth-child(3) { width: 66px; }
+.content-skeleton-facts > div:nth-child(2) {
+  width: 92px;
+}
+.content-skeleton-facts > div:nth-child(3) {
+  width: 66px;
+}
 
 .content-skeleton-overview {
   display: flex;
@@ -1342,7 +1382,9 @@
   height: 16px;
 }
 
-.content-skeleton-synopsis > div:last-child { width: 72%; }
+.content-skeleton-synopsis > div:last-child {
+  width: 72%;
+}
 
 .content-skeleton-actions {
   display: grid;
@@ -1440,7 +1482,9 @@
 }
 
 @keyframes content-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 760px) {
@@ -1457,8 +1501,17 @@
 
   .content-hero-scrim {
     background:
-      linear-gradient(180deg, color-mix(in srgb, #000 24%, transparent), transparent 30%),
-      linear-gradient(0deg, var(--detail-background) 0%, color-mix(in srgb, var(--detail-background) 84%, transparent) 24%, transparent 66%);
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, #000 24%, transparent),
+        transparent 30%
+      ),
+      linear-gradient(
+        0deg,
+        var(--detail-background) 0%,
+        color-mix(in srgb, var(--detail-background) 84%, transparent) 24%,
+        transparent 66%
+      );
   }
 
   .content-back-button {

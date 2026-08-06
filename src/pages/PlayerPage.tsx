@@ -24,8 +24,14 @@ import {
 } from "@noriginmedia/norigin-spatial-navigation-react";
 import { FocusableButton } from "../components/layout/FocusableButton";
 import { syncFromSharedFolder } from "../lib/sync/syncService";
+import { settingsStorage } from "../lib/storage/SettingsStorage";
 
-import { LuPlay as Play } from "react-icons/lu";
+import {
+  LuArrowLeft as ArrowLeft,
+  LuExternalLink as ExternalLink,
+  LuPlay as Play,
+  LuServer as Server,
+} from "react-icons/lu";
 import "./PlayerPage.css";
 
 interface PlayerLocationState {
@@ -122,8 +128,9 @@ const PlayerInner: React.FC<PlayerInnerProps> = ({ state }) => {
   const isAndroid = navigator.userAgent.toLowerCase().includes("android");
   const isLinux =
     navigator.userAgent.toLowerCase().includes("linux") && !isAndroid;
+  const useVlc = !isAndroid && settingsStorage.isVlcEnabled();
 
-  if (isAndroid || isLinux) {
+  if (isAndroid || isLinux || useVlc) {
     return (
       <TvPlayer
         state={state}
@@ -135,6 +142,7 @@ const PlayerInner: React.FC<PlayerInnerProps> = ({ state }) => {
         setSelectedStream={setSelectedStream}
         isAndroid={isAndroid}
         isLinux={isLinux}
+        useVlc={useVlc}
       />
     );
   }
@@ -166,6 +174,7 @@ const TvPlayer: React.FC<any> = ({
   setSelectedStream,
   isAndroid,
   isLinux,
+  useVlc,
 }) => {
   const navigate = useNavigate();
   const { addItem } = useWatchHistoryStore();
@@ -264,11 +273,13 @@ const TvPlayer: React.FC<any> = ({
           const headers = stream.headers ? JSON.stringify(stream.headers) : "";
           const intentUrl = `vega://play?url=${encodeURIComponent(playUrl)}&headers=${encodeURIComponent(headers)}`;
           await openUrl(intentUrl);
-        } else if (isLinux) {
+        } else if (isLinux || useVlc) {
           const { invoke } = await import("@tauri-apps/api/core");
-          await invoke("open_external_player", { url: playUrl }).catch(
-            console.error,
-          );
+          await invoke("open_external_player", {
+            url: playUrl,
+            playerPath: settingsStorage.getVlcPath(),
+            headers: stream.headers || null,
+          });
         }
       } catch (e) {
         console.error("Failed to open player", e);
@@ -277,7 +288,7 @@ const TvPlayer: React.FC<any> = ({
         setTimeout(() => setIsLaunching(false), 2000);
       }
     },
-    [isAndroid, isLinux],
+    [isAndroid, isLinux, useVlc],
   );
 
   if (streamLoading) {
@@ -351,133 +362,76 @@ const TvPlayer: React.FC<any> = ({
         ref={focusRef}
         className="tv-server-selection"
         style={{
-          height: "100vh",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
           backgroundImage: `url(${state.poster?.background || state.poster?.poster})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          color: "white",
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.85)",
-            backdropFilter: "blur(20px)",
-          }}
-        />
+        <div className="tv-server-backdrop" />
 
-        <div
-          style={{
-            position: "relative",
-            zIndex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            maxWidth: "800px",
-            width: "100%",
-            padding: "40px",
-          }}
-        >
-          <h2
-            style={{
-              fontSize: "3rem",
-              fontWeight: 800,
-              marginBottom: "8px",
-              textAlign: "center",
-              textShadow: "0 2px 10px rgba(0,0,0,0.5)",
-            }}
-          >
-            {state.primaryTitle}
-          </h2>
-          {activeEpisode?.title && (
-            <h3
-              style={{
-                fontSize: "1.5rem",
-                color: "#ccc",
-                marginBottom: "40px",
-                fontWeight: 500,
-              }}
+        <div className="tv-server-shell">
+          <header className="tv-server-header">
+            <FocusableButton
+              focusKey="TV_SERVER_BACK"
+              className="tv-server-back"
+              onClick={() => navigate(-1)}
+              aria-label="Go back"
             >
-              {activeEpisode.title}
-            </h3>
-          )}
+              <ArrowLeft size={24} />
+            </FocusableButton>
+            <div className="tv-server-title-copy">
+              <span className="tv-server-eyebrow">Open in VLC</span>
+              <h1>{state.primaryTitle}</h1>
+              {activeEpisode?.title && <p>{activeEpisode.title}</p>}
+            </div>
+          </header>
 
           {isLaunching ? (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                marginTop: "40px",
-              }}
-            >
+            <div className="tv-server-launching">
               <div className="loading-spinner" />
-              <span
-                style={{ marginTop: "16px", fontSize: "1.2rem", color: "#ccc" }}
-              >
-                Opening External Player...
-              </span>
+              <span>Opening VLC…</span>
             </div>
           ) : (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "16px",
-                width: "100%",
-                maxWidth: "400px",
-              }}
-            >
-              <h4
-                style={{
-                  fontSize: "1.1rem",
-                  color: "#aaa",
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                  marginBottom: "8px",
-                }}
-              >
-                Select Server
-              </h4>
+            <section className="tv-server-panel">
+              <div className="tv-server-panel-heading">
+                <div className="tv-server-panel-icon">
+                  <Server size={21} />
+                </div>
+                <div>
+                  <h2>Select server</h2>
+                  <p>{streamData?.length || 0} available</p>
+                </div>
+              </div>
 
-              {streamData?.map((stream: any, idx: number) => (
-                <FocusableButton
-                  key={idx}
-                  focusKey={`TV_SERVER_${idx}`}
-                  className={`action-btn ${selectedStream?.link === stream.link ? "primary-btn" : "secondary-btn"}`}
-                  style={{
-                    width: "100%",
-                    justifyContent: "center",
-                    padding: "16px",
-                    fontSize: "1.2rem",
-                    borderRadius: "12px",
-                  }}
-                  onClick={() => {
-                    setSelectedStream(stream);
-                    handlePlayNative(stream);
-                  }}
-                >
-                  <Play size={20} style={{ marginRight: "10px" }} />
-                  {stream.server || `Server ${idx + 1}`}{" "}
-                  {stream.quality ? `(${stream.quality})` : ""}
-                </FocusableButton>
-              ))}
-            </div>
+              <div className="tv-server-list">
+                {streamData?.map((stream: any, idx: number) => (
+                  <FocusableButton
+                    key={stream.link + "-" + idx}
+                    focusKey={"TV_SERVER_" + idx}
+                    className={
+                      "tv-server-card " +
+                      (selectedStream?.link === stream.link ? "selected" : "")
+                    }
+                    onClick={() => {
+                      setSelectedStream(stream);
+                      handlePlayNative(stream);
+                    }}
+                  >
+                    <span className="tv-server-play">
+                      <Play size={20} />
+                    </span>
+                    <span className="tv-server-name">
+                      {stream.server || "Server " + (idx + 1)}
+                    </span>
+                    {stream.quality && (
+                      <span className="tv-server-quality">
+                        {stream.quality}
+                      </span>
+                    )}
+                    <ExternalLink className="tv-server-open-icon" size={19} />
+                  </FocusableButton>
+                ))}
+              </div>
+            </section>
           )}
-
-          <FocusableButton
-            focusKey="TV_SERVER_BACK"
-            className="action-btn text-btn"
-            style={{ marginTop: "50px", fontSize: "1.2rem", opacity: 0.8 }}
-            onClick={() => navigate(-1)}
-          >
-            Go Back
-          </FocusableButton>
         </div>
       </div>
     </FocusContext.Provider>
@@ -543,6 +497,22 @@ const DesktopPlayer: React.FC<any> = ({
       2200,
     );
   }, []);
+
+  const openInVlc = useCallback(async () => {
+    if (!selectedStream?.link) return;
+    try {
+      await invoke("open_external_player", {
+        url: selectedStream.link,
+        playerPath: settingsStorage.getVlcPath(),
+        headers: selectedStream.headers || null,
+      });
+      toast("Opened in VLC");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Failed to open VLC:", error);
+      window.alert(message);
+    }
+  }, [selectedStream, toast]);
 
   const handleNextEpisode = useCallback(() => {
     if (activeEpisodeIndex < state.episodeList.length - 1) {
@@ -936,11 +906,17 @@ const DesktopPlayer: React.FC<any> = ({
             new PhysicalPosition(
               Math.max(
                 monitor.position.x,
-                monitor.position.x + monitor.size.width - pipSize.width - margin,
+                monitor.position.x +
+                  monitor.size.width -
+                  pipSize.width -
+                  margin,
               ),
               Math.max(
                 monitor.position.y,
-                monitor.position.y + monitor.size.height - pipSize.height - margin,
+                monitor.position.y +
+                  monitor.size.height -
+                  pipSize.height -
+                  margin,
               ),
             ),
           );
@@ -1072,6 +1048,7 @@ const DesktopPlayer: React.FC<any> = ({
       <PlayerInitError
         error={mpv.initializationError}
         onBack={() => navigate(-1)}
+        onOpenVlc={selectedStream?.link ? openInVlc : undefined}
       />
     );
   }
@@ -1137,6 +1114,7 @@ const DesktopPlayer: React.FC<any> = ({
           setPlaybackRate(rate);
           mpv.setPlaybackSpeed(rate);
         }}
+        onOpenVlc={openInVlc}
       />
       {toasts.map((t) => (
         <div key={t.id} className="player-toast">

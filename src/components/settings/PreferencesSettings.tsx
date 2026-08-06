@@ -25,6 +25,8 @@ export const PreferencesSettings: React.FC = () => {
   const [downloadConcurrency, setDownloadConcurrency] = useState<number>(2);
   const [tmdbApiKey, setTmdbApiKey] = useState<string>("");
   const [tmdbKeySaved, setTmdbKeySaved] = useState(false);
+  const [vlcEnabled, setVlcEnabled] = useState(false);
+  const [vlcPath, setVlcPath] = useState("");
 
   useEffect(() => {
     setDownloadLocation(settingsStorage.getDownloadLocation());
@@ -39,6 +41,8 @@ export const PreferencesSettings: React.FC = () => {
     setDohCustomUrl(settingsStorage.getDohCustomUrl());
     setDownloadConcurrency(settingsStorage.getDownloadConcurrency());
     setTmdbApiKey(settingsStorage.getTmdbApiKey());
+    setVlcEnabled(settingsStorage.isVlcEnabled());
+    setVlcPath(settingsStorage.getVlcPath());
   }, []);
 
   const handleChangeDir = async () => {
@@ -126,6 +130,34 @@ export const PreferencesSettings: React.FC = () => {
     useDownloadStore.getState().scheduleDownloads();
   };
 
+  const handleChangeVlcPath = async () => {
+    try {
+      const selected = await open({
+        directory: false,
+        multiple: false,
+        filters: navigator.userAgent.toLowerCase().includes("windows")
+          ? [{ name: "VLC executable", extensions: ["exe"] }]
+          : undefined,
+      });
+      if (selected && typeof selected === "string") {
+        setVlcPath(selected);
+        settingsStorage.setVlcPath(selected);
+      }
+    } catch (err) {
+      console.error("Failed to select VLC executable:", err);
+    }
+  };
+
+  const handleResetVlcPath = () => {
+    settingsStorage.resetVlcPath();
+    setVlcPath(settingsStorage.getVlcPath());
+  };
+
+  const handleToggleVlc = (enabled: boolean) => {
+    setVlcEnabled(enabled);
+    settingsStorage.setVlcEnabled(enabled);
+  };
+
   const saveTmdbApiKey = () => {
     settingsStorage.setTmdbApiKey(tmdbApiKey);
     setTmdbApiKey(settingsStorage.getTmdbApiKey());
@@ -205,6 +237,55 @@ export const PreferencesSettings: React.FC = () => {
       </div>
 
       <div className="settings-divider" />
+
+      {!isAndroid && (
+        <>
+          <div className="settings-row">
+            <div className="settings-info">
+              <h3 className="label-lg">VLC Player</h3>
+              <p className="body-md text-muted">
+                Open the selected server directly in VLC instead of Vega's
+                player.
+              </p>
+            </div>
+            <Switch
+              checked={vlcEnabled}
+              onCheckedChange={handleToggleVlc}
+              aria-label="Use VLC as the external player"
+            />
+          </div>
+          {vlcEnabled && (
+            <div className="settings-row">
+              <div className="settings-info">
+                <h3 className="label-lg">VLC Path</h3>
+                <p
+                  className="body-md text-muted"
+                  style={{ wordBreak: "break-all" }}
+                >
+                  {vlcPath}
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <FocusableButton
+                  className="theme-toggle-btn active"
+                  onClick={handleChangeVlcPath}
+                >
+                  <FolderOpen size={16} /> Change
+                </FocusableButton>
+                {vlcPath !== settingsStorage.getDefaultVlcPath() && (
+                  <FocusableButton
+                    className="theme-toggle-btn"
+                    onClick={handleResetVlcPath}
+                  >
+                    Reset
+                  </FocusableButton>
+                )}
+              </div>
+            </div>
+          )}
+          <div className="settings-divider" />
+        </>
+      )}
 
       {/* Auto Install Updates */}
       <div className="settings-row">
@@ -293,7 +374,8 @@ export const PreferencesSettings: React.FC = () => {
         <div className="settings-info">
           <h3 className="label-lg">TMDB API Key</h3>
           <p className="body-md text-muted">
-            Optional custom key for Story metadata. It overrides the bundled environment key.
+            Optional custom key for Story metadata. It overrides the bundled
+            environment key.
           </p>
         </div>
         <div className="tmdb-key-control">
@@ -301,17 +383,32 @@ export const PreferencesSettings: React.FC = () => {
             type="password"
             autoComplete="off"
             aria-label="Custom TMDB API key"
-            placeholder={import.meta.env.VITE_TMDB_API_KEY ? "Using bundled key" : "Enter TMDB API key"}
+            placeholder={
+              import.meta.env.VITE_TMDB_API_KEY
+                ? "Using bundled key"
+                : "Enter TMDB API key"
+            }
             value={tmdbApiKey}
-            onChange={(event) => { setTmdbApiKey(event.target.value); setTmdbKeySaved(false); }}
+            onChange={(event) => {
+              setTmdbApiKey(event.target.value);
+              setTmdbKeySaved(false);
+            }}
             className="tmdb-key-input"
           />
           <div className="tmdb-key-actions">
-            <FocusableButton className="theme-toggle-btn active" onClick={saveTmdbApiKey}>
+            <FocusableButton
+              className="theme-toggle-btn active"
+              onClick={saveTmdbApiKey}
+            >
               {tmdbKeySaved ? "Saved" : "Save"}
             </FocusableButton>
             {settingsStorage.getTmdbApiKey() && (
-              <FocusableButton className="theme-toggle-btn" onClick={clearTmdbApiKey}>Use bundled</FocusableButton>
+              <FocusableButton
+                className="theme-toggle-btn"
+                onClick={clearTmdbApiKey}
+              >
+                Use bundled
+              </FocusableButton>
             )}
           </div>
         </div>

@@ -5,6 +5,8 @@ mod doh_client;
 mod torrent;
 mod sync_manifest;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::ffi::OsStrExt;
 use std::{
     collections::HashMap,
     sync::{
@@ -16,14 +18,42 @@ use tauri::Manager;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_window_state::StateFlags;
 #[cfg(target_os = "windows")]
+use windows::core::PCWSTR;
+#[cfg(target_os = "windows")]
 use windows::Win32::{
     Foundation::{HWND, RECT},
     Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST},
+    System::LibraryLoader::SetDllDirectoryW,
     UI::WindowsAndMessaging::{
         GetWindowLongPtrW, GetWindowRect, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, HWND_TOPMOST,
         SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER, WS_MAXIMIZE,
     },
 };
+
+#[cfg(target_os = "windows")]
+fn configure_bundled_dll_search_path() {
+    let Some(lib_dir) = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(|parent| parent.join("lib")))
+        .filter(|path| path.is_dir())
+    else {
+        return;
+    };
+
+    let wide_path: Vec<u16> = lib_dir
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    if let Err(error) = unsafe { SetDllDirectoryW(PCWSTR(wide_path.as_ptr())) } {
+        eprintln!(
+            "[libmpv] Failed to add bundled library directory '{}': {}",
+            lib_dir.display(),
+            error
+        );
+    }
+}
 
 struct ProxyState {
     port: Mutex<Option<u16>>,
@@ -86,32 +116,62 @@ fn get_torrent_api_port(state: tauri::State<'_, Option<torrent::TorrentState>>) 
 }
 
 #[tauri::command]
-fn open_external_player(_url: String) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
-    {
-        if std::process::Command::new("mpv")
-            .arg("--player-operation-mode=pseudo-gui")
-            .arg("--fs")
-            .arg("--osc")
-            .arg(&_url)
-            .spawn().is_ok() {
-            return Ok(());
-        }
-        if std::process::Command::new("vlc")
-            .arg("--fullscreen")
-            .arg(&_url)
-            .spawn().is_ok() {
-            return Ok(());
-        }
-        if std::process::Command::new("xdg-open").arg(&_url).spawn().is_ok() {
-            return Ok(());
-        }
-        return Err("Failed to launch external player".into());
+fn open_external_player(
+    url: String,
+    player_path: Option<String>,
+    headers: Option<HashMap<String, String>>,
+) -> Result<(), String> {
+    let default_path = if cfg!(target_os = "windows") {
+        r"C:\Program Files\VideoLAN\VLC\vlc.exe"
+    } else if cfg!(target_os = "macos") {
+        "/Applications/VLC.app/Contents/MacOS/VLC"
+    } else {
+        "/usr/bin/vlc"
+    };
+    let path = player_path
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| default_path.to_string());
+    if !std::path::Path::new(&path).is_file() {
+        return Err(format!(
+            "VLC was not found at '{}'. Change its path in Settings.",
+            path
+        ));
     }
-    #[cfg(not(target_os = "linux"))]
-    {
-        Err("Not supported on this OS".into())
+
+    let mut command = std::process::Command::new(&path);
+    command.arg("--fullscreen");
+    if let Some(headers) = headers {
+        for (name, value) in headers {
+            match name.to_ascii_lowercase().as_str() {
+                "user-agent" => {
+                    command.arg(format!("--http-user-agent={value}"));
+                }
+                "referer" | "referrer" => {
+                    command.arg(format!("--http-referrer={value}"));
+                }
+                _ => {}
+            }
+        }
     }
+    let local_path = std::path::Path::new(&url);
+    if local_path.is_absolute() {
+        if !local_path.is_file() {
+            return Err(format!(
+                "The downloaded media file does not exist: '{}'",
+                local_path.display()
+            ));
+        }
+        let canonical_path = std::fs::canonicalize(local_path)
+            .map_err(|error| format!("Failed to resolve local media path: {error}"))?;
+        command.arg(canonical_path);
+    } else {
+        command.arg(url);
+    }
+
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Failed to launch VLC: {error}"))
 }
 
 #[tauri::command]
@@ -245,6 +305,9 @@ fn ensure_window_in_work_area(window: tauri::WebviewWindow, maximized: bool) -> 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "windows")]
+    configure_bundled_dll_search_path();
+
     let local_files = Arc::new(Mutex::new(HashMap::new()));
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())

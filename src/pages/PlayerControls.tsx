@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState, useEffect } from 'react';
-import { LuArrowLeft as ArrowLeft, LuPlay as Play, LuPause as Pause, LuSkipBack as SkipBack, LuSkipForward as SkipForward, LuMaximize as Maximize, LuMinimize as Minimize, LuSkipForward as NextIcon, LuCaptions as Subtitles, LuGauge as Gauge, LuPictureInPicture as PictureInPicture, LuRectangleHorizontal as RectangleHorizontal, LuCheck as Check, LuServer as ServerIcon, LuTv as Tv, LuAudioLines, LuList as ChaptersIcon } from 'react-icons/lu';
+import { LuArrowLeft as ArrowLeft, LuPlay as Play, LuPause as Pause, LuSkipBack as SkipBack, LuSkipForward as SkipForward, LuMaximize as Maximize, LuMinimize as Minimize, LuSkipForward as NextIcon, LuCaptions as Subtitles, LuGauge as Gauge, LuPictureInPicture as PictureInPicture, LuRectangleHorizontal as RectangleHorizontal, LuCheck as Check, LuServer as ServerIcon, LuTv as Tv, LuAudioLines, LuList as ChaptersIcon, LuExternalLink as ExternalLink } from 'react-icons/lu';
 import { MdVideoSettings, Md4K, Md8K, MdHd, MdSd, MdHighQuality } from 'react-icons/md';
 import type { MpvChapter, MpvTrack } from '../lib/hooks/useMpvPlayer';
 import { SearchSubtitlesModal } from '../components/SearchSubtitlesModal';
@@ -44,6 +44,7 @@ interface PlayerControlsProps {
   onToggleCrop: () => void;
   isCropped: boolean;
   onPlayNative?: () => void;
+  onOpenVlc?: () => void;
   isTV?: boolean;
 }
 
@@ -122,6 +123,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   onToggleCrop,
   isCropped,
   onPlayNative,
+  onOpenVlc,
 }) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<'audio' | 'subtitle' | 'speed' | 'quality' | 'server' | 'chapters' | null>(null);
@@ -398,6 +400,12 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
           </div>
 
           <div className="player-actions-right" onClick={stop} onDoubleClick={stop}>
+            {onOpenVlc && (
+              <button className="action-btn text-btn" onClick={onOpenVlc} title="Open in VLC">
+                <ExternalLink size={20} />
+                <span>VLC</span>
+              </button>
+            )}
             {onPlayNative && (
               <button className="action-btn text-btn" onClick={onPlayNative}>
                 <Tv size={20} />
