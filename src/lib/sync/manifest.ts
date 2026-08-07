@@ -84,6 +84,8 @@ export interface MergedSyncState {
   tombstones: Record<string, SyncTombstone>;
 }
 
+export const MAX_SYNC_HISTORY_ITEMS = 50;
+
 export const getTombstoneKey = (kind: SyncRecordKind, id: string): string =>
   `${kind}:${id}`;
 
@@ -249,7 +251,7 @@ export const mergeSyncManifests = (
   const limitedHistory = Object.fromEntries(
     Object.entries(history)
       .sort(([, a], [, b]) => b.updatedAt - a.updatedAt)
-      .slice(0, 100),
+      .slice(0, MAX_SYNC_HISTORY_ITEMS),
   );
 
   return { downloads, history: limitedHistory, watchlist, tombstones };

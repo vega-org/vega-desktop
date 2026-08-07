@@ -40,7 +40,11 @@ const useWatchHistoryStore = create<History>((set) => ({
         provider: item.provider,
         link: item.link,
         timestamp: existing?.timestamp || item.timestamp || 0,
-        episodeTitle: item.episodeTitle,
+        episodeTitle:
+          item.episodeTitle ||
+          (item.episode?.title && item.episode.title !== item.title
+            ? item.episode.title
+            : existing?.episodeTitle),
         episode: item.episode,
         type: item.type,
         isSeries: item.isSeries ?? item.type === "series",

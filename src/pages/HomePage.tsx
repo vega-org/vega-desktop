@@ -78,9 +78,6 @@ export const HomePage: React.FC = () => {
       });
 
     return [...latestByLink.values()]
-      .filter(
-        (item) => item.isSeries || item.progress! / item.duration! < 0.95,
-      )
       .slice(0, 10)
       .map((item) => ({
         title: item.title,
@@ -94,7 +91,11 @@ export const HomePage: React.FC = () => {
         progress: Math.min(item.progress! / item.duration!, 1),
         providerValue: item.provider,
         type: item.isSeries ? "series" : "movie",
-        episodeTitle: item.episodeTitle,
+        episodeTitle:
+          item.episodeTitle ||
+          (item.episode?.title && item.episode.title !== item.title
+            ? item.episode.title
+            : undefined),
       }));
   }, [history, homeData, provider?.value]);
 

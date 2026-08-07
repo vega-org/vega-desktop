@@ -1,4 +1,4 @@
-import { mainStorage, watchHistoryStorage, watchListStorage } from "../storage";
+import { cacheStorage, mainStorage, watchHistoryStorage, watchListStorage } from "../storage";
 import type { WatchHistoryItem } from "../storage/WatchHistoryStorage";
 import { WatchHistoryKeys } from "../storage/WatchHistoryStorage";
 import { WatchListKeys, type WatchListItem } from "../storage/WatchListStorage";
@@ -8,6 +8,7 @@ import useWatchListStore from "../zustand/watchListStore";
 import {
   getTombstoneKey,
   getDownloadMediaKey,
+  MAX_SYNC_HISTORY_ITEMS,
   mergeSyncManifests,
   VEGA_SYNC_SCHEMA_VERSION,
   type SyncTombstone,
@@ -133,6 +134,8 @@ const buildManifest = async (): Promise<VegaSyncManifest> => {
   const history = Object.fromEntries(
     watchHistoryStorage
       .getWatchHistory()
+      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+      .slice(0, MAX_SYNC_HISTORY_ITEMS)
       .map((item) => [item.id || item.link, toSyncedHistory(item)]),
   );
   const watchlist = Object.fromEntries(
@@ -253,8 +256,17 @@ const applyRemoteDownloads = async (
 const applyRemoteHistory = (history: Record<string, SyncedHistory>) => {
   const items: WatchHistoryItem[] = Object.values(history)
     .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, 100)
+    .slice(0, MAX_SYNC_HISTORY_ITEMS)
     .map(({ updatedAt, ...item }) => ({ ...item, timestamp: updatedAt }));
+  items.forEach((item) => {
+    const position = item.progress ?? item.currentTime ?? 0;
+    const duration = item.duration ?? 0;
+    if (!item.episode || duration <= 0) return;
+    const progress = JSON.stringify({ position, duration });
+    [item.episode.id, item.episode.sourceLink, item.episode.link]
+      .filter((key): key is string => Boolean(key))
+      .forEach((key) => cacheStorage.setString(key, progress));
+  });
   mainStorage.setArray(WatchHistoryKeys.WATCH_HISTORY, items);
   useWatchHistoryStore.setState({
     history: items.map((item) => ({

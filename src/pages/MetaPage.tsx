@@ -15,7 +15,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { useArtworkPalette, useArtworkPaletteReady } from "../lib/hooks/useArtworkPalette";
 import { useContentDetails } from "../lib/hooks/useContentInfo";
 import { useEpisodes } from "../lib/hooks/useEpisodes";
-import type { Link, Stream } from "../lib/providers/types";
+import type { EpisodeLink, Link, Stream } from "../lib/providers/types";
 import { providerManager } from "../lib/services/ProviderManager";
 import { cacheStorage } from "../lib/storage";
 import { settingsStorage } from "../lib/storage/SettingsStorage";
@@ -114,14 +114,23 @@ export const MetaPage: React.FC = () => {
   useEffect(() => {
     const secondaryTitle = activeSeason?.title || "";
     const progressMap: Record<string, { position: number; duration: number }> = {};
-    episodeList?.forEach((_, index) => {
-      const stored = cacheStorage.getString(`resume_${title}_${secondaryTitle}_${index}`);
+    const readEpisodeProgress = (episode: EpisodeLink, index: number) => {
+      const keys = [
+        episode.id,
+        episode.sourceLink,
+        episode.link,
+        `resume_${title}_${secondaryTitle}_${index}`,
+      ].filter((key): key is string => Boolean(key));
+      return keys.map((key) => cacheStorage.getString(key)).find(Boolean);
+    };
+    episodeList?.forEach((episode, index) => {
+      const stored = readEpisodeProgress(episode, index);
       if (stored) {
         try { progressMap[index] = JSON.parse(stored); } catch { /* Ignore invalid legacy progress. */ }
       }
     });
-    activeSeason?.directLinks?.forEach((_, index) => {
-      const stored = cacheStorage.getString(`resume_${title}_${secondaryTitle}_${index}`);
+    activeSeason?.directLinks?.forEach((episode, index) => {
+      const stored = readEpisodeProgress(episode, index);
       if (stored) {
         try { progressMap[`direct_${index}`] = JSON.parse(stored); } catch { /* Ignore invalid legacy progress. */ }
       }
@@ -355,7 +364,7 @@ export const MetaPage: React.FC = () => {
                       description={episode.description}
                       image={episode.image}
                       progressPercent={progressPercent}
-                      watched={progressPercent > 80}
+                      watched={progressPercent > 85}
                       download={storedDownload}
                       extracting={downloadingId === id}
                       onPlay={() => play(playableRows, index, rowType)}
