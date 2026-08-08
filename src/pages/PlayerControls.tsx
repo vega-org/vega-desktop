@@ -79,6 +79,9 @@ interface PlayerControlsProps {
   onCopyLink?: () => void;
   showShortcuts?: boolean;
   onToggleShortcuts?: () => void;
+  onRequestThumbnail?: (time: number) => Promise<string | null>;
+  thumbnailKey?: string;
+  onScrubbingChange?: (scrubbing: boolean) => void;
   isTV?: boolean;
 }
 
@@ -165,8 +168,23 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   onCopyLink,
   showShortcuts = false,
   onToggleShortcuts,
+  onRequestThumbnail,
+  thumbnailKey,
+  onScrubbingChange,
 }) => {
   const trackRef = useRef<HTMLDivElement>(null);
+  const previewTimerRef = useRef<number | null>(null);
+  const previewRequestRef = useRef(0);
+  const pendingPreviewBucketRef = useRef<number | null>(null);
+  const queuedPreviewBucketRef = useRef<number | null>(null);
+  const draggingTimelineRef = useRef(false);
+  const thumbnailCacheRef = useRef(new Map<number, string | null>());
+  const [timelinePreview, setTimelinePreview] = useState<{
+    time: number;
+    percent: number;
+    bucket: number;
+    image: string | null;
+  } | null>(null);
   const [openMenu, setOpenMenu] = useState<
     | "audio"
     | "subtitle"
@@ -179,6 +197,22 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   >(null);
   const [showOnlineSearch, setShowOnlineSearch] = useState(false);
   const showSeekButtons = !settingsStorage.hideSeekButtons();
+
+  useEffect(() => {
+    thumbnailCacheRef.current.clear();
+    pendingPreviewBucketRef.current = null;
+    queuedPreviewBucketRef.current = null;
+    previewRequestRef.current += 1;
+    setTimelinePreview(null);
+  }, [thumbnailKey]);
+
+  useEffect(
+    () => () => {
+      if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+      previewRequestRef.current += 1;
+    },
+    [],
+  );
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -223,7 +257,11 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     }
   };
 
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const renderedTime =
+    draggingTimelineRef.current && timelinePreview
+      ? timelinePreview.time
+      : currentTime;
+  const progressPercent = duration > 0 ? (renderedTime / duration) * 100 : 0;
   const cachePercent =
     duration > 0
       ? Math.min(((currentTime + (cacheDuration || 0)) / duration) * 100, 100)
@@ -235,29 +273,92 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   }
   const activeChapter = chapters[activeChapterIndex];
 
-  const seekFromMouse = useCallback(
+  const updateTimelinePreview = useCallback(
     (e: MouseEvent | React.MouseEvent) => {
-      if (!trackRef.current || !duration) return;
+      if (!trackRef.current || !duration) return null;
       const rect = trackRef.current.getBoundingClientRect();
       const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-      onSeek((x / rect.width) * duration);
+      const time = (x / rect.width) * duration;
+      const percent = rect.width > 0 ? (x / rect.width) * 100 : 0;
+      const bucketSize = duration >= 7200 ? 15 : duration >= 1800 ? 10 : 5;
+      const bucket = Math.min(
+        duration,
+        Math.max(0, Math.round(time / bucketSize) * bucketSize),
+      );
+      const cached = thumbnailCacheRef.current.get(bucket);
+      setTimelinePreview((current) => ({
+        time,
+        percent,
+        bucket,
+        image:
+          cached !== undefined
+            ? cached
+            : current?.bucket === bucket
+              ? current.image
+              : null,
+      }));
+
+      if (
+        onRequestThumbnail &&
+        cached === undefined &&
+        pendingPreviewBucketRef.current !== bucket
+      ) {
+        if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+        previewTimerRef.current = window.setTimeout(() => {
+          const generation = previewRequestRef.current;
+          const runRequest = async (targetBucket: number): Promise<void> => {
+            if (pendingPreviewBucketRef.current !== null) {
+              queuedPreviewBucketRef.current = targetBucket;
+              return;
+            }
+            pendingPreviewBucketRef.current = targetBucket;
+            const image = await onRequestThumbnail(targetBucket);
+            if (generation !== previewRequestRef.current) return;
+            pendingPreviewBucketRef.current = null;
+            thumbnailCacheRef.current.set(targetBucket, image);
+            setTimelinePreview((current) =>
+              current?.bucket === targetBucket
+                ? { ...current, image }
+                : current,
+            );
+
+            const queuedBucket = queuedPreviewBucketRef.current;
+            queuedPreviewBucketRef.current = null;
+            if (
+              queuedBucket !== null &&
+              !thumbnailCacheRef.current.has(queuedBucket)
+            ) {
+              await runRequest(queuedBucket);
+            }
+          };
+          void runRequest(bucket);
+        }, 140);
+      }
+      return time;
     },
-    [duration, onSeek],
+    [duration, onRequestThumbnail],
   );
 
   const handleTrackMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      seekFromMouse(e);
-      const onMove = (ev: MouseEvent) => seekFromMouse(ev);
-      const onUp = () => {
+      draggingTimelineRef.current = true;
+      onScrubbingChange?.(true);
+      updateTimelinePreview(e);
+      const onMove = (ev: MouseEvent) => updateTimelinePreview(ev);
+      const onUp = (ev: MouseEvent) => {
+        const seekTime = updateTimelinePreview(ev);
+        if (seekTime !== null) onSeek(seekTime);
+        draggingTimelineRef.current = false;
+        onScrubbingChange?.(false);
+        setTimelinePreview(null);
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
       };
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
     },
-    [seekFromMouse],
+    [onScrubbingChange, onSeek, updateTimelinePreview],
   );
 
   if (isPip) {
@@ -396,7 +497,42 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
             ref={trackRef}
             className="timeline-track"
             onMouseDown={handleTrackMouseDown}
+            onMouseEnter={(event) => {
+              onScrubbingChange?.(true);
+              updateTimelinePreview(event);
+            }}
+            onMouseMove={(event) => {
+              if (!draggingTimelineRef.current) onScrubbingChange?.(true);
+              updateTimelinePreview(event);
+            }}
+            onMouseLeave={() => {
+              if (!draggingTimelineRef.current) {
+                setTimelinePreview(null);
+                onScrubbingChange?.(false);
+              }
+            }}
           >
+            {timelinePreview && (
+              <div
+                className={`timeline-preview ${timelinePreview.image ? "ready" : ""}`}
+                style={{
+                  left: `${timelinePreview.percent}%`,
+                  transform:
+                    timelinePreview.percent < 10
+                      ? "translateX(0)"
+                      : timelinePreview.percent > 90
+                        ? "translateX(-100%)"
+                        : "translateX(-50%)",
+                }}
+              >
+                <div className="timeline-preview-frame">
+                  {timelinePreview.image && (
+                    <img src={timelinePreview.image} alt="" draggable={false} />
+                  )}
+                </div>
+                <span>{formatTime(timelinePreview.time)}</span>
+              </div>
+            )}
             <div
               className="timeline-cache"
               style={{

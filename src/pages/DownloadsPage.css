@@ -467,11 +467,10 @@
 .downloaded-episode-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 76px;
-  padding: 8px 10px;
+  gap: 14px;
+  padding: 12px;
   border: 1px solid var(--outline-variant);
-  border-radius: 20px;
+  border-radius: 14px;
   background: var(--surface-container-low);
   transition:
     background-color 170ms ease,
@@ -489,8 +488,8 @@
   align-items: center;
   flex: 1;
   min-width: 0;
-  gap: 14px;
-  padding: 8px;
+  gap: 16px;
+  padding: 0;
   border-radius: 14px;
   cursor: pointer;
 }
@@ -500,17 +499,36 @@
   outline-offset: -2px;
 }
 
-.downloaded-episode-number {
+.downloaded-video-thumbnail {
+  position: relative;
   display: grid;
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  flex: 0 0 96px;
   place-items: center;
-  border-radius: 14px;
-  color: var(--on-primary-container);
-  background: var(--primary-container);
-  font-size: 14px;
-  font-weight: 760;
+  overflow: hidden;
+  border-radius: 9px;
+  background: var(--secondary-container);
+}
+
+.downloaded-video-thumbnail img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.downloaded-thumbnail-play {
+  position: relative;
+  z-index: 1;
+  width: 0;
+  height: 0;
+  margin-left: 3px;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 11px solid #fff;
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 65%));
 }
 
 .downloaded-episode-copy {
@@ -524,7 +542,7 @@
 .downloaded-episode-copy strong {
   overflow: hidden;
   color: var(--on-surface);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 670;
   text-overflow: ellipsis;
   white-space: nowrap;

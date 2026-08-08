@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import {
   LuArrowLeft as ArrowLeft,
   LuDownload as Download,
-  LuPlay as Play,
   LuTrash2 as Trash2,
 } from "react-icons/lu";
 import { useNavigate, useParams } from "react-router-dom";
 import { CustomSelect } from "../components/CustomSelect";
+import { DownloadedVideoThumbnail } from "../components/DownloadedVideoThumbnail";
 import { FocusableButton } from "../components/layout/FocusableButton";
 import { sortDownloadedEpisodes } from "../lib/downloadLibrary";
 import {
@@ -18,7 +18,10 @@ import "./DownloadsPage.css";
 const formatBytes = (bytes: number) => {
   if (!bytes) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
-  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const unit = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  );
   return `${Number((bytes / 1024 ** unit).toFixed(1))} ${units[unit]}`;
 };
 
@@ -62,7 +65,9 @@ export const DownloadsSeriesPage = () => {
 
   const poster = showDownloads[0]?.poster;
   const currentSeasonDownloads = sortDownloadedEpisodes(
-    showDownloads.filter((item) => (item.seasonTitle || "Extras") === activeSeason),
+    showDownloads.filter(
+      (item) => (item.seasonTitle || "Extras") === activeSeason,
+    ),
   );
 
   const handlePlay = (item: DownloadItem, index: number) => {
@@ -102,7 +107,10 @@ export const DownloadsSeriesPage = () => {
         <div className="downloads-series-header-copy">
           <p className="downloads-eyebrow">Downloaded series</p>
           <h1>{decodedShowName}</h1>
-          <p>{showDownloads.length} downloaded {showDownloads.length === 1 ? "episode" : "episodes"}</p>
+          <p>
+            {showDownloads.length} downloaded{" "}
+            {showDownloads.length === 1 ? "episode" : "episodes"}
+          </p>
         </div>
       </header>
 
@@ -116,12 +124,24 @@ export const DownloadsSeriesPage = () => {
             {!poster && <Download size={38} />}
           </div>
           <div className="series-downloads-stats">
-            <span>{seasons.length} {seasons.length === 1 ? "season" : "seasons"}</span>
-            <span>{formatBytes(showDownloads.reduce((sum, item) => sum + (item.totalBytes || 0), 0))}</span>
+            <span>
+              {seasons.length} {seasons.length === 1 ? "season" : "seasons"}
+            </span>
+            <span>
+              {formatBytes(
+                showDownloads.reduce(
+                  (sum, item) => sum + (item.totalBytes || 0),
+                  0,
+                ),
+              )}
+            </span>
           </div>
         </aside>
 
-        <section className="series-episodes-section" aria-labelledby="downloaded-episodes-title">
+        <section
+          className="series-episodes-section"
+          aria-labelledby="downloaded-episodes-title"
+        >
           <div className="series-episodes-toolbar">
             <div>
               <p className="downloads-section-kicker">Ready offline</p>
@@ -129,7 +149,10 @@ export const DownloadsSeriesPage = () => {
             </div>
             {seasons.length > 0 && (
               <CustomSelect
-                options={seasons.map((season) => ({ value: season, label: season }))}
+                options={seasons.map((season) => ({
+                  value: season,
+                  label: season,
+                }))}
                 value={activeSeason}
                 onChange={setActiveSeason}
                 className="season-selector-custom"
@@ -140,8 +163,14 @@ export const DownloadsSeriesPage = () => {
           <div className="downloaded-episodes-list">
             {currentSeasonDownloads.map((item, index) => (
               <article className="downloaded-episode-row" key={item.id}>
-                <FocusableButton className="downloaded-episode-main" onClick={() => handlePlay(item, index)}>
-                  <span className="downloaded-episode-number">{index + 1}</span>
+                <FocusableButton
+                  className="downloaded-episode-main"
+                  onClick={() => handlePlay(item, index)}
+                >
+                  <DownloadedVideoThumbnail
+                    filePath={item.filePath}
+                    title={item.episodeName || item.title}
+                  />
                   <span className="downloaded-episode-copy">
                     <strong>{item.episodeName || item.title}</strong>
                     <small>{formatBytes(item.totalBytes)}</small>
@@ -157,13 +186,6 @@ export const DownloadsSeriesPage = () => {
                     title="Delete download"
                   >
                     <Trash2 size={18} />
-                  </FocusableButton>
-                  <FocusableButton
-                    className="episode-download-action is-primary"
-                    onClick={() => handlePlay(item, index)}
-                    title="Play episode"
-                  >
-                    <Play size={18} fill="currentColor" />
                   </FocusableButton>
                 </div>
               </article>

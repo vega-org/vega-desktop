@@ -80,6 +80,10 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
   >([]);
   const optsRef = useRef(opts);
   const initCounterRef = useRef(0);
+  const thumbnailSourceRef = useRef<{
+    source: string;
+    headers?: Record<string, string>;
+  } | null>(null);
   optsRef.current = opts;
 
   // ... fetchTracks is unchanged ...
@@ -373,6 +377,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     unlistenPropsRef.current = null;
     unlistenEventsRef.current = null;
     setIsInitialized(false);
+    thumbnailSourceRef.current = null;
 
     if (activeInstances <= 0) {
       // Debounce destroy to handle StrictMode unmount/remount
@@ -438,6 +443,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
       setIsBuffering(true);
       setTracks([]);
       setChapters([]);
+      thumbnailSourceRef.current = null;
       pendingSubsRef.current = subtitles || [];
       try {
         let ua =
@@ -662,6 +668,18 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
           ).catch(() => {});
         }
 
+        const thumbnailHeaders: Record<string, string> | undefined = isProxied
+          ? undefined
+          : {
+              ...(headers || {}),
+              "User-Agent": ua,
+              ...(referer ? { Referer: referer } : {}),
+            };
+        thumbnailSourceRef.current = {
+          source: finalUrl,
+          headers: thumbnailHeaders,
+        };
+
         await command("loadfile", [finalUrl, "replace"]);
       } catch (err: any) {
         if (err.name === "AbortError" || err.message === "Aborted") {
@@ -675,6 +693,22 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     },
     [isInitialized],
   );
+
+  const requestThumbnail = useCallback(async (timestamp: number) => {
+    const media = thumbnailSourceRef.current;
+    if (!media || !Number.isFinite(timestamp)) return null;
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      return await invoke<string>("generate_video_thumbnail", {
+        source: media.source,
+        timestamp: Math.max(0, timestamp),
+        headers: media.headers || null,
+      });
+    } catch (error) {
+      console.debug("Thumbnail preview unavailable:", error);
+      return null;
+    }
+  }, []);
 
   const togglePause = useCallback(async () => {
     if (!isInitialized) return;
@@ -839,6 +873,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     initPlayer,
     destroyPlayer,
     loadFile,
+    requestThumbnail,
     togglePause,
     seek,
     setVolumeLevel,

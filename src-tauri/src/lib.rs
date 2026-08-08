@@ -1,14 +1,15 @@
 mod cookie_manager;
+mod doh_client;
 mod download_manager;
 mod stream_server;
-mod doh_client;
-mod torrent;
 mod sync_manifest;
+mod torrent;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::ffi::OsStrExt;
 use std::{
     collections::HashMap,
+    hash::{Hash, Hasher},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex,
@@ -62,6 +63,9 @@ struct ProxyState {
 
 static NEXT_LOCAL_FILE_TOKEN: AtomicU64 = AtomicU64::new(1);
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+static THUMBNAIL_GENERATION_LOCK: Mutex<()> = Mutex::new(());
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -88,7 +92,9 @@ fn get_local_stream_url(
         .lock()
         .map_err(|_| "Stream proxy is unavailable".to_string())?
         .ok_or_else(|| "Stream proxy has not started".to_string())?;
-    let token = NEXT_LOCAL_FILE_TOKEN.fetch_add(1, Ordering::Relaxed).to_string();
+    let token = NEXT_LOCAL_FILE_TOKEN
+        .fetch_add(1, Ordering::Relaxed)
+        .to_string();
     let file_name = path
         .file_name()
         .and_then(|value| value.to_str())
@@ -107,12 +113,207 @@ fn get_local_stream_url(
 }
 
 #[tauri::command]
-fn get_torrent_api_port(state: tauri::State<'_, Option<torrent::TorrentState>>) -> Result<u16, String> {
+fn get_torrent_api_port(
+    state: tauri::State<'_, Option<torrent::TorrentState>>,
+) -> Result<u16, String> {
     if let Some(ref torrent_state) = *state {
         Ok(torrent_state.api_port)
     } else {
         Err("Torrent service is not available".into())
     }
+}
+
+/// Decodes a single frame in an isolated MPV core. This deliberately does not
+/// seek the visible player, so hovering and dragging the timeline cannot
+/// interrupt playback.
+#[tauri::command]
+async fn generate_video_thumbnail(
+    app: tauri::AppHandle,
+    source: String,
+    timestamp: f64,
+    headers: Option<HashMap<String, String>>,
+) -> Result<String, String> {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = (app, source, timestamp, headers);
+        return Err("Video thumbnails are only available in the desktop app".into());
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    tauri::async_runtime::spawn_blocking(move || {
+        use base64::Engine;
+        use tauri_plugin_libmpv::MpvExt;
+
+        let _generation_guard = THUMBNAIL_GENERATION_LOCK
+            .lock()
+            .map_err(|_| "Thumbnail generator is unavailable".to_string())?;
+
+        let safe_timestamp = if timestamp.is_finite() {
+            timestamp.max(0.0)
+        } else {
+            0.0
+        };
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        source.hash(&mut hasher);
+        ((safe_timestamp * 1000.0).round() as u64).hash(&mut hasher);
+        if let Some(values) = headers.as_ref() {
+            let mut entries: Vec<_> = values.iter().collect();
+            entries.sort_by(|left, right| left.0.cmp(right.0));
+            for (name, value) in entries {
+                name.to_ascii_lowercase().hash(&mut hasher);
+                value.hash(&mut hasher);
+            }
+        }
+        let cache_key = format!("{:016x}", hasher.finish());
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir())
+            .join("seek-thumbnails");
+        std::fs::create_dir_all(&cache_dir).map_err(|error| error.to_string())?;
+        let cache_file = cache_dir.join(format!("{cache_key}.jpg"));
+
+        let encode_file = |path: &std::path::Path| -> Result<String, String> {
+            let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
+            Ok(format!(
+                "data:image/jpeg;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(bytes)
+            ))
+        };
+        if cache_file
+            .metadata()
+            .map(|meta| meta.len() > 0)
+            .unwrap_or(false)
+        {
+            return encode_file(&cache_file);
+        }
+
+        let output_dir = cache_dir.join(format!("work-{cache_key}"));
+        if output_dir.exists() {
+            let _ = std::fs::remove_dir_all(&output_dir);
+        }
+        std::fs::create_dir_all(&output_dir).map_err(|error| error.to_string())?;
+
+        let instance_label = format!("thumbnail-{cache_key}");
+        let mut initial_options = serde_json::Map::new();
+        initial_options.insert("wid".into(), serde_json::json!(0));
+        initial_options.insert("idle".into(), serde_json::json!("yes"));
+        initial_options.insert("audio".into(), serde_json::json!("no"));
+        initial_options.insert("sub".into(), serde_json::json!("no"));
+        initial_options.insert("osd-level".into(), serde_json::json!("0"));
+        initial_options.insert("really-quiet".into(), serde_json::json!("yes"));
+        initial_options.insert("vo".into(), serde_json::json!("image"));
+        initial_options.insert("vo-image-format".into(), serde_json::json!("jpg"));
+        initial_options.insert("vo-image-jpeg-quality".into(), serde_json::json!("72"));
+        initial_options.insert("vf".into(), serde_json::json!("scale=320:-2"));
+        initial_options.insert(
+            "vo-image-outdir".into(),
+            serde_json::json!(output_dir.to_string_lossy().to_string()),
+        );
+        initial_options.insert("frames".into(), serde_json::json!("1"));
+        initial_options.insert(
+            "start".into(),
+            serde_json::json!(format!("{safe_timestamp:.3}")),
+        );
+
+        if let Some(values) = headers.as_ref() {
+            let mut header_fields = Vec::new();
+            for (name, value) in values {
+                match name.to_ascii_lowercase().as_str() {
+                    "user-agent" => {
+                        initial_options.insert("user-agent".into(), serde_json::json!(value));
+                    }
+                    "referer" | "referrer" => {
+                        initial_options.insert("referrer".into(), serde_json::json!(value));
+                    }
+                    _ => {}
+                }
+                header_fields.push(format!("{name}: {value}"));
+            }
+            if !header_fields.is_empty() {
+                initial_options.insert(
+                    "http-header-fields".into(),
+                    serde_json::json!(header_fields.join(",")),
+                );
+            }
+        }
+
+        let config: tauri_plugin_libmpv::MpvConfig = serde_json::from_value(serde_json::json!({
+            "initialOptions": initial_options,
+            "observedProperties": {}
+        }))
+        .map_err(|error| error.to_string())?;
+
+        app.mpv()
+            .init(config, &instance_label)
+            .map_err(|error| format!("Failed to start thumbnail decoder: {error}"))?;
+        let load_result = app.mpv().command(
+            "loadfile",
+            &vec![serde_json::json!(source), serde_json::json!("replace")],
+            &instance_label,
+        );
+        if let Err(error) = load_result {
+            let _ = app.mpv().destroy(&instance_label);
+            let _ = std::fs::remove_dir_all(&output_dir);
+            return Err(format!("Failed to decode thumbnail: {error}"));
+        }
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut generated_file = None;
+        while std::time::Instant::now() < deadline {
+            if let Ok(entries) = std::fs::read_dir(&output_dir) {
+                generated_file = entries
+                    .filter_map(Result::ok)
+                    .map(|entry| entry.path())
+                    .find(|path| {
+                        path.extension()
+                            .and_then(|value| value.to_str())
+                            .map(|value| value.eq_ignore_ascii_case("jpg"))
+                            .unwrap_or(false)
+                            && path.metadata().map(|meta| meta.len() > 0).unwrap_or(false)
+                    });
+            }
+            if generated_file.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(40));
+        }
+        let _ = app.mpv().destroy(&instance_label);
+
+        let generated_file = generated_file.ok_or_else(|| {
+            let _ = std::fs::remove_dir_all(&output_dir);
+            "MPV did not produce a thumbnail in time".to_string()
+        })?;
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        std::fs::rename(&generated_file, &cache_file)
+            .or_else(|_| std::fs::copy(&generated_file, &cache_file).map(|_| ()))
+            .map_err(|error| error.to_string())?;
+        let _ = std::fs::remove_dir_all(&output_dir);
+
+        // Keep the persistent preview cache bounded.
+        if let Ok(entries) = std::fs::read_dir(&cache_dir) {
+            let mut files: Vec<_> = entries
+                .filter_map(Result::ok)
+                .filter_map(|entry| {
+                    let path = entry.path();
+                    let modified = entry.metadata().ok()?.modified().ok()?;
+                    (path.extension().and_then(|value| value.to_str()) == Some("jpg"))
+                        .then_some((modified, path))
+                })
+                .collect();
+            if files.len() > 240 {
+                files.sort_by_key(|(modified, _)| *modified);
+                let remove_count = files.len() - 200;
+                for (_, path) in files.into_iter().take(remove_count) {
+                    let _ = std::fs::remove_file(path);
+                }
+            }
+        }
+
+        encode_file(&cache_file)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -354,7 +555,11 @@ pub fn run() {
                 }
             });
 
-            let torrent_cache_dir = app.path().app_cache_dir().unwrap_or_else(|_| std::env::temp_dir()).join("vega-torrents");
+            let torrent_cache_dir = app
+                .path()
+                .app_cache_dir()
+                .unwrap_or_else(|_| std::env::temp_dir())
+                .join("vega-torrents");
             let torrent_state = tauri::async_runtime::block_on(async {
                 match torrent::TorrentState::new(torrent_cache_dir).await {
                     Ok(state) => Some(state),
@@ -372,6 +577,7 @@ pub fn run() {
             greet,
             get_stream_proxy_port,
             get_local_stream_url,
+            generate_video_thumbnail,
             get_torrent_api_port,
             download_manager::start_download,
             download_manager::pause_download,

@@ -347,23 +347,87 @@
 
 .timeline-track {
   flex: 1;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.25);
-  border-radius: 999px;
+  height: 18px;
+  background: transparent;
   cursor: pointer;
   position: relative;
+}
+
+.timeline-track::before {
+  content: "";
+  position: absolute;
+  inset: 50% 0 auto;
+  height: 2px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
   transition: height 0.12s;
 }
-.timeline-track:hover {
+
+.timeline-track:hover::before {
   height: 4px;
 }
 
-.timeline-progress {
+.timeline-preview {
+  position: absolute;
+  bottom: 18px;
+  z-index: 12;
+  width: 180px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(10, 10, 10, 0.9);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.timeline-preview-frame {
+  width: 170px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.timeline-preview-frame img {
+  display: block;
+  width: 100%;
   height: 100%;
+  object-fit: cover;
+}
+
+.timeline-preview > span {
+  display: block;
+  padding: 5px 2px 1px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-progress {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 2px;
+  transform: translateY(-50%);
   background: var(--primary);
   border-radius: 999px;
-  position: relative;
   transition: width 0.08s linear;
+}
+
+.timeline-cache {
+  top: 50% !important;
+  height: 2px !important;
+  transform: translateY(-50%);
+}
+
+.timeline-track:hover .timeline-progress,
+.timeline-track:hover .timeline-cache {
+  height: 4px !important;
 }
 
 .timeline-thumb {
@@ -388,13 +452,13 @@
 
 .timeline-chapter-gap {
   position: absolute;
-  top: 0;
+  top: 50%;
   z-index: 3;
   width: 3px;
-  height: 100%;
+  height: 4px;
   border-radius: 1px;
   background: #000;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   pointer-events: none;
 }
 

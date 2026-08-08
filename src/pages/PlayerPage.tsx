@@ -23,8 +23,10 @@ import {
   useFocusable,
 } from "@noriginmedia/norigin-spatial-navigation-react";
 import { FocusableButton } from "../components/layout/FocusableButton";
+import { AnimatedHourglass } from "../components/AnimatedHourglass";
 import { syncFromSharedFolder } from "../lib/sync/syncService";
 import { settingsStorage } from "../lib/storage/SettingsStorage";
+import { useArtworkPalette } from "../lib/hooks/useArtworkPalette";
 
 import {
   LuArrowLeft as ArrowLeft,
@@ -113,6 +115,13 @@ const PlayerInner: React.FC<PlayerInnerProps> = ({ state }) => {
   const { provider } = useContentStore();
   const [activeEpisodeIndex, setActiveEpisodeIndex] = useState(state.linkIndex);
   const activeEpisode = state.episodeList[activeEpisodeIndex];
+  const dynamicInfoThemeEnabled =
+    settingsStorage.isInfoPageDynamicThemeEnabled();
+  const hourglassArtwork = dynamicInfoThemeEnabled
+    ? state.poster?.poster || state.poster?.background
+    : null;
+  const artworkPalette = useArtworkPalette(hourglassArtwork);
+  const hourglassSandColor = artworkPalette["--primary"] || "var(--primary)";
 
   const routeParams = useMemo(
     () => ({
@@ -163,6 +172,7 @@ const PlayerInner: React.FC<PlayerInnerProps> = ({ state }) => {
         isLinux={isLinux}
         useExternalPlayer={useExternalPlayer}
         useVlc={useVlc}
+        hourglassSandColor={hourglassSandColor}
       />
     );
   }
@@ -180,6 +190,7 @@ const PlayerInner: React.FC<PlayerInnerProps> = ({ state }) => {
       setSelectedStream={setSelectedStream}
       externalSubs={externalSubs}
       routeParams={routeParams}
+      hourglassSandColor={hourglassSandColor}
     />
   );
 };
@@ -196,6 +207,7 @@ const TvPlayer: React.FC<any> = ({
   isLinux,
   useExternalPlayer,
   useVlc,
+  hourglassSandColor,
 }) => {
   const navigate = useNavigate();
   const { addItem } = useWatchHistoryStore();
@@ -328,7 +340,7 @@ const TvPlayer: React.FC<any> = ({
           style={{
             position: "absolute",
             inset: 0,
-            backgroundColor: "rgba(0,0,0,0.85)",
+            backgroundColor: "rgba(0,0,0,0.92)",
             backdropFilter: "blur(20px)",
           }}
         />
@@ -340,7 +352,7 @@ const TvPlayer: React.FC<any> = ({
           <ArrowLeft size={23} />
         </FocusableButton>
         <div className="player-loading" style={{ background: "transparent" }}>
-          <div className="loading-spinner" />
+          <AnimatedHourglass sandColor={hourglassSandColor} />
           <span className="loading-text">Fetching Stream...</span>
         </div>
       </div>
@@ -491,6 +503,7 @@ const DesktopPlayer: React.FC<any> = ({
   setSelectedStream,
   externalSubs,
   routeParams,
+  hourglassSandColor,
 }) => {
   const navigate = useNavigate();
   const { history, addItem, updatePlaybackInfo } = useWatchHistoryStore();
@@ -505,6 +518,7 @@ const DesktopPlayer: React.FC<any> = ({
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
   const toastIdRef = useRef(0);
   const controlsTimerRef = useRef<number | null>(null);
+  const isScrubbingRef = useRef(false);
   const prevStreamLinkRef = useRef<string | null>(null);
   const prePipStateRef = useRef<{ size: any; pos: any } | null>(null);
   const preFullscreenStateRef = useRef<{
@@ -755,7 +769,7 @@ const DesktopPlayer: React.FC<any> = ({
   ]);
 
   const hideControls = useCallback(() => {
-    if (!showShortcuts) setShowControls(false);
+    if (!showShortcuts && !isScrubbingRef.current) setShowControls(false);
   }, [showShortcuts]);
   const scheduleHide = useCallback(() => {
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
@@ -1121,7 +1135,7 @@ const DesktopPlayer: React.FC<any> = ({
               style={{
                 position: "absolute",
                 inset: 0,
-                backgroundColor: "rgba(0,0,0,0.85)",
+                backgroundColor: "rgba(0,0,0,0.92)",
                 backdropFilter: "blur(20px)",
                 zIndex: -1,
               }}
@@ -1139,7 +1153,7 @@ const DesktopPlayer: React.FC<any> = ({
           className="player-loading"
           style={{ background: bgUrl ? "transparent" : "#000" }}
         >
-          <div className="loading-spinner" />
+          <AnimatedHourglass sandColor={hourglassSandColor} />
           <span className="loading-text">Fetching stream...</span>
         </div>
       </div>
@@ -1220,6 +1234,17 @@ const DesktopPlayer: React.FC<any> = ({
         onSeek={(t) => {
           mpv.seek(t);
           revealControls();
+        }}
+        onRequestThumbnail={mpv.requestThumbnail}
+        thumbnailKey={`${selectedStream?.link || ""}:${activeEpisodeIndex}`}
+        onScrubbingChange={(scrubbing) => {
+          isScrubbingRef.current = scrubbing;
+          if (controlsTimerRef.current) {
+            clearTimeout(controlsTimerRef.current);
+            controlsTimerRef.current = null;
+          }
+          setShowControls(true);
+          if (!scrubbing) scheduleHide();
         }}
         onNextEpisode={handleNextEpisode}
         onPrevEpisode={handlePrevEpisode}

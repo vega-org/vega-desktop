@@ -1,0 +1,132 @@
+.animated-hourglass {
+  display: block;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.animated-hourglass__turn {
+  transform-box: view-box;
+  transform-origin: 52px 52px;
+  animation: animated-hourglass-turn 5.2s cubic-bezier(0.65, 0, 0.35, 1)
+    infinite;
+}
+
+.animated-hourglass__top,
+.animated-hourglass__bottom {
+  transform-box: fill-box;
+  transform-origin: center top;
+}
+
+.animated-hourglass__top {
+  animation: animated-hourglass-top 5.2s linear infinite;
+}
+
+.animated-hourglass__bottom {
+  transform: translateY(27px);
+  animation: animated-hourglass-bottom 5.2s linear infinite;
+}
+
+.animated-hourglass__stream {
+  opacity: 0;
+}
+
+.animated-hourglass__stream--fixed {
+  animation:
+    animated-hourglass-stream-both 5.2s linear infinite,
+    animated-hourglass-grains 0.34s linear infinite;
+}
+
+.animated-hourglass__grain {
+  animation: animated-hourglass-stream-both 5.2s linear infinite;
+}
+
+@keyframes animated-hourglass-top {
+  0%,
+  2% {
+    transform: translateY(0) scaleY(1);
+  }
+  34%,
+  45.99% {
+    transform: translateY(27px) scaleY(1);
+  }
+  46% {
+    transform: translateY(0) scaleY(0);
+  }
+  84%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+@keyframes animated-hourglass-bottom {
+  0%,
+  2% {
+    transform: translateY(27px) scaleY(1);
+  }
+  34%,
+  46% {
+    transform: translateY(0) scaleY(1);
+  }
+  84%,
+  99.99% {
+    transform: translateY(0) scaleY(0);
+  }
+  100% {
+    transform: translateY(27px) scaleY(1);
+  }
+}
+
+@keyframes animated-hourglass-turn {
+  0%,
+  36% {
+    transform: rotate(0);
+  }
+  46%,
+  86% {
+    transform: rotate(180deg);
+  }
+  96%,
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes animated-hourglass-stream-both {
+  0%,
+  2% {
+    opacity: 0;
+  }
+  4%,
+  32% {
+    opacity: 1;
+  }
+  34%,
+  48% {
+    opacity: 0;
+  }
+  50%,
+  82% {
+    opacity: 1;
+  }
+  84%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes animated-hourglass-grains {
+  to {
+    stroke-dashoffset: -9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated-hourglass__turn,
+  .animated-hourglass__top,
+  .animated-hourglass__bottom,
+  .animated-hourglass__stream,
+  .animated-hourglass__grain {
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+  }
+}

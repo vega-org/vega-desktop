@@ -9,6 +9,7 @@ dependencies = [
  "aes",
  "anyhow",
  "axum",
+ "base64 0.22.1",
  "cbc",
  "futures-util",
  "hex",
