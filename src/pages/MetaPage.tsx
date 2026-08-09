@@ -105,7 +105,7 @@ export const MetaPage: React.FC = () => {
 
   const bgImage = meta?.background || info?.background || info?.image;
   const cachedPosterImage = searchParams.get("poster") || "";
-  const posterImage = meta?.poster || info?.poster || cachedPosterImage || info?.image;
+  const posterImage = info?.poster || meta?.poster || cachedPosterImage || info?.image;
   const title = meta?.name || info?.title || "Untitled";
   const description = meta?.description || info?.synopsis || info?.description;
   const year = meta?.year || info?.year;
