@@ -6,6 +6,7 @@ import { LuArrowDownNarrowWide, LuArrowDownWideNarrow, LuArrowLeft, LuCircleAler
 import { ContentDetailSkeleton } from "../components/content/ContentDetailSkeleton";
 import { ContentHero } from "../components/content/ContentHero";
 import { ContentOverview } from "../components/content/ContentOverview";
+import { EpisodeDetailsDialog, type EpisodeDetails } from "../components/content/EpisodeDetailsDialog";
 import { EpisodeRow } from "../components/content/EpisodeRow";
 import { InfoStoryDialog } from "../components/content/InfoStoryDialog";
 import { SeasonSelector } from "../components/content/SeasonSelector";
@@ -24,7 +25,7 @@ import { useDownloadStore } from "../lib/zustand/downloadStore";
 import useWatchListStore from "../lib/zustand/watchListStore";
 import "./MetaPage.css";
 
-const EPISODE_SORT_ORDER_KEY = "episodeSortOrder";
+const EPISODE_SORT_ORDER_KEY_PREFIX = "episodeSortOrder";
 
 interface DialogContext {
   id: string;
@@ -50,6 +51,7 @@ export const MetaPage: React.FC = () => {
 
   const link = decodeURIComponent(url || "");
   const activeProviderValue = searchParams.get("provider") || provider?.value || "";
+  const episodeSortOrderKey = `${EPISODE_SORT_ORDER_KEY_PREFIX}:${activeProviderValue}:${link}`;
   const { info, meta, isLoading, error, refetch } = useContentDetails(link, activeProviderValue);
   const [activeSeason, setActiveSeason] = useState<Link | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -58,9 +60,10 @@ export const MetaPage: React.FC = () => {
   const [dialogContext, setDialogContext] = useState<DialogContext | null>(null);
   const [episodesProgress, setEpisodesProgress] = useState<Record<string, { position: number; duration: number }>>({});
   const [episodeSearch, setEpisodeSearch] = useState("");
+  const [episodeDetails, setEpisodeDetails] = useState<EpisodeDetails | null>(null);
   const [storyOpen, setStoryOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">(() =>
-    localStorage.getItem(EPISODE_SORT_ORDER_KEY) === "desc" ? "desc" : "asc",
+    localStorage.getItem(episodeSortOrderKey) === "desc" ? "desc" : "asc",
   );
 
   const excludedQualities = useMemo(() => settingsStorage.getExcludedQualities(), []);
@@ -76,6 +79,12 @@ export const MetaPage: React.FC = () => {
   useEffect(() => {
     document.querySelector<HTMLElement>(".layout-content")?.scrollTo(0, 0);
   }, [link]);
+
+  useEffect(() => {
+    setSortOrder(
+      localStorage.getItem(episodeSortOrderKey) === "desc" ? "desc" : "asc",
+    );
+  }, [episodeSortOrderKey]);
 
   useEffect(() => {
     if (!filteredLinkList.length) {
@@ -315,7 +324,7 @@ export const MetaPage: React.FC = () => {
                     onClick={() => {
                       const nextOrder = sortOrder === "asc" ? "desc" : "asc";
                       setSortOrder(nextOrder);
-                      localStorage.setItem(EPISODE_SORT_ORDER_KEY, nextOrder);
+                      localStorage.setItem(episodeSortOrderKey, nextOrder);
                     }}
                   >
                     {sortOrder === "asc" ? (
@@ -370,6 +379,11 @@ export const MetaPage: React.FC = () => {
                       onPlay={() => play(playableRows, index, rowType)}
                       onDownload={() => void prepareDownload(episode, sourceIndex, rowType, groupTitle, id)}
                       onDeleteDownload={() => void cancelDownload(storedDownloadId)}
+                      onShowDetails={episode.description?.trim() ? () => setEpisodeDetails({
+                        title: episode.title || displayTitle,
+                        description: episode.description.trim(),
+                        image: episode.image,
+                      }) : undefined}
                     />
                   );
                 })}
@@ -386,6 +400,10 @@ export const MetaPage: React.FC = () => {
           streams={dialogStreams}
           onSelect={selectStream}
           episodeTitle={dialogEpisodeTitle}
+        />
+        <EpisodeDetailsDialog
+          details={episodeDetails}
+          onClose={() => setEpisodeDetails(null)}
         />
         <InfoStoryDialog
           open={storyOpen}

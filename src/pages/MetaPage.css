@@ -518,14 +518,135 @@
   -webkit-line-clamp: 2;
 }
 
-.episode-copy small {
-  display: -webkit-box;
+.episode-description {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.episode-description small {
+  display: block;
+  max-height: 2.7em;
   overflow: hidden;
   color: #d4cbc9;
   font-size: 12px;
   line-height: 1.35;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+}
+
+.episode-more-button {
+  position: static;
+  display: inline;
+  padding: 0;
+  color: #d9d8d7;
+  font: inherit;
+  font-weight: 700;
+  background: none;
+}
+
+.episode-more-button:hover,
+.episode-more-button.tv-focus {
+  text-decoration: underline;
+}
+
+.episode-more-button.tv-focus {
+  outline: none;
+}
+
+.episode-details-overlay {
+  position: fixed;
+  z-index: 1300;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(12px);
+  animation: episode-details-fade-in 160ms ease-out;
+}
+
+.episode-details-dialog {
+  position: relative;
+  width: min(720px, 92vw);
+  max-height: min(88vh, 760px);
+  overflow: hidden;
+  border: 1px solid var(--outline-variant);
+  border-radius: 24px;
+  color: var(--on-surface);
+  background: var(--surface-container-high);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+  animation: episode-details-enter 190ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.episode-details-close {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(8px);
+}
+
+.episode-details-close:hover,
+.episode-details-close.tv-focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  background: rgba(0, 0, 0, 0.78);
+}
+
+.episode-details-media {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  place-items: center;
+  overflow: hidden;
+  color: var(--on-surface-variant);
+  background: var(--surface-container-highest);
+}
+
+.episode-details-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.episode-details-copy {
+  padding: 24px 26px 26px;
+}
+
+.episode-details-copy h2 {
+  margin: 0;
+  color: var(--on-surface);
+  font-size: clamp(22px, 2.4vw, 30px);
+  line-height: 1.2;
+}
+
+.episode-details-copy p {
+  max-height: 190px;
+  margin: 12px 0 0;
+  overflow: auto;
+  color: var(--on-surface-variant);
+  font-size: 16px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+@keyframes episode-details-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes episode-details-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
 }
 
 .content-episode-download {

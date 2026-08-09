@@ -667,7 +667,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                   {subtitleTracks
                     .find((t) => t.selected)
                     ?.lang?.toUpperCase()
-                    .slice(0, 2) || "OFF"}
+                    .slice(0, 2) || ""}
                 </span>
               </button>
               {openMenu === "subtitle" && (

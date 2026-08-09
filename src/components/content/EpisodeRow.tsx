@@ -1,4 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   LuDownload as Download,
   LuListEnd as Queued,
@@ -18,8 +24,10 @@ const DOWNLOAD_PROGRESS_RADIUS = 15;
 const createProgressPiePath = (progress: number) => {
   if (progress <= 0 || progress >= 1) return undefined;
   const endAngle = progress * Math.PI * 2 - Math.PI / 2;
-  const endX = DOWNLOAD_PROGRESS_CENTER + DOWNLOAD_PROGRESS_RADIUS * Math.cos(endAngle);
-  const endY = DOWNLOAD_PROGRESS_CENTER + DOWNLOAD_PROGRESS_RADIUS * Math.sin(endAngle);
+  const endX =
+    DOWNLOAD_PROGRESS_CENTER + DOWNLOAD_PROGRESS_RADIUS * Math.cos(endAngle);
+  const endY =
+    DOWNLOAD_PROGRESS_CENTER + DOWNLOAD_PROGRESS_RADIUS * Math.sin(endAngle);
   const largeArcFlag = progress > 0.5 ? 1 : 0;
 
   return [
@@ -30,10 +38,10 @@ const createProgressPiePath = (progress: number) => {
   ].join(" ");
 };
 
-const DownloadProgressPie: React.FC<{ progress: number; hasKnownTotal: boolean }> = ({
-  progress,
-  hasKnownTotal,
-}) => {
+const DownloadProgressPie: React.FC<{
+  progress: number;
+  hasKnownTotal: boolean;
+}> = ({ progress, hasKnownTotal }) => {
   const normalizedProgress = Math.min(1, Math.max(0, progress / 100));
   const progressPath = createProgressPiePath(normalizedProgress);
 
@@ -74,10 +82,12 @@ interface EpisodeRowProps {
   onPlay: () => void;
   onDownload: () => void;
   onDeleteDownload: () => void;
+  onShowDetails?: () => void;
 }
 
 const EpisodeMedia: React.FC<{ image?: string }> = ({ image }) => {
-  const source = image?.trim() && /^https?:\/\//i.test(image) ? image : undefined;
+  const source =
+    image?.trim() && /^https?:\/\//i.test(image) ? image : undefined;
   const [failed, setFailed] = useState(false);
 
   useEffect(() => setFailed(false), [source]);
@@ -85,7 +95,12 @@ const EpisodeMedia: React.FC<{ image?: string }> = ({ image }) => {
   return (
     <span className={`episode-media ${source && !failed ? "has-image" : ""}`}>
       {source && !failed ? (
-        <img src={source} alt="" loading="lazy" onError={() => setFailed(true)} />
+        <img
+          src={source}
+          alt=""
+          loading="lazy"
+          onError={() => setFailed(true)}
+        />
       ) : (
         <IoPlayCircle size={32} />
       )}
@@ -105,12 +120,110 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
   onPlay,
   onDownload,
   onDeleteDownload,
+  onShowDetails,
 }) => {
   const episodeDescription = description?.trim();
+  const descriptionRef = useRef<HTMLElement | null>(null);
+  const [descriptionTruncated, setDescriptionTruncated] = useState(false);
+  const [visibleDescription, setVisibleDescription] = useState(
+    episodeDescription ?? "",
+  );
   const progress =
     download?.status === "downloading" && download.totalBytes
       ? Math.min((download.downloadedBytes / download.totalBytes) * 100, 100)
       : progressPercent;
+
+  const measureDescription = useCallback(() => {
+    const element = descriptionRef.current;
+    if (!episodeDescription || !element || element.clientWidth <= 0) return;
+
+    const computed = window.getComputedStyle(element);
+    const lineHeight =
+      Number.parseFloat(computed.lineHeight) ||
+      Number.parseFloat(computed.fontSize) * 1.35;
+    const maxHeight = lineHeight * 2 + 1;
+    const measuringElement = document.createElement("span");
+    Object.assign(measuringElement.style, {
+      position: "fixed",
+      left: "-10000px",
+      top: "0",
+      display: "block",
+      visibility: "hidden",
+      pointerEvents: "none",
+      width: `${element.clientWidth}px`,
+      fontFamily: computed.fontFamily,
+      fontSize: computed.fontSize,
+      fontStyle: computed.fontStyle,
+      fontWeight: computed.fontWeight,
+      letterSpacing: computed.letterSpacing,
+      lineHeight: computed.lineHeight,
+      whiteSpace: "normal",
+      overflowWrap: "break-word",
+    });
+    document.body.appendChild(measuringElement);
+
+    const setMeasuredText = (text: string, withMore: boolean) => {
+      measuringElement.replaceChildren(document.createTextNode(text));
+      if (withMore) {
+        measuringElement.appendChild(document.createTextNode("… "));
+        const more = document.createElement("strong");
+        more.textContent = "More";
+        more.style.fontWeight = "700";
+        measuringElement.appendChild(more);
+      }
+    };
+
+    const sourceEndsWithEllipsis = /(?:\u2026|\.{3})\s*$/.test(
+      episodeDescription,
+    );
+    const descriptionToFit = sourceEndsWithEllipsis
+      ? episodeDescription.replace(/(?:\u2026|\.{3})\s*$/, "").trimEnd()
+      : episodeDescription;
+
+    setMeasuredText(episodeDescription, false);
+    const layoutIsTruncated = measuringElement.scrollHeight > maxHeight;
+    if (!layoutIsTruncated && !sourceEndsWithEllipsis) {
+      measuringElement.remove();
+      setVisibleDescription((current) =>
+        current === episodeDescription ? current : episodeDescription,
+      );
+      setDescriptionTruncated(false);
+      return;
+    }
+
+    let low = 1;
+    let high = descriptionToFit.length;
+    let fittingCharacterCount = 1;
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2);
+      setMeasuredText(descriptionToFit.slice(0, middle).trimEnd(), true);
+      if (measuringElement.scrollHeight <= maxHeight) {
+        fittingCharacterCount = middle;
+        low = middle + 1;
+      } else {
+        high = middle - 1;
+      }
+    }
+
+    measuringElement.remove();
+    const nextVisibleDescription = descriptionToFit
+      .slice(0, Math.max(1, fittingCharacterCount - 2))
+      .trimEnd();
+    setVisibleDescription((current) =>
+      current === nextVisibleDescription ? current : nextVisibleDescription,
+    );
+    setDescriptionTruncated(true);
+  }, [episodeDescription]);
+
+  useLayoutEffect(() => {
+    measureDescription();
+    const element = descriptionRef.current;
+    if (!element) return;
+
+    const observer = new ResizeObserver(measureDescription);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [measureDescription]);
 
   return (
     <article className={`content-episode-row ${watched ? "watched" : ""}`}>
@@ -123,7 +236,27 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
         <span className="episode-copy">
           <strong>{title}</strong>
           {episodeDescription && (
-            <small title={episodeDescription}>{episodeDescription}</small>
+            <span className="episode-description">
+              <small ref={descriptionRef}>
+                {visibleDescription}
+                {descriptionTruncated && onShowDetails && (
+                  <>
+                    {"… "}
+                    <FocusableButton
+                      className="episode-more-button"
+                      focusKey={`EPISODE_MORE_${index}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onShowDetails();
+                      }}
+                      aria-label={`Show full description for ${title}`}
+                    >
+                      more
+                    </FocusableButton>
+                  </>
+                )}
+              </small>
+            </span>
           )}
         </span>
       </FocusableButton>
@@ -147,7 +280,11 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
         ) : download?.status === "downloading" ? (
           <span
             className="episode-action-static"
-            title={download.totalBytes ? `Download ${Math.round(progress)}%` : "Downloading"}
+            title={
+              download.totalBytes
+                ? `Download ${Math.round(progress)}%`
+                : "Downloading"
+            }
           >
             <DownloadProgressPie
               progress={progress}
@@ -155,11 +292,17 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
             />
           </span>
         ) : download?.status === "queued" ? (
-          <span className="episode-action-static queued" title="Queued for download">
+          <span
+            className="episode-action-static queued"
+            title="Queued for download"
+          >
             <Queued size={20} />
           </span>
         ) : download?.status === "paused" ? (
-          <span className="episode-action-static paused" title="Download paused">
+          <span
+            className="episode-action-static paused"
+            title="Download paused"
+          >
             <Pause size={20} />
           </span>
         ) : download?.status === "error" ? (
@@ -180,7 +323,6 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
           </FocusableButton>
         )}
       </div>
-
     </article>
   );
 };
