@@ -1,12 +1,18 @@
-import React, { useRef, useEffect, useCallback } from "react";
+import React, {
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { LuArrowLeft as ArrowLeft } from "react-icons/lu";
 import { providerManager } from "../lib/services/ProviderManager";
 import { PostCardItem } from "../components/home/PostCardItem";
 import { FocusableButton } from "../components/layout/FocusableButton";
 import { Skeleton } from "../components/ui/skeleton";
-import { Spinner } from "../components/ui/spinner";
 import "./CatalogPage.css";
 
 export const CatalogPage: React.FC = () => {
@@ -16,7 +22,10 @@ export const CatalogPage: React.FC = () => {
   const searchQuery = searchParams.get("searchQuery") || "";
   const providerValue = searchParams.get("provider") || "";
   const navigate = useNavigate();
-  const observerTarget = useRef<HTMLDivElement>(null);
+  const catalogGridRef = useRef<HTMLDivElement>(null);
+  const [gridWidth, setGridWidth] = useState(0);
+  const [gridOffset, setGridOffset] = useState(0);
+  const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
 
   const {
     data,
@@ -62,32 +71,84 @@ export const CatalogPage: React.FC = () => {
       (typeof filter === "string" || typeof searchQuery === "string"),
   });
 
-  const handleObserver = useCallback(
-    (entries: IntersectionObserverEntry[]) => {
-      const [target] = entries;
-      if (target.isIntersecting && hasNextPage && !isFetchingNextPage) {
-        fetchNextPage();
-      }
-    },
-    [fetchNextPage, hasNextPage, isFetchingNextPage],
+  const posts = useMemo(() => data?.pages.flat() || [], [data]);
+  const compactGrid = gridWidth > 0 && gridWidth <= 768;
+  const gridGap = compactGrid ? 16 : 20;
+  const minimumCardWidth = compactGrid ? 140 : 150;
+  const columnCount = Math.max(
+    1,
+    Math.floor((gridWidth + gridGap) / (minimumCardWidth + gridGap)),
   );
+  const rowCount = Math.ceil(posts.length / columnCount);
+  const estimatedCardWidth = Math.min(
+    190,
+    Math.max(
+      minimumCardWidth,
+      (gridWidth - gridGap * (columnCount - 1)) / columnCount,
+    ),
+  );
+  const rowVirtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollElement,
+    estimateSize: () => estimatedCardWidth * 1.5 + 72 + gridGap,
+    overscan: 3,
+    scrollMargin: gridOffset,
+    getItemKey: (rowIndex) =>
+      `${posts[rowIndex * columnCount]?.link || "row"}-${rowIndex}`,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const lastVirtualRowIndex = virtualRows[virtualRows.length - 1]?.index;
+
+  useLayoutEffect(() => {
+    const grid = catalogGridRef.current;
+    if (!grid) return;
+
+    const scroller = grid.closest<HTMLElement>(".layout-content");
+    setScrollElement(scroller);
+    const updateMetrics = () => {
+      setGridWidth(grid.clientWidth);
+      if (scroller) {
+        setGridOffset(
+          grid.getBoundingClientRect().top -
+            scroller.getBoundingClientRect().top +
+            scroller.scrollTop,
+        );
+      }
+    };
+    updateMetrics();
+    const resizeObserver = new ResizeObserver(updateMetrics);
+    resizeObserver.observe(grid);
+    window.addEventListener("resize", updateMetrics);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateMetrics);
+    };
+  }, [posts.length, status]);
 
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+    rowVirtualizer.measure();
+  }, [columnCount, gridWidth, rowVirtualizer]);
 
   useEffect(() => {
-    const element = observerTarget.current;
-    if (!element) return;
-    const observer = new IntersectionObserver(handleObserver, {
-      threshold: 0,
-      rootMargin: "400px",
-    });
-    observer.observe(element);
-    return () => observer.unobserve(element);
-  }, [handleObserver]);
+    scrollElement?.scrollTo({ top: 0 });
+  }, [filter, providerValue, scrollElement, searchQuery]);
 
-  const posts = data?.pages.flat() || [];
+  useEffect(() => {
+    if (
+      lastVirtualRowIndex !== undefined &&
+      lastVirtualRowIndex >= rowCount - 3 &&
+      hasNextPage &&
+      !isFetchingNextPage
+    ) {
+      void fetchNextPage();
+    }
+  }, [
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    lastVirtualRowIndex,
+    rowCount,
+  ]);
 
   return (
     <div className="catalog-page">
@@ -125,38 +186,66 @@ export const CatalogPage: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div className="catalog-grid">
-          {posts.map((post, index) => (
-            <PostCardItem
-              key={`${post.link}-${index}`}
-              post={post}
-              onClick={(p) => {
-                const finalProvider = p.providerValue || providerValue;
-                let url = `/content/${encodeURIComponent(p.link)}`;
-                const params = new URLSearchParams();
-                if (finalProvider) params.append("provider", finalProvider);
-                if (p.image) params.append("poster", p.image);
-                const queryString = params.toString();
-                if (queryString) {
-                  url += `?${queryString}`;
-                }
-                navigate(url);
-              }}
-            />
+        <div
+          ref={catalogGridRef}
+          className="catalog-virtual-grid"
+          style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
+          {virtualRows.map((virtualRow) => {
+            const firstPostIndex = virtualRow.index * columnCount;
+            const rowPosts = posts.slice(
+              firstPostIndex,
+              firstPostIndex + columnCount,
+            );
+            return (
+              <div
+                key={virtualRow.key}
+                ref={rowVirtualizer.measureElement}
+                data-index={virtualRow.index}
+                className="catalog-virtual-row"
+                style={{
+                  gap: `${gridGap}px`,
+                  gridTemplateColumns: `repeat(${columnCount}, minmax(${minimumCardWidth}px, 190px))`,
+                  paddingBottom: `${gridGap}px`,
+                  transform: `translateY(${virtualRow.start - gridOffset}px)`,
+                }}>
+                {rowPosts.map((post, rowPostIndex) => (
+                  <PostCardItem
+                    key={`${post.link}-${firstPostIndex + rowPostIndex}`}
+                    post={post}
+                    onClick={(p) => {
+                      const finalProvider =
+                        p.providerValue || providerValue;
+                      let url = `/content/${encodeURIComponent(p.link)}`;
+                      const params = new URLSearchParams();
+                      if (finalProvider)
+                        params.append("provider", finalProvider);
+                      if (p.image) params.append("poster", p.image);
+                      const queryString = params.toString();
+                      if (queryString) url += `?${queryString}`;
+                      navigate(url);
+                    }}
+                  />
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {isFetchingNextPage && posts.length > 0 && (
+        <div className="catalog-grid catalog-next-page-skeletons">
+          {[...Array(columnCount)].map((_, index) => (
+            <div key={index} className="post-card">
+              <Skeleton className="skeleton-card" />
+              <Skeleton className="skeleton-card-title" />
+            </div>
           ))}
         </div>
       )}
 
-      {/* Loading trigger / indicator */}
-      <div ref={observerTarget} className="catalog-loading-more">
-        {isFetchingNextPage ? (
-          <Spinner size={32} label="Loading more titles" />
-        ) : hasNextPage ? (
-          <div className="catalog-loading-sentinel" />
-        ) : (
-          posts.length > 0 && (
-            <p className="text-muted body-md">You've reached the end.</p>
-          )
+      <div className="catalog-loading-more">
+        {!hasNextPage && posts.length > 0 && !isFetchingNextPage && (
+          <p className="text-muted body-md">You've reached the end.</p>
         )}
       </div>
     </div>

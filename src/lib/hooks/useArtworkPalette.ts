@@ -58,7 +58,7 @@ const mixHex = (color: string, target: string, amount: number) => {
 
 const decodeImage = async (source: string, objectUrl?: string) => {
   const image = new Image();
-  image.crossOrigin = "anonymous";
+  if (!objectUrl) image.crossOrigin = "anonymous";
   image.decoding = "async";
 
   try {
@@ -184,7 +184,11 @@ const extractPalette = (url: string) => {
   if (cached) return cached;
 
   const request = (async () => {
-    const loaders = [() => loadBrowserImage(url), () => loadTauriImage(url)];
+    // Remote artwork is commonly served without browser CORS headers. In the
+    // desktop runtime, fetch it natively first and decode the resulting local
+    // blob URL so palette extraction never triggers a rejected WebView image
+    // request. The browser loader remains a fallback for web development.
+    const loaders = [() => loadTauriImage(url), () => loadBrowserImage(url)];
     for (const load of loaders) {
       try {
         const { image, release } = await load();

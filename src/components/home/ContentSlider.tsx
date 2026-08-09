@@ -1,5 +1,9 @@
 import React, { useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { Swiper, SwiperSlide } from "swiper/react";
+import { FreeMode, Mousewheel, Virtual } from "swiper/modules";
+import type { Swiper as SwiperInstance } from "swiper";
+import "swiper/css";
 import {
   LuChevronLeft as ChevronLeft,
   LuChevronRight as ChevronRight,
@@ -33,7 +37,7 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
   searchQuery,
   onRemove,
 }) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const swiperRef = useRef<SwiperInstance | null>(null);
   const navigate = useNavigate();
   const tvMode = settingsStorage.isTvModeEnabled();
 
@@ -47,16 +51,8 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
   });
 
   const handleScroll = (direction: "left" | "right") => {
-    if (scrollRef.current) {
-      const scrollAmount = scrollRef.current.clientWidth * 0.8;
-      const targetScroll =
-        scrollRef.current.scrollLeft +
-        (direction === "left" ? -scrollAmount : scrollAmount);
-      scrollRef.current.scrollTo({
-        left: targetScroll,
-        behavior: "smooth",
-      });
-    }
+    if (direction === "left") swiperRef.current?.slidePrev();
+    else swiperRef.current?.slideNext();
   };
 
   const handlePostClick = (post: Post) => {
@@ -131,16 +127,53 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
             <ChevronLeft size={32} />
           </button>
 
-          <div className="slider-row" ref={scrollRef}>
+          <Swiper
+            className="slider-row"
+            modules={[Virtual, Mousewheel, FreeMode]}
+            onSwiper={(swiper) => {
+              swiperRef.current = swiper;
+            }}
+            slidesPerView="auto"
+            slidesPerGroupAuto
+            spaceBetween={16}
+            speed={320}
+            freeMode={{
+              enabled: true,
+              momentum: true,
+              sticky: false,
+            }}
+            mousewheel={{
+              enabled: true,
+              forceToAxis: true,
+              releaseOnEdges: true,
+              sensitivity: 1,
+            }}
+            breakpoints={{
+              0: { slidesOffsetBefore: 16, slidesOffsetAfter: 16 },
+              769: { slidesOffsetBefore: 44, slidesOffsetAfter: 44 },
+            }}
+            virtual={
+              posts.length > 24
+                ? {
+                    enabled: true,
+                    addSlidesBefore: 12,
+                    addSlidesAfter: 12,
+                  }
+                : false
+            }>
             {posts.map((post, index) => (
-              <PostCardItem
+              <SwiperSlide
+                className="content-slider-slide"
                 key={`${post.link}-${index}`}
-                post={post}
-                onClick={handlePostClick}
-                onRemove={onRemove}
-              />
+                virtualIndex={index}>
+                <PostCardItem
+                  post={post}
+                  onClick={handlePostClick}
+                  onRemove={onRemove}
+                />
+              </SwiperSlide>
             ))}
-          </div>
+          </Swiper>
 
           <button
             className="slider-arrow right"

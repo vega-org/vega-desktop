@@ -103,7 +103,7 @@ export const MetaPage: React.FC = () => {
     !!activeSeason?.episodesLink,
   );
 
-  const bgImage = meta?.background || info?.background || info?.image;
+  const bgImage = meta?.background || info?.image;
   const cachedPosterImage = searchParams.get("poster") || "";
   const posterImage = info?.poster || meta?.poster || cachedPosterImage || info?.image;
   const title = meta?.name || info?.title || "Untitled";
@@ -112,7 +112,9 @@ export const MetaPage: React.FC = () => {
   const webUrl = info?.webUrl?.trim();
   const trailerUrl = info?.trailerUrl?.trim();
   const dynamicThemeEnabled = settingsStorage.isInfoPageDynamicThemeEnabled();
-  const paletteArtwork = dynamicThemeEnabled ? posterImage || bgImage : null;
+  const paletteArtwork = dynamicThemeEnabled
+    ? meta?.poster || cachedPosterImage || info?.image || bgImage
+    : null;
   const paletteStyle = useArtworkPalette(paletteArtwork);
   const paletteReady = useArtworkPaletteReady(paletteArtwork);
   const providerName =

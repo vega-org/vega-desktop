@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { LuX as X } from "react-icons/lu";
 import { useFocusable } from "@noriginmedia/norigin-spatial-navigation-react";
 import { settingsStorage } from "../../lib/storage";
@@ -30,6 +30,10 @@ export const PostCardItem: React.FC<PostCardItemProps> = ({
   onRemove,
 }) => {
   const tvMode = settingsStorage.isTvModeEnabled();
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => setImageFailed(false), [post.image]);
+
   const progressPalette = useArtworkPalette(
     post.progress !== undefined ? post.image : null,
   );
@@ -66,12 +70,16 @@ export const PostCardItem: React.FC<PostCardItemProps> = ({
       aria-label={`Open ${post.title}`}
     >
       <div className="post-image-container">
-        <img
-          src={post.image}
-          alt={post.title}
-          className="post-image"
-          loading="lazy"
-        />
+        {post.image && !imageFailed && (
+          <img
+            src={post.image}
+            alt=""
+            className="post-image"
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={() => setImageFailed(true)}
+          />
+        )}
         {onRemove && (
           <button
             className="post-remove-btn"

@@ -26,6 +26,25 @@
   width: 100%;
 }
 
+.catalog-virtual-grid {
+  position: relative;
+  width: 100%;
+  min-height: 1px;
+}
+
+.catalog-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  width: 100%;
+  justify-content: space-between;
+}
+
+.catalog-virtual-row .post-card {
+  width: 100%;
+}
+
 .catalog-loading-sentinel {
   height: 20px;
 }
