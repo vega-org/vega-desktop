@@ -24,6 +24,7 @@
   z-index: 100;
   background: #000;
   gap: 24px;
+  pointer-events: none;
 }
 
 .loading-spinner {
@@ -1398,7 +1399,7 @@
   position: absolute;
   top: 28px;
   left: 28px;
-  z-index: 60;
+  z-index: 120;
   display: grid;
   width: 48px;
   height: 48px;
@@ -1408,6 +1409,7 @@
   background: rgba(20, 20, 20, 0.72);
   color: #fff;
   backdrop-filter: blur(12px);
+  cursor: pointer;
 }
 
 .player-loading-back:hover,

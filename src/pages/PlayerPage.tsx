@@ -221,15 +221,14 @@ const TvPlayer: React.FC<any> = ({
     focusable: true,
     trackChildren: true,
     isFocusBoundary: true,
-    preferredChildFocusKey: "TV_SERVER_0",
+    preferredChildFocusKey: streamLoading
+      ? "PLAYER_LOADING_BACK"
+      : "TV_SERVER_0",
   });
 
   useEffect(() => {
-    if (!streamLoading && !streamError) {
-      // Focus the boundary after loading completes and children render
-      const timer = setTimeout(() => focusSelf(), 50);
-      return () => clearTimeout(timer);
-    }
+    const timer = setTimeout(() => focusSelf(), 50);
+    return () => clearTimeout(timer);
   }, [focusSelf, streamLoading, streamError]);
 
   useEffect(() => {
@@ -327,35 +326,42 @@ const TvPlayer: React.FC<any> = ({
 
   if (streamLoading) {
     return (
-      <div
-        className="player-page"
-        style={{
-          backgroundImage: `url(${state.poster?.background})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      >
+      <FocusContext.Provider value={focusKey}>
         <div
-          className="player-page-overlay"
+          ref={focusRef}
+          className="player-page controls-visible"
           style={{
-            position: "absolute",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.92)",
-            backdropFilter: "blur(20px)",
+            backgroundImage: `url(${state.poster?.background})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
           }}
-        />
-        <FocusableButton
-          className="player-loading-back"
-          onClick={() => navigate(-1)}
-          aria-label="Go back"
         >
-          <ArrowLeft size={23} />
-        </FocusableButton>
-        <div className="player-loading" style={{ background: "transparent" }}>
-          <AnimatedHourglass sandColor={hourglassSandColor} />
-          <span className="loading-text">Fetching Stream...</span>
+          <div
+            className="player-page-overlay"
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.92)",
+              backdropFilter: "blur(20px)",
+            }}
+          />
+          <FocusableButton
+            className="player-loading-back"
+            focusKey="PLAYER_LOADING_BACK"
+            onClick={() => navigate(-1)}
+            aria-label="Go back"
+          >
+            <ArrowLeft size={23} />
+          </FocusableButton>
+          <div
+            className="player-loading"
+            style={{ background: "transparent" }}
+          >
+            <AnimatedHourglass sandColor={hourglassSandColor} />
+            <span className="loading-text">Fetching Stream...</span>
+          </div>
         </div>
-      </div>
+      </FocusContext.Provider>
     );
   }
 
@@ -824,7 +830,6 @@ const DesktopPlayer: React.FC<any> = ({
       ) {
         return;
       }
-      revealControls();
       const key = e.key.toLowerCase();
       switch (key) {
         case " ":
@@ -1144,6 +1149,7 @@ const DesktopPlayer: React.FC<any> = ({
         )}
         <FocusableButton
           className="player-loading-back"
+          focusKey="PLAYER_LOADING_BACK"
           onClick={() => navigate(-1)}
           aria-label="Go back"
         >
