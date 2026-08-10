@@ -9,6 +9,7 @@ import {
   listenEvents,
   type MpvObservableProperty,
 } from "tauri-plugin-libmpv-api";
+import { invoke } from "@tauri-apps/api/core";
 import { settingsStorage } from "../storage/SettingsStorage";
 
 const OBSERVED_PROPERTIES = [
@@ -196,32 +197,32 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
       await destroyPromise;
     }
 
+    const hwAccel = settingsStorage.isHardwareAccelerationEnabled();
+    const initialOptions: Record<string, string> = {
+      "keep-open": "yes",
+      "force-window": "no",
+      "osd-level": "0",
+      "sub-auto": "fuzzy",
+      "sub-font-size": (
+        settingsStorage.getSubtitleFontSize() || 36
+      ).toString(),
+      "sub-border-size": "2",
+      "sub-shadow-offset": "1",
+      "sub-margin-y": (
+        settingsStorage.getSubtitleBottomPadding() || 36
+      ).toString(),
+      "sub-ass-override": "force",
+      "demuxer-lavf-o": "fflags=+genpts",
+    };
+
+    if (hwAccel) {
+      initialOptions["vo"] = "gpu-next";
+      initialOptions["hwdec"] = "auto-safe";
+    }
+
     if (!globalInitPromise) {
       globalInitPromise = (async () => {
         try {
-          const hwAccel = settingsStorage.isHardwareAccelerationEnabled();
-          const initialOptions: Record<string, string> = {
-            "keep-open": "yes",
-            "force-window": "no",
-            "osd-level": "0",
-            "sub-auto": "fuzzy",
-            "sub-font-size": (
-              settingsStorage.getSubtitleFontSize() || 36
-            ).toString(),
-            "sub-border-size": "2",
-            "sub-shadow-offset": "1",
-            "sub-margin-y": (
-              settingsStorage.getSubtitleBottomPadding() || 36
-            ).toString(),
-            "sub-ass-override": "force",
-            "demuxer-lavf-o": "fflags=+genpts",
-          };
-
-          if (hwAccel) {
-            initialOptions["vo"] = "gpu-next";
-            initialOptions["hwdec"] = "auto-safe";
-          }
-
           await init({
             initialOptions,
             observedProperties: OBSERVED_PROPERTIES,
@@ -237,7 +238,21 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     try {
       await globalInitPromise;
     } catch (err) {
-      setInitializationError(err instanceof Error ? err.message : String(err));
+      const originalError = err instanceof Error ? err.message : String(err);
+      try {
+        const diagnostic = await invoke<string>("diagnose_mpv_initialization", {
+          initialOptions,
+        });
+        setInitializationError(`${originalError}\n\n${diagnostic}`);
+      } catch (diagnosticError) {
+        setInitializationError(
+          `${originalError}\n\nMPV diagnostic failed: ${
+            diagnosticError instanceof Error
+              ? diagnosticError.message
+              : String(diagnosticError)
+          }`,
+        );
+      }
       return;
     }
 

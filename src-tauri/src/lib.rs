@@ -504,6 +504,277 @@ fn ensure_window_in_work_area(window: tauri::WebviewWindow, maximized: bool) -> 
     Ok(())
 }
 
+#[tauri::command]
+fn diagnose_mpv_initialization(
+    window: tauri::WebviewWindow,
+    mut initial_options: HashMap<String, serde_json::Value>,
+) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        use libloading::Library;
+        use std::ffi::{c_char, c_int, c_void, CStr, CString};
+
+        #[repr(C)]
+        struct RtlOsVersionInfoW {
+            size: u32,
+            major: u32,
+            minor: u32,
+            build: u32,
+            platform_id: u32,
+            service_pack: [u16; 128],
+        }
+
+        #[link(name = "ntdll")]
+        unsafe extern "system" {
+            fn RtlGetVersion(version: *mut RtlOsVersionInfoW) -> i32;
+        }
+
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn GetCurrentPackageFullName(length: *mut u32, name: *mut u16) -> i32;
+        }
+
+        type MpvCreate = unsafe extern "C" fn() -> *mut c_void;
+        type MpvCreateClient = unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut c_void;
+        type MpvSetOptionString =
+            unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char) -> c_int;
+        type MpvInitialize = unsafe extern "C" fn(*mut c_void) -> c_int;
+        type MpvErrorString = unsafe extern "C" fn(c_int) -> *const c_char;
+        type MpvDestroy = unsafe extern "C" fn(*mut c_void);
+        type MpvTerminateDestroy = unsafe extern "C" fn(*mut c_void);
+
+        fn windows_version() -> String {
+            let mut version = RtlOsVersionInfoW {
+                size: std::mem::size_of::<RtlOsVersionInfoW>() as u32,
+                major: 0,
+                minor: 0,
+                build: 0,
+                platform_id: 0,
+                service_pack: [0; 128],
+            };
+            if unsafe { RtlGetVersion(&mut version) } == 0 {
+                format!("{}.{}.{}", version.major, version.minor, version.build)
+            } else {
+                "unavailable".to_string()
+            }
+        }
+
+        fn package_identity() -> String {
+            const ERROR_INSUFFICIENT_BUFFER: i32 = 122;
+            const APPMODEL_ERROR_NO_PACKAGE: i32 = 15700;
+            let mut length = 0u32;
+            let status = unsafe { GetCurrentPackageFullName(&mut length, std::ptr::null_mut()) };
+            if status == APPMODEL_ERROR_NO_PACKAGE {
+                return "NSIS or unpackaged".to_string();
+            }
+            if status != ERROR_INSUFFICIENT_BUFFER || length == 0 {
+                return format!("unknown (Windows status {status})");
+            }
+
+            let mut buffer = vec![0u16; length as usize];
+            let status = unsafe { GetCurrentPackageFullName(&mut length, buffer.as_mut_ptr()) };
+            if status != 0 {
+                return format!("MSIX identity unavailable (Windows status {status})");
+            }
+            let end = buffer
+                .iter()
+                .position(|value| *value == 0)
+                .unwrap_or(buffer.len());
+            format!("MSIX ({})", String::from_utf16_lossy(&buffer[..end]))
+        }
+
+        fn error_text(error_string: MpvErrorString, code: c_int) -> String {
+            let value = unsafe { error_string(code) };
+            if value.is_null() {
+                format!("native error code {code}")
+            } else {
+                unsafe { CStr::from_ptr(value) }
+                    .to_string_lossy()
+                    .into_owned()
+            }
+        }
+
+        let app_version = window.app_handle().package_info().version.to_string();
+        let process_architecture = std::env::consts::ARCH;
+        let os_architecture = std::env::var("PROCESSOR_ARCHITEW6432")
+            .or_else(|_| std::env::var("PROCESSOR_ARCHITECTURE"))
+            .unwrap_or_else(|_| "unavailable".to_string());
+        let cpu =
+            std::env::var("PROCESSOR_IDENTIFIER").unwrap_or_else(|_| "unavailable".to_string());
+        let hardware_acceleration = if initial_options.contains_key("hwdec") {
+            "enabled"
+        } else {
+            "disabled"
+        };
+        let system_details = format!(
+            "System details:\nVega: {app_version}\nWindows: {}\nProcess architecture: {process_architecture}\nOS architecture: {os_architecture}\nCPU: {cpu}\nInstallation: {}\nHardware acceleration: {hardware_acceleration}",
+            windows_version(),
+            package_identity(),
+        );
+        let report = |detail: String| format!("{detail}\n\n{system_details}");
+
+        macro_rules! finish {
+            ($($arg:tt)*) => {
+                return report(format!($($arg)*))
+            };
+        }
+
+        let exe_dir = match std::env::current_exe()
+            .ok()
+            .and_then(|path| path.parent().map(|parent| parent.to_path_buf()))
+        {
+            Some(path) => path,
+            None => finish!("Could not resolve Vega's installation directory."),
+        };
+        let candidates = [
+            exe_dir.join("lib").join("libmpv-2.dll"),
+            exe_dir.join("libmpv-2.dll"),
+        ];
+        let Some(lib_path) = candidates.iter().find(|path| path.is_file()) else {
+            finish!(
+                "Bundled libmpv-2.dll was not found. Checked: {}",
+                candidates
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        };
+
+        let mpv_size = std::fs::metadata(lib_path).map(|value| value.len()).ok();
+        let wrapper_path = lib_path.with_file_name("libmpv-wrapper.dll");
+        let wrapper_size = std::fs::metadata(&wrapper_path)
+            .map(|value| value.len())
+            .ok();
+        let library_details = format!(
+            "Bundled libraries:\nlibmpv-2.dll: {}\nlibmpv-wrapper.dll: {}",
+            mpv_size
+                .map(|size| format!("present ({size} bytes)"))
+                .unwrap_or_else(|| "missing".to_string()),
+            wrapper_size
+                .map(|size| format!("present ({size} bytes)"))
+                .unwrap_or_else(|| "missing".to_string()),
+        );
+        let report = |detail: String| format!("{detail}\n\n{system_details}\n\n{library_details}");
+
+        let library = match unsafe { Library::new(lib_path) } {
+            Ok(library) => library,
+            Err(error) => {
+                return report(format!(
+                    "Windows could not load bundled libmpv-2.dll from '{}': {error}. This normally identifies a missing dependency, incompatible Windows build, blocked DLL, or architecture mismatch.",
+                    lib_path.display()
+                ));
+            }
+        };
+
+        macro_rules! load_symbol {
+            ($name:literal, $type:ty) => {
+                match unsafe { library.get::<$type>(concat!($name, "\0").as_bytes()) } {
+                    Ok(symbol) => *symbol,
+                    Err(error) => {
+                        return report(format!(
+                            "Bundled libmpv-2.dll is missing required symbol '{}': {error}",
+                            $name
+                        ))
+                    }
+                }
+            };
+        }
+
+        let mpv_create = load_symbol!("mpv_create", MpvCreate);
+        let mpv_create_client = load_symbol!("mpv_create_client", MpvCreateClient);
+        let mpv_set_option_string = load_symbol!("mpv_set_option_string", MpvSetOptionString);
+        let mpv_initialize = load_symbol!("mpv_initialize", MpvInitialize);
+        let mpv_error_string = load_symbol!("mpv_error_string", MpvErrorString);
+        let mpv_destroy = load_symbol!("mpv_destroy", MpvDestroy);
+        let mpv_terminate_destroy = load_symbol!("mpv_terminate_destroy", MpvTerminateDestroy);
+
+        let handle = unsafe { mpv_create() };
+        if handle.is_null() {
+            return report("libmpv loaded, but mpv_create() returned null (usually an allocation or broken-runtime failure).".to_string());
+        }
+
+        let client_name = CString::new("vega-diagnostic").expect("static string is valid");
+        let client = unsafe { mpv_create_client(handle, client_name.as_ptr()) };
+        if client.is_null() {
+            unsafe { mpv_terminate_destroy(handle) };
+            return report(
+                "mpv_create_client() returned null after the main MPV handle was created."
+                    .to_string(),
+            );
+        }
+
+        if let Ok(hwnd) = window.hwnd() {
+            initial_options.insert(
+                "wid".to_string(),
+                serde_json::Value::String((hwnd.0 as isize).to_string()),
+            );
+        }
+
+        for (name, value) in initial_options {
+            let value = match value {
+                serde_json::Value::Bool(value) => if value { "yes" } else { "no" }.to_string(),
+                serde_json::Value::Number(value) => value.to_string(),
+                serde_json::Value::String(value) => value,
+                _ => continue,
+            };
+            let Ok(c_name) = CString::new(name.as_str()) else {
+                unsafe {
+                    mpv_destroy(client);
+                    mpv_terminate_destroy(handle);
+                }
+                return report(format!(
+                    "MPV option name contains an invalid null byte: {name:?}"
+                ));
+            };
+            let Ok(c_value) = CString::new(value.as_str()) else {
+                unsafe {
+                    mpv_destroy(client);
+                    mpv_terminate_destroy(handle);
+                }
+                return report(format!(
+                    "MPV option '{name}' contains an invalid null byte."
+                ));
+            };
+            let result =
+                unsafe { mpv_set_option_string(handle, c_name.as_ptr(), c_value.as_ptr()) };
+            if result < 0 {
+                let detail = error_text(mpv_error_string, result);
+                unsafe {
+                    mpv_destroy(client);
+                    mpv_terminate_destroy(handle);
+                }
+                return report(format!(
+                    "MPV rejected option '{name}={value}': {detail} ({result})."
+                ));
+            }
+        }
+
+        let result = unsafe { mpv_initialize(handle) };
+        if result < 0 {
+            let detail = error_text(mpv_error_string, result);
+            unsafe {
+                mpv_destroy(client);
+                mpv_terminate_destroy(handle);
+            }
+            return report(format!("mpv_initialize() failed: {detail} ({result})."));
+        }
+
+        unsafe {
+            mpv_destroy(client);
+            mpv_terminate_destroy(handle);
+        }
+        report("Direct libmpv initialization succeeded. The failure is inside the bundled libmpv wrapper integration rather than MPV or its system dependencies.".to_string())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (window, initial_options);
+        "Detailed MPV initialization diagnostics are currently available on Windows only."
+            .to_string()
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "windows")]
@@ -590,6 +861,7 @@ pub fn run() {
             toggle_devtools,
             set_player_fullscreen,
             ensure_window_in_work_area,
+            diagnose_mpv_initialization,
             doh_client::doh_fetch,
             sync_manifest::read_sync_manifests,
             sync_manifest::write_sync_manifest,

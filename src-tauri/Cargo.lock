@@ -15,6 +15,7 @@ dependencies = [
  "hex",
  "hickory-resolver",
  "lazy_static",
+ "libloading 0.8.9",
  "librqbit",
  "librqbit-dualstack-sockets",
  "m3u8-rs",
