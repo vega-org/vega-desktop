@@ -513,6 +513,15 @@ fn diagnose_mpv_initialization(
     {
         use libloading::Library;
         use std::ffi::{c_char, c_int, c_void, CStr, CString};
+        use std::os::windows::ffi::OsStrExt;
+        use std::path::Path;
+        use windows::{
+            core::PCWSTR,
+            Win32::{
+                Foundation::{GetLastError, SetLastError, WIN32_ERROR},
+                System::LibraryLoader::{FreeLibrary, LoadLibraryW},
+            },
+        };
 
         #[repr(C)]
         struct RtlOsVersionInfoW {
@@ -594,6 +603,43 @@ fn diagnose_mpv_initialization(
             }
         }
 
+        // `libloading` formats its own error and does not retain GetLastError.
+        // Probe with LoadLibraryW on failure so support reports the actual
+        // Win32 loader code (126, 193, 577, 1114, etc.).
+        fn loader_error(path: &Path) -> Option<u32> {
+            let wide_path: Vec<u16> = path
+                .as_os_str()
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+            unsafe { SetLastError(WIN32_ERROR(0)) };
+            let module = unsafe { LoadLibraryW(PCWSTR(wide_path.as_ptr())) };
+            if module.0 != 0 {
+                let _ = unsafe { FreeLibrary(module) };
+                None
+            } else {
+                Some(unsafe { GetLastError().0 })
+            }
+        }
+
+        fn loader_error_details(path: &Path) -> String {
+            let Some(code) = loader_error(path) else {
+                return "Windows loader probe unexpectedly succeeded after libloading failed."
+                    .to_string();
+            };
+
+            let category = match code {
+                126 => "ERROR_MOD_NOT_FOUND: libmpv or one of its dependent DLLs is missing",
+                193 => "ERROR_BAD_EXE_FORMAT: architecture mismatch or an invalid DLL",
+                577 => "ERROR_INVALID_IMAGE_HASH: the DLL was blocked by signature or policy",
+                1114 => "ERROR_DLL_INIT_FAILED: a DLL dependency failed during initialization",
+                1157 => "ERROR_DLL_NOT_FOUND: a required dependent DLL is missing",
+                _ => "See the Windows system message below",
+            };
+            let system_message = std::io::Error::from_raw_os_error(code as i32);
+            format!("Windows loader error: {code} ({category})\nWindows message: {system_message}")
+        }
+
         let app_version = window.app_handle().package_info().version.to_string();
         let process_architecture = std::env::consts::ARCH;
         let os_architecture = std::env::var("PROCESSOR_ARCHITEW6432")
@@ -661,8 +707,9 @@ fn diagnose_mpv_initialization(
             Ok(library) => library,
             Err(error) => {
                 return report(format!(
-                    "Windows could not load bundled libmpv-2.dll from '{}': {error}. This normally identifies a missing dependency, incompatible Windows build, blocked DLL, or architecture mismatch.",
-                    lib_path.display()
+                    "Windows could not load bundled libmpv-2.dll from '{}': {error}.\n{}",
+                    lib_path.display(),
+                    loader_error_details(lib_path),
                 ));
             }
         };

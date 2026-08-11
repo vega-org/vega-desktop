@@ -16,7 +16,7 @@ fn main() {
                 .unwrap_or(false)
         }) {
             let lib_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("lib");
-            
+
             let libs = if target_os == "windows" {
                 vec!["libmpv-wrapper.dll", "libmpv-2.dll"]
             } else if target_os == "macos" {
@@ -35,7 +35,11 @@ fn main() {
                             != fs::metadata(&dst).ok().map(|m| m.len()))
                 {
                     let _ = fs::copy(&src, &dst);
-                    println!("cargo:warning=Copied {} to {}", lib_name, target_debug.display());
+                    println!(
+                        "cargo:warning=Copied {} to {}",
+                        lib_name,
+                        target_debug.display()
+                    );
                 }
             }
         }
