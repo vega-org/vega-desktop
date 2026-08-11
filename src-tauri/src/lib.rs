@@ -519,7 +519,7 @@ fn diagnose_mpv_initialization(
             core::PCWSTR,
             Win32::{
                 Foundation::{GetLastError, SetLastError, WIN32_ERROR},
-                System::LibraryLoader::{FreeLibrary, LoadLibraryW},
+                System::LibraryLoader::LoadLibraryW,
             },
         };
 
@@ -613,12 +613,13 @@ fn diagnose_mpv_initialization(
                 .chain(std::iter::once(0))
                 .collect();
             unsafe { SetLastError(WIN32_ERROR(0)) };
-            let module = unsafe { LoadLibraryW(PCWSTR(wide_path.as_ptr())) };
-            if module.0 != 0 {
-                let _ = unsafe { FreeLibrary(module) };
-                None
-            } else {
-                Some(unsafe { GetLastError().0 })
+            match unsafe { LoadLibraryW(PCWSTR(wide_path.as_ptr())) } {
+                // This diagnostic path is only reached after the real loader
+                // failed. Keeping this probe handle until process exit is
+                // harmless and avoids relying on an API not enabled by every
+                // version of the `windows` crate used in CI.
+                Ok(_) => None,
+                Err(_) => Some(unsafe { GetLastError().0 }),
             }
         }
 
