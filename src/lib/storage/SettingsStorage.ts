@@ -53,6 +53,7 @@ export enum SettingsKeys {
   EXTERNAL_PLAYER_ENABLED = "externalPlayerEnabled",
   VLC_ENABLED = "vlcEnabled",
   VLC_PATH = "vlcPath",
+  PLAYER_ZOOM = "playerZoom",
 }
 
 /**
@@ -392,6 +393,16 @@ export class SettingsStorage {
 
   setDohCustomUrl(url: string): void {
     mainStorage.setString("dohCustomUrl", url);
+  }
+
+  // Player Zoom level
+  getPlayerZoom(): number {
+    const val = mainStorage.getNumber(SettingsKeys.PLAYER_ZOOM);
+    return val && val >= 50 && val <= 300 ? val : 100;
+  }
+
+  setPlayerZoom(zoom: number): void {
+    mainStorage.setNumber(SettingsKeys.PLAYER_ZOOM, zoom);
   }
 }
 

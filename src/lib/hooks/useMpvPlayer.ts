@@ -202,6 +202,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
       "keep-open": "yes",
       "force-window": "no",
       "osd-level": "0",
+      "volume-max": "200",
       "sub-auto": "fuzzy",
       "sub-font-size": (
         settingsStorage.getSubtitleFontSize() || 36
@@ -752,7 +753,8 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     async (level: number) => {
       if (!isInitialized) return;
       try {
-        const vol = Math.max(0, Math.min(150, level));
+        const vol = Math.max(0, Math.min(200, level));
+        await setProperty("volume-max", 200).catch(() => {});
         await setProperty("volume", vol);
       } catch (err) {
         console.error("Failed to set volume:", err);

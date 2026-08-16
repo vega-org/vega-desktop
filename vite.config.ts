@@ -26,10 +26,18 @@ export default defineConfig(({ mode }) => {
     getSharedMobileTmdbKey() ||
     "";
 
+  const proxyApiUrl =
+    desktopEnv.PROXY_API_URL ||
+    desktopEnv.VITE_PROXY_API_URL ||
+    desktopEnv.META_PROXY_URL ||
+    desktopEnv.VITE_META_PROXY_URL ||
+    "";
+
   return {
     plugins: [react(), tailwindcss()],
     define: {
       "import.meta.env.VITE_TMDB_API_KEY": JSON.stringify(tmdbApiKey),
+      "import.meta.env.VITE_PROXY_API_URL": JSON.stringify(proxyApiUrl),
     },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

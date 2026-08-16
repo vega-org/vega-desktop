@@ -162,7 +162,7 @@ const sandboxAxiosAdapter: AxiosAdapter = async (config) => {
     }
   }
 
-  return {
+  const result = {
     data,
     status: response.status,
     statusText: response.statusText,
@@ -170,6 +170,24 @@ const sandboxAxiosAdapter: AxiosAdapter = async (config) => {
     config,
     request: { url },
   };
+
+  const validateStatus =
+    config.validateStatus ||
+    ((status: number) => status >= 200 && status < 300);
+
+  if (!validateStatus(response.status)) {
+    const error: any = new Error(
+      "Request failed with status code " + response.status,
+    );
+    error.config = config;
+    error.request = { url };
+    error.response = result;
+    error.isAxiosError = true;
+    error.status = response.status;
+    throw error;
+  }
+
+  return result;
 };
 
 axios.defaults.adapter = sandboxAxiosAdapter;

@@ -20,6 +20,9 @@ import {
   LuEllipsisVertical as MoreVertical,
   LuExternalLink as ExternalLink,
   LuCopy as Copy,
+  LuZoomIn as ZoomIn,
+  LuPlus as Plus,
+  LuMinus as Minus,
 } from "react-icons/lu";
 import {
   MdVideoSettings,
@@ -74,6 +77,11 @@ interface PlayerControlsProps {
   isPip: boolean;
   onToggleCrop: () => void;
   isCropped: boolean;
+  zoomLevel?: number;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onResetZoom?: () => void;
+  onSetZoom?: (zoom: number) => void;
   onPlayNative?: () => void;
   onOpenVlc?: () => void;
   onCopyLink?: () => void;
@@ -163,6 +171,11 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   isPip,
   onToggleCrop,
   isCropped,
+  zoomLevel = 100,
+  onZoomIn,
+  onZoomOut,
+  onResetZoom,
+  onSetZoom,
   onPlayNative,
   onOpenVlc,
   onCopyLink,
@@ -196,7 +209,41 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     | null
   >(null);
   const [showOnlineSearch, setShowOnlineSearch] = useState(false);
+  const [isEditingZoom, setIsEditingZoom] = useState(false);
+  const [customZoomInput, setCustomZoomInput] = useState(String(zoomLevel));
+  const zoomInputRef = useRef<HTMLInputElement>(null);
   const showSeekButtons = !settingsStorage.hideSeekButtons();
+
+  useEffect(() => {
+    if (!isEditingZoom) {
+      setCustomZoomInput(String(zoomLevel));
+    }
+  }, [zoomLevel, isEditingZoom]);
+
+  useEffect(() => {
+    if (isEditingZoom && zoomInputRef.current) {
+      zoomInputRef.current.focus();
+      zoomInputRef.current.select();
+    }
+  }, [isEditingZoom]);
+
+  useEffect(() => {
+    if (openMenu !== "more") {
+      setIsEditingZoom(false);
+    }
+  }, [openMenu]);
+
+  const handleSaveCustomZoom = useCallback(() => {
+    const parsed = parseInt(customZoomInput, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      const clamped = Math.min(300, Math.max(50, parsed));
+      onSetZoom?.(clamped);
+      setCustomZoomInput(String(clamped));
+    } else {
+      setCustomZoomInput(String(zoomLevel));
+    }
+    setIsEditingZoom(false);
+  }, [customZoomInput, zoomLevel, onSetZoom]);
 
   useEffect(() => {
     thumbnailCacheRef.current.clear();
@@ -934,6 +981,87 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
               </button>
               {openMenu === "more" && (
                 <div className="inline-menu right wide" onClick={stop}>
+                  <div className="inline-menu-zoom-row">
+                    <div className="inline-menu-zoom-label">
+                      <ZoomIn size={18} />
+                      <span>Zoom</span>
+                    </div>
+                    <div className="inline-menu-zoom-actions">
+                      <button
+                        type="button"
+                        className="zoom-stepper-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onZoomOut?.();
+                        }}
+                        disabled={zoomLevel <= 50}
+                        title="Zoom out (-10%)"
+                        aria-label="Zoom out"
+                      >
+                        <Minus size={13} />
+                      </button>
+                      {isEditingZoom ? (
+                        <div
+                          className="zoom-input-wrapper"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            ref={zoomInputRef}
+                            type="number"
+                            min={50}
+                            max={300}
+                            step={1}
+                            className="zoom-level-input"
+                            value={customZoomInput}
+                            onChange={(e) => setCustomZoomInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleSaveCustomZoom();
+                              } else if (e.key === "Escape") {
+                                e.preventDefault();
+                                setCustomZoomInput(String(zoomLevel));
+                                setIsEditingZoom(false);
+                              }
+                            }}
+                            onBlur={handleSaveCustomZoom}
+                          />
+                          <span className="zoom-input-percent">%</span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className={`zoom-level-badge ${zoomLevel !== 100 ? "custom" : ""}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCustomZoomInput(String(zoomLevel));
+                            setIsEditingZoom(true);
+                          }}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            onResetZoom?.();
+                          }}
+                          title="Click to enter custom zoom %, double-click to reset"
+                        >
+                          {zoomLevel}%
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="zoom-stepper-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onZoomIn?.();
+                        }}
+                        disabled={zoomLevel >= 300}
+                        title="Zoom in (+10%)"
+                        aria-label="Zoom in"
+                      >
+                        <Plus size={13} />
+                      </button>
+                    </div>
+                  </div>
                   {onToggleShortcuts && (
                     <button
                       className="inline-menu-item"
@@ -1011,6 +1139,8 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                 ["A", "Next audio track"],
                 ["T", "Next subtitle track"],
                 ["Shift + , / .", "Decrease or increase speed"],
+                ["+ / -", "Zoom in or out"],
+                ["0", "Reset zoom (100%)"],
                 ["S", "Skip to next chapter"],
                 ["M", "Mute or unmute"],
                 ["F", "Toggle fullscreen"],

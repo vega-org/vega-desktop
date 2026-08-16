@@ -36,3 +36,12 @@ export function getGlobalCookies(url: string): string | undefined {
     return undefined;
   }
 }
+
+export function clearGlobalCookies(url: string) {
+  try {
+    const domain = new URL(url).origin;
+    localStorage.removeItem(`vega_waf_cookie_${domain}`);
+  } catch (e) {
+    console.error('Failed to clear cookie from localStorage', e);
+  }
+}

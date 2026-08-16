@@ -171,7 +171,8 @@ export class ProviderManager {
     }
     if (operation === "openWebView") {
       const url = this.validateProviderUrl(args?.url);
-      return openWebView(url.toString(), args?.options);
+      const result = await openWebView(url.toString(), args?.options);
+      return { ...result, cookie: result.cookies };
     }
     if (operation === "fetch") {
       const url = this.validateProviderUrl(args?.url);

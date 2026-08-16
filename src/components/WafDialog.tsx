@@ -164,7 +164,6 @@ export const WafDialog: React.FC = () => {
         height: 600,
         center: true,
         userAgent: customUserAgent,
-        incognito: true,
       });
 
       webviewRef.current = webview;

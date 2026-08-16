@@ -176,6 +176,8 @@ export interface OpenWebViewResult {
   data: string;
   // Cookie header value, e.g. "cf_clearance=abc; other=def".
   cookies: string;
+  // Backward-compatible alias used by older provider modules.
+  cookie?: string;
   // Cookies as a name -> value map.
   cookieMap: Record<string, string>;
   // The User-Agent used by the WebView.

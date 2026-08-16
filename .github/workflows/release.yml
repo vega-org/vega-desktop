@@ -12,6 +12,7 @@ jobs:
       contents: write
     env:
       VITE_TMDB_API_KEY: ${{ secrets.VITE_TMDB_API_KEY || secrets.TMDB_API_KEY }}
+      VITE_PROXY_API_URL: ${{ secrets.VITE_PROXY_API_URL || secrets.PROXY_API_URL }}
     strategy:
       fail-fast: false
       matrix:
@@ -120,6 +121,7 @@ jobs:
       contents: write
     env:
       VITE_TMDB_API_KEY: ${{ secrets.VITE_TMDB_API_KEY || secrets.TMDB_API_KEY }}
+      VITE_PROXY_API_URL: ${{ secrets.VITE_PROXY_API_URL || secrets.PROXY_API_URL }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

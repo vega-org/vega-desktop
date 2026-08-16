@@ -6,13 +6,13 @@ import React, {
   useMemo,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useMpvPlayer } from "../lib/hooks/useMpvPlayer";
+import { useMpvPlayer, type MpvTrack } from "../lib/hooks/useMpvPlayer";
 import { useStream } from "../lib/hooks/useStream";
 import { usePlayerProgress } from "../lib/hooks/usePlayerSettings";
 import { useMediaSession } from "../lib/hooks/useMediaSession";
 import useContentStore from "../lib/zustand/contentStore";
 import useWatchHistoryStore from "../lib/zustand/watchHistrory";
-import { cacheStorage } from "../lib/storage";
+import { cacheStorage, mainStorage } from "../lib/storage";
 import { PlayerControls } from "./PlayerControls";
 import { PlayerInitError } from "./PlayerInitError";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
@@ -46,6 +46,192 @@ interface PlayerLocationState {
   providerValue: string;
   infoUrl: string;
   doNotTrack?: boolean;
+}
+
+interface MediaTrackPreference {
+  audioLang?: string;
+  audioTitle?: string;
+  audioLabel?: string;
+  audioIndex?: number;
+  subLang?: string;
+  subTitle?: string;
+  subLabel?: string;
+  subIndex?: number;
+  subOff?: boolean;
+}
+
+const getMediaPrefKey = (state?: PlayerLocationState | null) => {
+  const rawId = state?.infoUrl || state?.primaryTitle || "";
+  return `media_tracks_${rawId}`;
+};
+
+const getSavedTrackPreference = (
+  state?: PlayerLocationState | null,
+): MediaTrackPreference | null => {
+  if (!state) return null;
+  const key = getMediaPrefKey(state);
+  return mainStorage.getObject<MediaTrackPreference>(key) || null;
+};
+
+const saveAudioPreference = (
+  state: PlayerLocationState | undefined,
+  track: MpvTrack,
+  index?: number,
+) => {
+  if (!state) return;
+  const key = getMediaPrefKey(state);
+  const current = mainStorage.getObject<MediaTrackPreference>(key) || {};
+  mainStorage.setObject<MediaTrackPreference>(key, {
+    ...current,
+    audioLang: track.lang?.trim() || undefined,
+    audioTitle: track.title?.trim() || undefined,
+    audioLabel: formatTrackLabel(track),
+    audioIndex: index,
+  });
+};
+
+const saveSubtitlePreference = (
+  state: PlayerLocationState | undefined,
+  trackOrOff: MpvTrack | "off",
+  index?: number,
+) => {
+  if (!state) return;
+  const key = getMediaPrefKey(state);
+  const current = mainStorage.getObject<MediaTrackPreference>(key) || {};
+  if (trackOrOff === "off") {
+    mainStorage.setObject<MediaTrackPreference>(key, {
+      ...current,
+      subOff: true,
+      subLang: undefined,
+      subTitle: undefined,
+      subLabel: undefined,
+      subIndex: undefined,
+    });
+  } else {
+    mainStorage.setObject<MediaTrackPreference>(key, {
+      ...current,
+      subOff: false,
+      subLang: trackOrOff.lang?.trim() || undefined,
+      subTitle: trackOrOff.title?.trim() || undefined,
+      subLabel: formatTrackLabel(trackOrOff),
+      subIndex: index,
+    });
+  }
+};
+
+function findBestMatchingAudioTrack(
+  tracks: MpvTrack[],
+  saved: MediaTrackPreference,
+): MpvTrack | undefined {
+  if (!tracks.length) return undefined;
+
+  if (saved.audioLang) {
+    const sl = saved.audioLang.trim().toLowerCase();
+    const match = tracks.find((t) => {
+      const l = t.lang?.trim().toLowerCase();
+      if (!l) return false;
+      if (l === sl) return true;
+      if (l.length >= 2 && sl.length >= 2 && l.slice(0, 2) === sl.slice(0, 2)) {
+        return true;
+      }
+      return false;
+    });
+    if (match) return match;
+  }
+
+  if (saved.audioLabel) {
+    const match = tracks.find(
+      (t) =>
+        formatTrackLabel(t).toLowerCase() === saved.audioLabel!.toLowerCase(),
+    );
+    if (match) return match;
+  }
+
+  if (saved.audioTitle) {
+    const st = saved.audioTitle.trim().toLowerCase();
+    const match = tracks.find((t) => {
+      const title = t.title?.trim().toLowerCase();
+      if (!title) return false;
+      return title === st || title.includes(st) || st.includes(title);
+    });
+    if (match) return match;
+  }
+
+  if (saved.audioLang) {
+    const sl = saved.audioLang.trim().toLowerCase();
+    const match = tracks.find((t) => {
+      const title = t.title?.trim().toLowerCase();
+      return Boolean(title && title.includes(sl));
+    });
+    if (match) return match;
+  }
+
+  if (
+    saved.audioIndex !== undefined &&
+    saved.audioIndex >= 0 &&
+    saved.audioIndex < tracks.length
+  ) {
+    return tracks[saved.audioIndex];
+  }
+
+  return undefined;
+}
+
+function findBestMatchingSubtitleTrack(
+  tracks: MpvTrack[],
+  saved: MediaTrackPreference,
+): MpvTrack | undefined {
+  if (!tracks.length) return undefined;
+
+  if (saved.subLang) {
+    const sl = saved.subLang.trim().toLowerCase();
+    const match = tracks.find((t) => {
+      const l = t.lang?.trim().toLowerCase();
+      if (!l) return false;
+      if (l === sl) return true;
+      if (l.length >= 2 && sl.length >= 2 && l.slice(0, 2) === sl.slice(0, 2)) {
+        return true;
+      }
+      return false;
+    });
+    if (match) return match;
+  }
+
+  if (saved.subLabel) {
+    const match = tracks.find(
+      (t) => formatTrackLabel(t).toLowerCase() === saved.subLabel!.toLowerCase(),
+    );
+    if (match) return match;
+  }
+
+  if (saved.subTitle) {
+    const st = saved.subTitle.trim().toLowerCase();
+    const match = tracks.find((t) => {
+      const title = t.title?.trim().toLowerCase();
+      if (!title) return false;
+      return title === st || title.includes(st) || st.includes(title);
+    });
+    if (match) return match;
+  }
+
+  if (saved.subLang) {
+    const sl = saved.subLang.trim().toLowerCase();
+    const match = tracks.find((t) => {
+      const title = t.title?.trim().toLowerCase();
+      return Boolean(title && title.includes(sl));
+    });
+    if (match) return match;
+  }
+
+  if (
+    saved.subIndex !== undefined &&
+    saved.subIndex >= 0 &&
+    saved.subIndex < tracks.length
+  ) {
+    return tracks[saved.subIndex];
+  }
+
+  return undefined;
 }
 
 const formatTrackLabel = (track: {
@@ -520,12 +706,17 @@ const DesktopPlayer: React.FC<any> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPip, setIsPip] = useState(false);
   const [isCropped, setIsCropped] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(() =>
+    settingsStorage.getPlayerZoom(),
+  );
   const [showShortcuts, setShowShortcuts] = useState(false);
-  const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
-  const toastIdRef = useRef(0);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
   const controlsTimerRef = useRef<number | null>(null);
   const isScrubbingRef = useRef(false);
   const prevStreamLinkRef = useRef<string | null>(null);
+  const appliedAudioForStreamRef = useRef<string | null>(null);
+  const appliedSubtitleForStreamRef = useRef<string | null>(null);
   const prePipStateRef = useRef<{ size: any; pos: any } | null>(null);
   const preFullscreenStateRef = useRef<{
     size: any;
@@ -535,6 +726,12 @@ const DesktopPlayer: React.FC<any> = ({
   } | null>(null);
   const manualFullscreenRef = useRef(false);
   const isWindows = navigator.userAgent.toLowerCase().includes("windows");
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     document.body.classList.toggle("player-window-fullscreen", isFullscreen);
@@ -552,12 +749,14 @@ const DesktopPlayer: React.FC<any> = ({
   }, [showControls]);
 
   const toast = useCallback((msg: string) => {
-    const id = ++toastIdRef.current;
-    setToasts((prev) => [...prev, { id, msg }]);
-    setTimeout(
-      () => setToasts((prev) => prev.filter((t) => t.id !== id)),
-      2200,
-    );
+    setToastMessage(msg);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+      toastTimerRef.current = null;
+    }, 1600);
   }, []);
 
   const openInVlc = useCallback(async () => {
@@ -590,6 +789,8 @@ const DesktopPlayer: React.FC<any> = ({
   const handleNextEpisode = useCallback(() => {
     if (activeEpisodeIndex < state.episodeList.length - 1) {
       prevStreamLinkRef.current = null;
+      appliedAudioForStreamRef.current = null;
+      appliedSubtitleForStreamRef.current = null;
       setActiveEpisodeIndex((prev: number) => prev + 1);
       toast("Playing next episode");
     }
@@ -603,6 +804,8 @@ const DesktopPlayer: React.FC<any> = ({
   const handlePrevEpisode = useCallback(() => {
     if (activeEpisodeIndex > 0) {
       prevStreamLinkRef.current = null;
+      appliedAudioForStreamRef.current = null;
+      appliedSubtitleForStreamRef.current = null;
       setActiveEpisodeIndex((prev: number) => prev - 1);
       toast("Playing previous episode");
     }
@@ -628,6 +831,11 @@ const DesktopPlayer: React.FC<any> = ({
           const { position } = JSON.parse(cached);
           if (position > 5) mpv.seek(position);
         } catch {}
+      }
+
+      const savedZoom = settingsStorage.getPlayerZoom();
+      if (savedZoom !== 100) {
+        mpv.setProperty("video-zoom", Math.log2(savedZoom / 100));
       }
     },
   });
@@ -713,8 +921,71 @@ const DesktopPlayer: React.FC<any> = ({
   }, []);
 
   useEffect(() => {
-    if (mpv.isInitialized) mpv.updateSubtitleSettings();
+    if (mpv.isInitialized) {
+      mpv.updateSubtitleSettings();
+      const savedZoom = settingsStorage.getPlayerZoom();
+      if (savedZoom !== 100) {
+        mpv.setProperty("video-zoom", Math.log2(savedZoom / 100));
+      }
+    }
   }, [mpv.isInitialized]);
+
+  // Apply saved audio and subtitle track preferences once per new stream/episode
+  useEffect(() => {
+    if (!mpv.isInitialized || !selectedStream?.link) return;
+    const streamLink = selectedStream.link;
+
+    // 1. Audio track matching
+    if (
+      appliedAudioForStreamRef.current !== streamLink &&
+      mpv.audioTracks.length > 0
+    ) {
+      const saved = getSavedTrackPreference(state);
+      if (saved) {
+        const targetAudio = findBestMatchingAudioTrack(mpv.audioTracks, saved);
+        if (targetAudio) {
+          appliedAudioForStreamRef.current = streamLink;
+          if (!targetAudio.selected) {
+            mpv.selectTrack("aid", targetAudio.id);
+          }
+        }
+      }
+    }
+
+    // 2. Subtitle track matching
+    if (
+      appliedSubtitleForStreamRef.current !== streamLink &&
+      mpv.subtitleTracks.length > 0
+    ) {
+      const saved = getSavedTrackPreference(state);
+      if (saved) {
+        if (saved.subOff) {
+          appliedSubtitleForStreamRef.current = streamLink;
+          const anySelected = mpv.subtitleTracks.some((t) => t.selected);
+          if (anySelected) {
+            mpv.selectTrack("sid", "no");
+          }
+        } else {
+          const targetSub = findBestMatchingSubtitleTrack(
+            mpv.subtitleTracks,
+            saved,
+          );
+          if (targetSub) {
+            appliedSubtitleForStreamRef.current = streamLink;
+            if (!targetSub.selected) {
+              mpv.selectTrack("sid", targetSub.id);
+            }
+          }
+        }
+      }
+    }
+  }, [
+    mpv.audioTracks,
+    mpv.subtitleTracks,
+    selectedStream?.link,
+    mpv.isInitialized,
+    state,
+  ]);
 
   useEffect(() => {
     if (!mpv.isInitialized || !selectedStream?.link) return;
@@ -801,6 +1072,27 @@ const DesktopPlayer: React.FC<any> = ({
     }
   }, [showControls, revealControls]);
 
+  const applyZoom = useCallback((newZoom: number) => {
+    const clamped = Math.min(300, Math.max(50, Math.round(newZoom)));
+    setZoomLevel(clamped);
+    settingsStorage.setPlayerZoom(clamped);
+    const mpvZoom = clamped === 100 ? 0.0 : Math.log2(clamped / 100);
+    mpv.setProperty("video-zoom", mpvZoom);
+    toast(`Zoom: ${clamped}%${clamped === 100 ? " (Default)" : ""}`);
+  }, [mpv, toast]);
+
+  const handleZoomIn = useCallback(() => {
+    applyZoom(zoomLevel + 10);
+  }, [applyZoom, zoomLevel]);
+
+  const handleZoomOut = useCallback(() => {
+    applyZoom(zoomLevel - 10);
+  }, [applyZoom, zoomLevel]);
+
+  const handleResetZoom = useCallback(() => {
+    applyZoom(100);
+  }, [applyZoom]);
+
   useEffect(() => {
     import("@noriginmedia/norigin-spatial-navigation-core")
       .then(({ pause, resume }) => {
@@ -810,12 +1102,21 @@ const DesktopPlayer: React.FC<any> = ({
       .catch(() => {});
 
     const handleWheel = (e: WheelEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.closest(
+          ".inline-menu, .inline-menu-container, .player-shortcuts-overlay, .player-shortcuts-dialog, .search-subtitles-modal, .search-subtitles-container, [data-prevent-wheel-volume]",
+        )
+      ) {
+        return;
+      }
       revealControls();
       const newVol =
         e.deltaY < 0
-          ? Math.min(150, mpv.volume + 5)
+          ? Math.min(200, mpv.volume + 5)
           : Math.max(0, mpv.volume - 5);
       mpv.setVolumeLevel(newVol);
+      toast(`Volume: ${Math.round(newVol)}%`);
     };
 
     const onMouseMoveEvent = () => revealControls();
@@ -848,8 +1149,8 @@ const DesktopPlayer: React.FC<any> = ({
           break;
         case "arrowup":
           e.preventDefault();
-          mpv.setVolumeLevel(Math.min(150, mpv.volume + 5));
-          toast(`Volume: ${Math.min(150, Math.round(mpv.volume + 5))}%`);
+          mpv.setVolumeLevel(Math.min(200, mpv.volume + 5));
+          toast(`Volume: ${Math.min(200, Math.round(mpv.volume + 5))}%`);
           break;
         case "arrowdown":
           e.preventDefault();
@@ -874,17 +1175,20 @@ const DesktopPlayer: React.FC<any> = ({
         case "a": {
           if (!mpv.audioTracks.length) break;
           e.preventDefault();
+          appliedAudioForStreamRef.current = selectedStream?.link || null;
           const selectedIndex = mpv.audioTracks.findIndex(
             (track) => track.selected,
           );
-          const nextTrack =
-            mpv.audioTracks[(selectedIndex + 1) % mpv.audioTracks.length];
+          const nextIndex = (selectedIndex + 1) % mpv.audioTracks.length;
+          const nextTrack = mpv.audioTracks[nextIndex];
           mpv.selectTrack("aid", nextTrack.id);
+          saveAudioPreference(state, nextTrack, nextIndex);
           toast(`Audio: ${formatTrackLabel(nextTrack)}`);
           break;
         }
         case "t": {
           e.preventDefault();
+          appliedSubtitleForStreamRef.current = selectedStream?.link || null;
           const selectedIndex = mpv.subtitleTracks.findIndex(
             (track) => track.selected,
           );
@@ -893,10 +1197,13 @@ const DesktopPlayer: React.FC<any> = ({
             selectedIndex === mpv.subtitleTracks.length - 1
           ) {
             mpv.selectTrack("sid", "no");
+            saveSubtitlePreference(state, "off");
             toast("Subtitles: Off");
           } else {
-            const nextTrack = mpv.subtitleTracks[selectedIndex + 1];
+            const nextIndex = selectedIndex + 1;
+            const nextTrack = mpv.subtitleTracks[nextIndex];
             mpv.selectTrack("sid", nextTrack.id);
+            saveSubtitlePreference(state, nextTrack, nextIndex);
             toast(`Subtitles: ${formatTrackLabel(nextTrack)}`);
           }
           break;
@@ -927,6 +1234,20 @@ const DesktopPlayer: React.FC<any> = ({
           }
           break;
         }
+        case "+":
+        case "=":
+          e.preventDefault();
+          handleZoomIn();
+          break;
+        case "-":
+        case "_":
+          e.preventDefault();
+          handleZoomOut();
+          break;
+        case "0":
+          e.preventDefault();
+          handleResetZoom();
+          break;
         case "?":
           e.preventDefault();
           setShowShortcuts((current) => !current);
@@ -954,6 +1275,9 @@ const DesktopPlayer: React.FC<any> = ({
     toast,
     playbackRate,
     showShortcuts,
+    handleZoomIn,
+    handleZoomOut,
+    handleResetZoom,
   ]);
 
   const toggleFullscreen = async () => {
@@ -1096,9 +1420,13 @@ const DesktopPlayer: React.FC<any> = ({
     mpv.setProperty("panscan", nextCrop ? 1.0 : 0.0);
   };
 
+
+
   const handleStreamSelect = useCallback(
     (stream: any) => {
       prevStreamLinkRef.current = null;
+      appliedAudioForStreamRef.current = null;
+      appliedSubtitleForStreamRef.current = null;
       setSelectedStream(stream);
     },
     [setSelectedStream],
@@ -1262,6 +1590,11 @@ const DesktopPlayer: React.FC<any> = ({
         isPip={isPip}
         onToggleCrop={toggleCrop}
         isCropped={isCropped}
+        zoomLevel={zoomLevel}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onResetZoom={handleResetZoom}
+        onSetZoom={applyZoom}
         onClickBackground={handleBackgroundClick}
         audioTracks={mpv.audioTracks}
         subtitleTracks={mpv.subtitleTracks}
@@ -1273,16 +1606,31 @@ const DesktopPlayer: React.FC<any> = ({
         selectedStream={selectedStream}
         onSelectStream={handleStreamSelect}
         onSelectAudioTrack={(id) => {
+          appliedAudioForStreamRef.current = selectedStream?.link || null;
           mpv.selectTrack("aid", id);
-          const track = mpv.audioTracks.find((item) => item.id === id);
+          const index = mpv.audioTracks.findIndex((item) => item.id === id);
+          const track = mpv.audioTracks[index];
+          if (track) {
+            saveAudioPreference(state, track, index >= 0 ? index : undefined);
+          }
           toast(`Audio: ${track ? formatTrackLabel(track) : String(id)}`);
         }}
         onSelectSubtitleTrack={(id) => {
+          appliedSubtitleForStreamRef.current = selectedStream?.link || null;
           mpv.selectTrack("sid", id);
           if (id === "no") {
+            saveSubtitlePreference(state, "off");
             toast("Subtitles: Off");
           } else {
-            const track = mpv.subtitleTracks.find((item) => item.id === id);
+            const index = mpv.subtitleTracks.findIndex((item) => item.id === id);
+            const track = mpv.subtitleTracks[index];
+            if (track) {
+              saveSubtitlePreference(
+                state,
+                track,
+                index >= 0 ? index : undefined,
+              );
+            }
             toast(`Subtitles: ${track ? formatTrackLabel(track) : String(id)}`);
           }
         }}
@@ -1299,11 +1647,11 @@ const DesktopPlayer: React.FC<any> = ({
         onOpenVlc={openInVlc}
         onCopyLink={selectedStream?.link ? copyStreamLink : undefined}
       />
-      {toasts.map((t) => (
-        <div key={t.id} className="player-toast">
-          {t.msg}
+      {toastMessage && (
+        <div className="player-toast">
+          {toastMessage}
         </div>
-      ))}
+      )}
     </div>
   );
 };
