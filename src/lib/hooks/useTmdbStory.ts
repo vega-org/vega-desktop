@@ -292,7 +292,12 @@ function parseProxyResponse(json: any): TmdbStoryData | null {
     releaseDate: json.releaseDate || undefined,
     runtime: json.runtimeSeconds ? Math.round(json.runtimeSeconds / 60) : undefined,
     genres: json.genres ?? [],
-    rating: json.rating || undefined,
+    rating:
+      typeof json.rating === "number"
+        ? json.rating
+        : json.rating
+          ? parseFloat(String(json.rating)) || undefined
+          : undefined,
     voteCount: json.voteCount || undefined,
     popularity: undefined,
     trendingRank: undefined,
@@ -318,14 +323,26 @@ function parseProxyResponse(json: any): TmdbStoryData | null {
       : undefined,
     featuredReview,
     relatedTitles: json.raw.mainColumnData?.moreLikeThisTitles
-      ? json.raw.mainColumnData.moreLikeThisTitles.map((t: any) => ({
-          id: t.id,
-          title: t.titleText || t.originalTitleText,
-          image: t.primaryImage?.url || undefined,
-          rating: t.ratingsSummary?.aggregateRating || undefined,
-          voteCount: t.ratingsSummary?.voteCount || undefined,
-          mediaType: t.titleType?.id === "tvSeries" ? "tv" : "movie",
-        }))
+      ? json.raw.mainColumnData.moreLikeThisTitles.map((t: any) => {
+          const rawRating = t.ratingsSummary?.aggregateRating;
+          const parsedRating =
+            typeof rawRating === "number"
+              ? rawRating
+              : rawRating
+                ? parseFloat(String(rawRating))
+                : undefined;
+          return {
+            id: t.id,
+            title: t.titleText || t.originalTitleText,
+            image: t.primaryImage?.url || undefined,
+            rating:
+              parsedRating !== undefined && !isNaN(parsedRating)
+                ? parsedRating
+                : undefined,
+            voteCount: t.ratingsSummary?.voteCount || undefined,
+            mediaType: t.titleType?.id === "tvSeries" ? "tv" : "movie",
+          };
+        })
       : undefined,
     watchlistCount: engagementStats?.watchlistStatistics?.displayableCount || undefined,
     awardsText,

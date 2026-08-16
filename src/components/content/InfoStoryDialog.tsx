@@ -61,8 +61,32 @@ const formatRuntime = (minutes?: number) => {
 const compactNumber = (value?: number) =>
   value ? new Intl.NumberFormat("en", { notation: "compact" }).format(value) : undefined;
 
-const formatCurrency = (value?: number) =>
-  value ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(value) : undefined;
+const formatCurrency = (value?: number): string | undefined => {
+  if (!value && value !== 0) return undefined;
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) {
+    const formatted = (value / 1_000_000_000).toLocaleString("en-US", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 1,
+    });
+    return `$${formatted} billion`;
+  }
+  if (abs >= 1_000_000) {
+    const formatted = (value / 1_000_000).toLocaleString("en-US", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 1,
+    });
+    return `$${formatted} million`;
+  }
+  if (abs >= 1_000) {
+    const formatted = (value / 1_000).toLocaleString("en-US", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 1,
+    });
+    return `$${formatted} thousand`;
+  }
+  return `$${value.toLocaleString("en-US")}`;
+};
 
 export function InfoStoryDialog({
   backdrop,
@@ -385,12 +409,18 @@ function BoxOfficePage({ data }: { data: any }) {
           );
         })}
       </div>
-      {data.productionBudget && data.worldwideGross && (
-        <div className="info-story-boxoffice-roi">
-          <span>Return on Investment</span>
-          <strong>{((data.worldwideGross / data.productionBudget) * 100 - 100).toFixed(0)}%</strong>
-        </div>
-      )}
+      {data.productionBudget && data.worldwideGross && (() => {
+        const roi = (data.worldwideGross / data.productionBudget) * 100 - 100;
+        const isProfit = roi >= 0;
+        return (
+          <div className="info-story-boxoffice-roi">
+            <span>Return on Investment</span>
+            <strong style={{ color: isProfit ? "#22c55e" : "#ef4444" }}>
+              {isProfit ? `+${roi.toFixed(0)}%` : `${roi.toFixed(0)}%`}
+            </strong>
+          </div>
+        );
+      })()}
     </div>
   );
 }
