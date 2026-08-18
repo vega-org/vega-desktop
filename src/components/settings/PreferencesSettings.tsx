@@ -16,8 +16,6 @@ export const PreferencesSettings: React.FC = () => {
   const [autoInstallUpdates, setAutoInstallUpdates] = useState<boolean>(true);
   const [autoCheckUpdates, setAutoCheckUpdates] = useState<boolean>(true);
   const [tvModeEnabled, setTvModeEnabled] = useState<boolean>(false);
-  const [showSeekButtons, setShowSeekButtons] = useState<boolean>(true);
-  const [hwAccelEnabled, setHwAccelEnabled] = useState<boolean>(false);
   const [devtoolsShortcutsEnabled, setDevtoolsShortcutsEnabled] =
     useState<boolean>(false);
   const [dohEnabled, setDohEnabled] = useState<boolean>(true);
@@ -26,9 +24,6 @@ export const PreferencesSettings: React.FC = () => {
   const [downloadConcurrency, setDownloadConcurrency] = useState<number>(2);
   const [tmdbApiKey, setTmdbApiKey] = useState<string>("");
   const [tmdbKeySaved, setTmdbKeySaved] = useState(false);
-  const [externalPlayerEnabled, setExternalPlayerEnabled] = useState(false);
-  const [vlcEnabled, setVlcEnabled] = useState(false);
-  const [vlcPath, setVlcPath] = useState("");
 
   useEffect(() => {
     setDownloadLocation(settingsStorage.getDownloadLocation());
@@ -36,17 +31,12 @@ export const PreferencesSettings: React.FC = () => {
     setAutoInstallUpdates(settingsStorage.isAutoDownloadEnabled());
     setAutoCheckUpdates(settingsStorage.isAutoCheckUpdateEnabled());
     setTvModeEnabled(settingsStorage.isTvModeEnabled());
-    setShowSeekButtons(!settingsStorage.hideSeekButtons());
-    setHwAccelEnabled(settingsStorage.isHardwareAccelerationEnabled());
     setDevtoolsShortcutsEnabled(settingsStorage.areDevtoolsShortcutsEnabled());
     setDohEnabled(settingsStorage.isDohEnabled());
     setDohProvider(settingsStorage.getDohProvider());
     setDohCustomUrl(settingsStorage.getDohCustomUrl());
     setDownloadConcurrency(settingsStorage.getDownloadConcurrency());
     setTmdbApiKey(settingsStorage.getTmdbApiKey());
-    setExternalPlayerEnabled(settingsStorage.isExternalPlayerEnabled());
-    setVlcEnabled(settingsStorage.isVlcEnabled());
-    setVlcPath(settingsStorage.getVlcPath());
   }, []);
 
   const handleChangeDir = async () => {
@@ -96,17 +86,6 @@ export const PreferencesSettings: React.FC = () => {
     settingsStorage.setTvModeEnabled(nextState);
   };
 
-  const handleToggleSeekButtons = (enabled: boolean) => {
-    setShowSeekButtons(enabled);
-    settingsStorage.setHideSeekButtons(!enabled);
-  };
-
-  const handleToggleHwAccel = () => {
-    const nextState = !hwAccelEnabled;
-    setHwAccelEnabled(nextState);
-    settingsStorage.setHardwareAccelerationEnabled(nextState);
-  };
-
   const handleToggleDevtoolsShortcuts = () => {
     const nextState = !devtoolsShortcutsEnabled;
     setDevtoolsShortcutsEnabled(nextState);
@@ -137,39 +116,6 @@ export const PreferencesSettings: React.FC = () => {
     setDownloadConcurrency(next);
     settingsStorage.setDownloadConcurrency(next);
     useDownloadStore.getState().scheduleDownloads();
-  };
-
-  const handleChangeVlcPath = async () => {
-    try {
-      const selected = await open({
-        directory: false,
-        multiple: false,
-        filters: navigator.userAgent.toLowerCase().includes("windows")
-          ? [{ name: "VLC executable", extensions: ["exe"] }]
-          : undefined,
-      });
-      if (selected && typeof selected === "string") {
-        setVlcPath(selected);
-        settingsStorage.setVlcPath(selected);
-      }
-    } catch (err) {
-      console.error("Failed to select VLC executable:", err);
-    }
-  };
-
-  const handleResetVlcPath = () => {
-    settingsStorage.resetVlcPath();
-    setVlcPath(settingsStorage.getVlcPath());
-  };
-
-  const handleToggleVlc = (enabled: boolean) => {
-    setVlcEnabled(enabled);
-    settingsStorage.setVlcEnabled(enabled);
-  };
-
-  const handleToggleExternalPlayer = (enabled: boolean) => {
-    setExternalPlayerEnabled(enabled);
-    settingsStorage.setExternalPlayerEnabled(enabled);
   };
 
   const saveTmdbApiKey = () => {
@@ -222,6 +168,7 @@ export const PreferencesSettings: React.FC = () => {
 
       <div className="settings-divider" />
 
+      {/* Concurrent Downloads */}
       <div className="settings-row">
         <div className="settings-info">
           <h3 className="label-lg">Concurrent Downloads</h3>
@@ -251,75 +198,6 @@ export const PreferencesSettings: React.FC = () => {
       </div>
 
       <div className="settings-divider" />
-
-      {isAndroid && (
-        <>
-          <div className="settings-row">
-            <div className="settings-info">
-              <h3 className="label-lg">External Player</h3>
-              <p className="body-md text-muted">
-                Show Android&apos;s app chooser for network streams instead of
-                playing them inside Vega.
-              </p>
-            </div>
-            <Switch
-              checked={externalPlayerEnabled}
-              onCheckedChange={handleToggleExternalPlayer}
-              aria-label="Use an external player"
-            />
-          </div>
-          <div className="settings-divider" />
-        </>
-      )}
-
-      {!isAndroid && (
-        <>
-          <div className="settings-row">
-            <div className="settings-info">
-              <h3 className="label-lg">VLC Player</h3>
-              <p className="body-md text-muted">
-                Open the selected server directly in VLC instead of Vega's
-                player.
-              </p>
-            </div>
-            <Switch
-              checked={vlcEnabled}
-              onCheckedChange={handleToggleVlc}
-              aria-label="Use VLC as the external player"
-            />
-          </div>
-          {vlcEnabled && (
-            <div className="settings-row">
-              <div className="settings-info">
-                <h3 className="label-lg">VLC Path</h3>
-                <p
-                  className="body-md text-muted"
-                  style={{ wordBreak: "break-all" }}
-                >
-                  {vlcPath}
-                </p>
-              </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <FocusableButton
-                  className="theme-toggle-btn active"
-                  onClick={handleChangeVlcPath}
-                >
-                  <FolderOpen size={16} /> Change
-                </FocusableButton>
-                {vlcPath !== settingsStorage.getDefaultVlcPath() && (
-                  <FocusableButton
-                    className="theme-toggle-btn"
-                    onClick={handleResetVlcPath}
-                  >
-                    Reset
-                  </FocusableButton>
-                )}
-              </div>
-            </div>
-          )}
-          <div className="settings-divider" />
-        </>
-      )}
 
       {/* Auto Install Updates */}
       <div className="settings-row">
@@ -371,39 +249,7 @@ export const PreferencesSettings: React.FC = () => {
 
       <div className="settings-divider" />
 
-      <div className="settings-row">
-        <div className="settings-info">
-          <h3 className="label-lg">Player Seek Buttons</h3>
-          <p className="body-md text-muted">
-            Show 10-second rewind and forward buttons in the player
-          </p>
-        </div>
-        <Switch
-          checked={showSeekButtons}
-          onCheckedChange={handleToggleSeekButtons}
-          aria-label="Show player seek buttons"
-        />
-      </div>
-
-      <div className="settings-divider" />
-
-      {/* Hardware Acceleration */}
-      <div className="settings-row">
-        <div className="settings-info">
-          <h3 className="label-lg">Hardware Acceleration</h3>
-          <p className="body-md text-muted">
-            Use GPU to decode video. Turn off if you experience playback issues.
-          </p>
-        </div>
-        <Switch
-          checked={hwAccelEnabled}
-          onCheckedChange={() => handleToggleHwAccel()}
-          aria-label="Enable hardware acceleration"
-        />
-      </div>
-
-      <div className="settings-divider" />
-
+      {/* Developer Tools Shortcuts */}
       <div className="settings-row">
         <div className="settings-info">
           <h3 className="label-lg">Developer Tools Shortcuts</h3>
@@ -420,6 +266,7 @@ export const PreferencesSettings: React.FC = () => {
 
       <div className="settings-divider" />
 
+      {/* TMDB API Key */}
       <div className="settings-row" style={{ alignItems: "flex-start" }}>
         <div className="settings-info">
           <h3 className="label-lg">TMDB API Key</h3>
@@ -470,7 +317,7 @@ export const PreferencesSettings: React.FC = () => {
                 className="theme-toggle-btn"
                 onClick={clearTmdbApiKey}
               >
-                Use bundled
+                Clear
               </FocusableButton>
             )}
           </div>

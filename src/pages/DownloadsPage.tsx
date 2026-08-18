@@ -48,7 +48,7 @@ const statusCopy: Record<DownloadItem["status"], string> = {
   downloading: "Downloading",
   paused: "Paused",
   completed: "Completed",
-  error: "Needs attention",
+  error: "Failed",
 };
 
 export const DownloadsPage = () => {
@@ -68,7 +68,14 @@ export const DownloadsPage = () => {
   const completedGroups = useMemo(() => {
     const groups: Record<string, CompletedGroup> = {};
     allDownloads
-      .filter((item) => item.status === "completed")
+      .filter(
+        (item) =>
+          item.status === "completed" &&
+          !item.isSubtitle &&
+          !item.id.includes("_subtitle_") &&
+          item.videoType !== "vtt" &&
+          item.videoType !== "srt",
+      )
       .forEach((item) => {
         const key = item.showName || item.title;
         groups[key] ??= {
@@ -249,7 +256,15 @@ export const DownloadsPage = () => {
                               {formatBytes(item.totalBytes)}
                             </span>
                           ) : item.status === "error" ? (
-                            <span>Resume to try this download again</span>
+                            <span
+                              style={{
+                                color: "var(--error, #ef4444)",
+                                fontWeight: 500,
+                              }}
+                              title={item.error}
+                            >
+                              {item.error || "Download failed. Resume to retry."}
+                            </span>
                           ) : (
                             <>
                               <span>

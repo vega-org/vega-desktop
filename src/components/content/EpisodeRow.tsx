@@ -81,6 +81,7 @@ interface EpisodeRowProps {
   progressPercent: number;
   watched: boolean;
   download?: DownloadItem;
+  hasDownloadedSubtitles?: boolean;
   extracting: boolean;
   onPlay: () => void;
   onDownload: () => void;
@@ -119,6 +120,7 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
   progressPercent,
   watched,
   download,
+  hasDownloadedSubtitles,
   extracting,
   onPlay,
   onDownload,
@@ -272,14 +274,6 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
           >
             <Loader size={19} className="spin" />
           </span>
-        ) : download?.status === "completed" ? (
-          <FocusableButton
-            className="episode-action-button completed"
-            onClick={onDownload}
-            title="Download options"
-          >
-            <Check size={18} />
-          </FocusableButton>
         ) : download?.status === "downloading" ? (
           <span
             className="episode-action-static"
@@ -315,6 +309,14 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
             title="Retry download"
           >
             <Retry size={18} />
+          </FocusableButton>
+        ) : download?.status === "completed" || hasDownloadedSubtitles ? (
+          <FocusableButton
+            className="episode-action-button completed"
+            onClick={onDownload}
+            title="Download options"
+          >
+            <Check size={18} />
           </FocusableButton>
         ) : (
           <FocusableButton

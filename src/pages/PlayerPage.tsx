@@ -30,9 +30,12 @@ import { useArtworkPalette } from "../lib/hooks/useArtworkPalette";
 
 import {
   LuArrowLeft as ArrowLeft,
+  LuChevronLeft as ChevronLeft,
   LuExternalLink as ExternalLink,
+  LuList as ListIcon,
   LuPlay as Play,
   LuServer as Server,
+  LuX as CloseIcon,
 } from "react-icons/lu";
 import "./PlayerPage.css";
 
@@ -368,7 +371,6 @@ const PlayerInner: React.FC<PlayerInnerProps> = ({ state }) => {
       />
     );
   }
-
   return (
     <DesktopPlayer
       state={state}
@@ -534,7 +536,6 @@ const TvPlayer: React.FC<any> = ({
               position: "absolute",
               inset: 0,
               backgroundColor: "rgba(0,0,0,0.92)",
-              backdropFilter: "blur(20px)",
             }}
           />
           <FocusableButton
@@ -575,7 +576,6 @@ const TvPlayer: React.FC<any> = ({
               position: "absolute",
               inset: 0,
               backgroundColor: "rgba(0,0,0,0.85)",
-              backdropFilter: "blur(20px)",
             }}
           />
         )}
@@ -689,6 +689,64 @@ const TvPlayer: React.FC<any> = ({
   );
 };
 
+const SidebarEpisodeItem = React.memo<{
+  episode: any;
+  index: number;
+  isActive: boolean;
+  onSelect: () => void;
+  itemRef?: React.Ref<HTMLButtonElement>;
+}>(({ episode, index, isActive, onSelect, itemRef }) => {
+  const epNum = index + 1;
+  const title = episode?.title || `Episode ${epNum}`;
+  const description = episode?.description?.trim();
+  const rawImage = episode?.image || episode?.poster || episode?.still_path;
+  const source =
+    rawImage?.trim() && /^https?:\/\//i.test(rawImage) ? rawImage : undefined;
+  const [imgFailed, setImgFailed] = useState(false);
+
+  useEffect(() => setImgFailed(false), [source]);
+
+  return (
+    <button
+      ref={itemRef}
+      type="button"
+      className={`player-episode-sidebar-item ${isActive ? "active" : ""}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect();
+      }}
+    >
+      <div
+        className={`player-episode-sidebar-media ${source && !imgFailed ? "has-image" : ""}`}
+      >
+        {source && !imgFailed ? (
+          <img
+            src={source}
+            alt=""
+            loading="lazy"
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          <span className="player-episode-sidebar-media-placeholder">
+            {epNum}
+          </span>
+        )}
+        <div className="player-episode-sidebar-media-overlay">
+          <Play size={18} fill={isActive ? "var(--primary)" : "#ffffff"} />
+        </div>
+      </div>
+      <div className="player-episode-sidebar-item-info">
+        <strong className="player-episode-sidebar-item-title">{title}</strong>
+        {description && (
+          <small className="player-episode-sidebar-item-desc">
+            {description}
+          </small>
+        )}
+      </div>
+    </button>
+  );
+});
+
 const DesktopPlayer: React.FC<any> = ({
   state,
   activeEpisode,
@@ -716,6 +774,13 @@ const DesktopPlayer: React.FC<any> = ({
     settingsStorage.getPlayerZoom(),
   );
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showEpisodeSidebar, setShowEpisodeSidebar] = useState(false);
+  const activeEpisodeItemRef = useRef<HTMLButtonElement | null>(null);
+  const showEpisodeSidebarSetting = settingsStorage.showPlayerEpisodeSidebar();
+  const hasMultipleEpisodes =
+    Array.isArray(state.episodeList) &&
+    state.episodeList.length > 1 &&
+    state.type !== "movie";
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const controlsTimerRef = useRef<number | null>(null);
@@ -1010,9 +1075,17 @@ const DesktopPlayer: React.FC<any> = ({
     prevStreamLinkRef.current = selectedStream.link;
 
     (async () => {
-      const subs = selectedStream.subtitles?.length
-        ? selectedStream.subtitles
-        : externalSubs;
+      const allSubs = [
+        ...(selectedStream.subtitles || []),
+        ...(externalSubs || []),
+      ];
+      const seen = new Set<string>();
+      const subs = allSubs.filter((sub) => {
+        const url = sub.url || sub.uri;
+        if (!url || seen.has(url)) return false;
+        seen.add(url);
+        return true;
+      });
       await mpv.loadFile(
         selectedStream.link,
         selectedStream.headers,
@@ -1063,12 +1136,26 @@ const DesktopPlayer: React.FC<any> = ({
   ]);
 
   const hideControls = useCallback(() => {
-    if (!showShortcuts && !isScrubbingRef.current) setShowControls(false);
-  }, [showShortcuts]);
+    if (!showShortcuts && !showEpisodeSidebar && !isScrubbingRef.current) {
+      setShowControls(false);
+    }
+  }, [showShortcuts, showEpisodeSidebar]);
   const scheduleHide = useCallback(() => {
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
     controlsTimerRef.current = window.setTimeout(hideControls, 3500);
   }, [hideControls]);
+
+  useEffect(() => {
+    if (showEpisodeSidebar) {
+      const timer = window.setTimeout(() => {
+        activeEpisodeItemRef.current?.scrollIntoView({
+          behavior: "auto",
+          block: "nearest",
+        });
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [showEpisodeSidebar]);
 
   const revealControls = useCallback(() => {
     setShowControls(true);
@@ -1122,7 +1209,7 @@ const DesktopPlayer: React.FC<any> = ({
       const target = e.target as HTMLElement | null;
       if (
         target?.closest(
-          ".inline-menu, .inline-menu-container, .player-shortcuts-overlay, .player-shortcuts-dialog, .search-subtitles-modal, .search-subtitles-container, [data-prevent-wheel-volume]",
+          ".inline-menu, .inline-menu-container, .player-shortcuts-overlay, .player-shortcuts-dialog, .search-subtitles-modal, .search-subtitles-container, .player-episode-sidebar, .player-episode-sidebar-list, [data-prevent-wheel-volume]",
         )
       ) {
         return;
@@ -1178,7 +1265,8 @@ const DesktopPlayer: React.FC<any> = ({
           toggleFullscreen();
           break;
         case "escape":
-          if (showShortcuts) setShowShortcuts(false);
+          if (showEpisodeSidebar) setShowEpisodeSidebar(false);
+          else if (showShortcuts) setShowShortcuts(false);
           else if (isFullscreen) toggleFullscreen();
           else navigate(-1);
           break;
@@ -1485,8 +1573,7 @@ const DesktopPlayer: React.FC<any> = ({
               style={{
                 position: "absolute",
                 inset: 0,
-                backgroundColor: "rgba(0,0,0,0.92)",
-                backdropFilter: "blur(20px)",
+                backgroundColor: "rgba(0,0,0,0.95)",
                 zIndex: -1,
               }}
             />
@@ -1531,8 +1618,7 @@ const DesktopPlayer: React.FC<any> = ({
               style={{
                 position: "absolute",
                 inset: 0,
-                backgroundColor: "rgba(0,0,0,0.85)",
-                backdropFilter: "blur(20px)",
+                backgroundColor: "rgba(0,0,0,0.95)",
                 zIndex: -1,
               }}
             />
@@ -1664,6 +1750,90 @@ const DesktopPlayer: React.FC<any> = ({
         onOpenVlc={openInVlc}
         onCopyLink={selectedStream?.link ? copyStreamLink : undefined}
       />
+      {showEpisodeSidebarSetting && hasMultipleEpisodes && (
+        <button
+          className={`player-episode-sidebar-toggle ${showControls && !showEpisodeSidebar ? "visible" : ""}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowEpisodeSidebar((prev) => !prev);
+            revealControls();
+          }}
+          title="Episodes"
+          aria-label="Toggle episode list sidebar"
+        >
+          <ChevronLeft size={20} />
+        </button>
+      )}
+
+      {showEpisodeSidebarSetting && hasMultipleEpisodes && (
+        <>
+          <div
+            className={`player-episode-sidebar-backdrop ${showEpisodeSidebar ? "visible" : ""}`}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowEpisodeSidebar(false);
+            }}
+          />
+          <aside
+            className={`player-episode-sidebar ${showEpisodeSidebar ? "open" : ""}`}
+            data-prevent-wheel-volume="true"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="player-episode-sidebar-header">
+              <div className="player-episode-sidebar-title-group">
+                <ListIcon size={18} className="player-episode-sidebar-icon" />
+                <h3 className="player-episode-sidebar-title">Episodes</h3>
+                <span className="player-episode-sidebar-count">
+                  {state.episodeList.length}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="player-episode-sidebar-close"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowEpisodeSidebar(false);
+                }}
+                aria-label="Close episode list"
+              >
+                <CloseIcon size={18} />
+              </button>
+            </div>
+            <div
+              className="player-episode-sidebar-list"
+              data-prevent-wheel-volume="true"
+            >
+              {state.episodeList.map((ep: any, index: number) => {
+                const isActive = index === activeEpisodeIndex;
+                const epNum = index + 1;
+                const epTitle = ep?.title || `Episode ${epNum}`;
+                return (
+                  <SidebarEpisodeItem
+                    key={ep?.id || ep?.link || index}
+                    episode={ep}
+                    index={index}
+                    isActive={isActive}
+                    itemRef={isActive ? activeEpisodeItemRef : undefined}
+                    onSelect={() => {
+                      if (index !== activeEpisodeIndex) {
+                        prevStreamLinkRef.current = null;
+                        appliedAudioForStreamRef.current = null;
+                        appliedSubtitleForStreamRef.current = null;
+                        setActiveEpisodeIndex(index);
+                        toast(`Playing: ${epTitle}`);
+                      }
+                      setShowEpisodeSidebar(false);
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </aside>
+        </>
+      )}
+
       {toastMessage && (
         <div className="player-toast">
           {toastMessage}

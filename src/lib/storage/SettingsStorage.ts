@@ -23,6 +23,7 @@ export enum SettingsKeys {
   SHOW_MEDIA_CONTROLS = "showMediaControls",
   SHOW_HAMBURGER_MENU = "showHamburgerMenu",
   HIDE_SEEK_BUTTONS = "hideSeekButtons",
+  SHOW_PLAYER_EPISODE_SIDEBAR = "showPlayerEpisodeSidebar",
   ENABLE_2X_GESTURE = "enable2xGesture",
   ENABLE_SWIPE_GESTURE = "enableSwipeGesture",
 
@@ -231,6 +232,14 @@ export class SettingsStorage {
 
   setHideSeekButtons(hide: boolean): void {
     mainStorage.setBool(SettingsKeys.HIDE_SEEK_BUTTONS, hide);
+  }
+
+  showPlayerEpisodeSidebar(): boolean {
+    return mainStorage.getBool(SettingsKeys.SHOW_PLAYER_EPISODE_SIDEBAR, true);
+  }
+
+  setShowPlayerEpisodeSidebar(show: boolean): void {
+    mainStorage.setBool(SettingsKeys.SHOW_PLAYER_EPISODE_SIDEBAR, show);
   }
 
   isEnable2xGestureEnabled(): boolean {

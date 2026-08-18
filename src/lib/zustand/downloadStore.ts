@@ -22,6 +22,7 @@ export interface DownloadItem {
   headers?: Record<string, string>;
   subtitles?: { url: string; language: string; format?: string }[];
   videoType?: string | null;
+  isSubtitle?: boolean;
   isTorrent?: boolean;
   torrentInfoHash?: string;
   filePath: string;
@@ -30,10 +31,41 @@ export interface DownloadItem {
   downloadedBytes: number;
   speed: number;
   status: "queued" | "downloading" | "paused" | "completed" | "error";
+  error?: string;
   createdAt?: number;
   updatedAt?: number;
   completedAt?: number;
 }
+
+export const isSubtitleDownloadItem = (
+  item?: Partial<DownloadItem> | null,
+): boolean => {
+  if (!item) return false;
+  if (item.isSubtitle) return true;
+  if (item.id && item.id.includes("_subtitle_")) return true;
+  if (item.server === "Subtitle") return true;
+  const vt = (item.videoType || "").toLowerCase();
+  if (
+    vt === "vtt" ||
+    vt === "srt" ||
+    vt === "subtitle" ||
+    vt.includes("vtt") ||
+    vt.includes("srt")
+  ) {
+    return true;
+  }
+  if (item.filePath?.endsWith(".vtt") || item.filePath?.endsWith(".srt")) {
+    return true;
+  }
+  return false;
+};
+
+export const isVideoDownloadItem = (
+  item?: Partial<DownloadItem> | null,
+): item is DownloadItem => {
+  if (!item) return false;
+  return !isSubtitleDownloadItem(item);
+};
 
 interface DownloadState {
   downloads: Record<string, DownloadItem>;
@@ -56,7 +88,7 @@ interface DownloadState {
     speed: number,
   ) => void;
   markCompleted: (id: string) => void;
-  markError: (id: string) => void;
+  markError: (id: string, error?: string) => void;
 }
 
 const getDownloadBaseDir = async () => {
@@ -111,31 +143,38 @@ export const useDownloadStore = create<DownloadState>()(
         try {
           const baseDir = item.baseDir || (await getDownloadBaseDir());
 
-          if (item.subtitles && item.subtitles.length > 0) {
+          const isSubtitle =
+            item.isSubtitle ||
+            item.id.includes("_subtitle_") ||
+            item.videoType === "vtt" ||
+            item.videoType === "srt";
+
+          if (isSubtitle) {
             const { fetch } = await import("@tauri-apps/plugin-http");
-            const baseName = item.filePath.substring(
-              0,
-              item.filePath.lastIndexOf("."),
-            );
-            let subIdx = 0;
-            for (const sub of item.subtitles) {
-              try {
-                const ext =
-                  sub.format || (sub.url.endsWith(".srt") ? "srt" : "vtt");
-                const subPath = `${baseName}.${sub.language || "unk"}_${subIdx}.${ext}`;
-                subIdx++;
-                const response = await fetch(sub.url);
-                if (response.ok) {
-                  await invoke("save_subtitle", {
-                    baseDir,
-                    path: subPath,
-                    content: await response.text(),
-                  });
-                }
-              } catch (subErr) {
-                console.error("Failed to download subtitle:", subErr);
-              }
-            }
+            const response = await fetch(item.url, {
+              headers: item.headers,
+            });
+            if (!response.ok) throw new Error("Failed to download subtitle");
+            const content = await response.text();
+            await invoke("save_subtitle", {
+              baseDir,
+              path: item.filePath,
+              content,
+            });
+            set((state) => ({
+              downloads: {
+                ...state.downloads,
+                [id]: {
+                  ...state.downloads[id],
+                  status: "completed",
+                  downloadedBytes: content.length,
+                  totalBytes: content.length,
+                  completedAt: Date.now(),
+                  updatedAt: Date.now(),
+                },
+              },
+            }));
+            return;
           }
 
           if (item.isTorrent) {
@@ -169,9 +208,11 @@ export const useDownloadStore = create<DownloadState>()(
                 item.videoType || (item.url.includes(".m3u8") ? "m3u8" : null),
             });
           }
-        } catch (e) {
+        } catch (e: any) {
           console.error("Failed to start download:", e);
-          get().markError(id);
+          const errorMsg =
+            typeof e === "string" ? e : e?.message || "Failed to start download";
+          get().markError(id, errorMsg);
         }
       };
 
@@ -222,7 +263,26 @@ export const useDownloadStore = create<DownloadState>()(
             ? await join(safeDir, safeSeason)
             : safeDir;
 
-          if (isTorrent) {
+          const isSubtitle =
+            item.isSubtitle ||
+            item.id.includes("_subtitle_") ||
+            item.videoType === "vtt" ||
+            item.videoType === "srt";
+
+          if (isSubtitle) {
+            const ext =
+              item.videoType?.includes("vtt") || item.url.includes(".vtt")
+                ? "vtt"
+                : "srt";
+            const subTitle = item.id.includes("_subtitle_")
+              ? item.id.split("_subtitle_")[1]
+              : item.title;
+            const videoBase = item.episodeName
+              ? safePathSegment(item.episodeName, 72)
+              : safeTitle;
+            const subBase = `${videoBase}.${safePathSegment(subTitle, 40)}`;
+            filePath = await join(groupDir, `${subBase}.${ext}`);
+          } else if (isTorrent) {
             filePath = groupDir; // Each dropdown group gets its own torrent directory.
           } else if (item.episodeName) {
             const itemFile = safePathSegment(item.episodeName, 72);
@@ -252,10 +312,6 @@ export const useDownloadStore = create<DownloadState>()(
         },
 
         scheduleDownloads,
-
-        startNow: async (id) => {
-          await startDownloadItem(id);
-        },
 
         pauseDownload: async (id) => {
           const item = get().downloads[id];
@@ -288,7 +344,12 @@ export const useDownloadStore = create<DownloadState>()(
           set((state) => ({
             downloads: {
               ...state.downloads,
-              [id]: { ...state.downloads[id], status: "downloading" },
+              [id]: {
+                ...state.downloads[id],
+                status: "downloading",
+                error: undefined,
+                updatedAt: Date.now(),
+              },
             },
           }));
 
@@ -313,50 +374,117 @@ export const useDownloadStore = create<DownloadState>()(
                   (item.url.includes(".m3u8") ? "m3u8" : null),
               });
             }
-          } catch (e) {
+          } catch (e: any) {
             console.error("Failed to resume download:", e);
-            get().markError(id);
+            const errorMsg =
+              typeof e === "string" ? e : e?.message || "Failed to resume download";
+            get().markError(id, errorMsg);
           }
         },
 
-        cancelDownload: async (id) => {
+        startNow: async (id) => {
           const item = get().downloads[id];
           if (!item) return;
+          if (item.status === "paused" || item.status === "error") {
+            set((state) => ({
+              downloads: {
+                ...state.downloads,
+                [id]: {
+                  ...state.downloads[id],
+                  status: "queued",
+                  error: undefined,
+                  updatedAt: Date.now(),
+                },
+              },
+            }));
+          }
+          await startDownloadItem(id);
+        },
 
-          const baseDir = item.baseDir || (await getDownloadBaseDir());
+        cancelDownload: async (id) => {
+          const currentDownloads = get().downloads;
+          const item = currentDownloads[id];
 
-          try {
-            if (item.isTorrent && item.torrentInfoHash) {
-              const apiPort = await invoke<number>("get_torrent_api_port");
-              const { fetch } = await import("@tauri-apps/plugin-http");
-              await fetch(
-                `http://127.0.0.1:${apiPort}/torrents/${item.torrentInfoHash}/delete`,
-                { method: "POST" },
-              );
-            } else if (!item.isTorrent) {
-              await invoke("cancel_download", {
-                id,
-                filePath: item.filePath,
-                baseDir,
-              });
+          const isSub = item ? isSubtitleDownloadItem(item) : id.includes("_subtitle_");
+          const keysToDelete = new Set<string>();
+          keysToDelete.add(id);
+
+          if (!isSub) {
+            // Main video/episode deleted -> also delete associated subtitles
+            Object.entries(currentDownloads).forEach(([subId, subItem]) => {
+              if (
+                subId.startsWith(`${id}_subtitle_`) ||
+                (item &&
+                  isSubtitleDownloadItem(subItem) &&
+                  subItem.infoUrl === item.infoUrl &&
+                  subItem.sourceLink === item.sourceLink)
+              ) {
+                keysToDelete.add(subId);
+              }
+            });
+          }
+
+          for (const key of keysToDelete) {
+            const target = currentDownloads[key];
+            if (!target) continue;
+            const baseDir = target.baseDir || (await getDownloadBaseDir());
+
+            try {
+              if (target.isTorrent && target.torrentInfoHash) {
+                const apiPort = await invoke<number>("get_torrent_api_port");
+                const { fetch } = await import("@tauri-apps/plugin-http");
+                await fetch(
+                  `http://127.0.0.1:${apiPort}/torrents/${target.torrentInfoHash}/delete`,
+                  { method: "POST" },
+                );
+              } else if (!target.isTorrent) {
+                await invoke("cancel_download", {
+                  id: target.id,
+                  filePath: target.filePath,
+                  baseDir,
+                });
+              }
+            } catch (e) {
+              console.error("Failed to cancel download:", e);
             }
-          } catch (e) {
-            console.error("Failed to cancel download:", e);
           }
 
           set((state) => {
             const next = { ...state.downloads };
-            delete next[id];
+            keysToDelete.forEach((key) => {
+              delete next[key];
+            });
             return { downloads: next };
           });
           scheduleDownloads();
         },
 
         removeDownload: async (id) => {
-          // If completed, maybe delete file too, but for now just remove from state
+          const currentDownloads = get().downloads;
+          const item = currentDownloads[id];
+          const isSub = item ? isSubtitleDownloadItem(item) : id.includes("_subtitle_");
+          const keysToDelete = new Set<string>();
+          keysToDelete.add(id);
+
+          if (!isSub) {
+            Object.entries(currentDownloads).forEach(([subId, subItem]) => {
+              if (
+                subId.startsWith(`${id}_subtitle_`) ||
+                (item &&
+                  isSubtitleDownloadItem(subItem) &&
+                  subItem.infoUrl === item.infoUrl &&
+                  subItem.sourceLink === item.sourceLink)
+              ) {
+                keysToDelete.add(subId);
+              }
+            });
+          }
+
           set((state) => {
             const next = { ...state.downloads };
-            delete next[id];
+            keysToDelete.forEach((key) => {
+              delete next[key];
+            });
             return { downloads: next };
           });
         },
@@ -390,6 +518,7 @@ export const useDownloadStore = create<DownloadState>()(
                 [id]: {
                   ...item,
                   status: "completed",
+                  error: undefined,
                   speed: 0,
                   downloadedBytes: item.totalBytes,
                   completedAt: Date.now(),
@@ -401,14 +530,20 @@ export const useDownloadStore = create<DownloadState>()(
           scheduleDownloads();
         },
 
-        markError: (id) => {
+        markError: (id, error) => {
           set((state) => {
             const item = state.downloads[id];
             if (!item) return state;
             return {
               downloads: {
                 ...state.downloads,
-                [id]: { ...item, status: "error", speed: 0 },
+                [id]: {
+                  ...item,
+                  status: "error",
+                  error: error || item.error || "Download failed",
+                  speed: 0,
+                  updatedAt: Date.now(),
+                },
               },
             };
           });

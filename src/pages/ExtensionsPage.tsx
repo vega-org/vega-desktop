@@ -204,16 +204,9 @@ export const ExtensionsPage: React.FC = () => {
       .filter((provider) => !provider.disabled)
       .forEach((provider) => combined.set(providerKey(provider), provider));
 
-    return Array.from(combined.values()).sort((left, right) => {
-      const leftInstalled = installedProviders.some((item) =>
-        isSameProvider(item, left),
-      );
-      const rightInstalled = installedProviders.some((item) =>
-        isSameProvider(item, right),
-      );
-      if (leftInstalled !== rightInstalled) return leftInstalled ? -1 : 1;
-      return left.display_name.localeCompare(right.display_name);
-    });
+    return Array.from(combined.values()).sort((left, right) =>
+      left.display_name.localeCompare(right.display_name),
+    );
   }, [availableProviders, installedProviders]);
 
   const handleAddSource = () => {
@@ -511,6 +504,17 @@ export const ExtensionsPage: React.FC = () => {
           </div>
         )}
       </section>
+
+      <div
+        style={{
+          height: 100,
+          minHeight: 100,
+          width: "100%",
+          flexShrink: 0,
+          pointerEvents: "none",
+        }}
+        aria-hidden="true"
+      />
 
       <Dialog.Root open={showSourcePicker} onOpenChange={setShowSourcePicker}>
         <Dialog.Portal>

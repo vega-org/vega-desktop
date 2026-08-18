@@ -36,6 +36,10 @@ export const DownloadsSeriesPage = () => {
       Object.values(downloads).filter(
         (item) =>
           item.status === "completed" &&
+          !item.isSubtitle &&
+          !item.id.includes("_subtitle_") &&
+          item.videoType !== "vtt" &&
+          item.videoType !== "srt" &&
           (item.showName === decodedShowName || item.title === decodedShowName),
       ),
     [downloads, decodedShowName],

@@ -696,13 +696,6 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
           headers: thumbnailHeaders,
         };
 
-        // Delay the blocking loadfile command by 400ms.
-        // This is CRITICAL for Windows WebView2: if `loadfile` (which blocks the main thread for 2-3s on HTTP streams)
-        // is called synchronously right after a UI state change that triggers CSS transitions (like the sidebar sliding out),
-        // the GPU compositor and main thread can deadlock, freezing the entire app forever.
-        // Giving a 400ms breather allows the React render and CSS transitions to finish before we block the thread.
-        await new Promise((r) => setTimeout(r, 400));
-
         await command("loadfile", [finalUrl, "replace"]);
       } catch (err: any) {
         if (err.name === "AbortError" || err.message === "Aborted") {

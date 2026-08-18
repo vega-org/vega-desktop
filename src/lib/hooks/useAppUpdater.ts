@@ -65,18 +65,16 @@ export const checkAppUpdates = async (manual = false) => {
       return;
     }
 
-    const autoInstall = settingsStorage.isAutoDownloadEnabled();
+    const wantToUpdate = await ask(
+      `Version ${update.version} is available!\n\nRelease notes:\n${update.body || 'New version available.'}\n\nWould you like to install it now?`,
+      { title: 'Vega Desktop Update', kind: 'info' }
+    );
+    if (!wantToUpdate) return;
 
-    if (!autoInstall) {
-      const wantToUpdate = await ask(
-        `Version ${update.version} is available!\n\nRelease notes:\n${update.body || 'New version available.'}\n\nWould you like to install it now?`,
-        { title: 'Vega Desktop Update', kind: 'info' }
-      );
-      if (!wantToUpdate) return;
-    } else {
-      // If auto install is ON, just show a toast/message that we're downloading
-      message(`Downloading new version (${update.version}) in the background. The app will restart when ready.`, { title: 'Updating Vega Desktop' });
-    }
+    message(
+      `Downloading new version (${update.version}) in the background. The app will restart when ready.`,
+      { title: 'Updating Vega Desktop', kind: 'info' }
+    );
 
     console.log(`Downloading update ${update.version}...`);
 

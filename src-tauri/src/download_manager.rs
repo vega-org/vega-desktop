@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc::{self, Sender};
@@ -106,7 +107,8 @@ pub fn list_download_subtitles(
         .file_stem()
         .and_then(|value| value.to_str())
         .ok_or_else(|| "Invalid download filename".to_string())?;
-    let prefix = format!("{base_name}.");
+    let prefix_dot = format!("{base_name}.");
+    let prefix_dash = format!("{base_name} - ");
     let mut subtitles = Vec::new();
 
     for entry in std::fs::read_dir(parent).map_err(|e| e.to_string())? {
@@ -121,19 +123,27 @@ pub fn list_download_subtitles(
         }
 
         let file_name = entry.file_name();
-        let Some(file_name) = file_name.to_str() else {
+        let Some(file_name_str) = file_name.to_str() else {
             continue;
         };
-        let Some(language) = file_name
-            .strip_prefix(&prefix)
+
+        let language = if let Some(lang) = file_name_str
+            .strip_prefix(&prefix_dot)
             .and_then(|value| value.strip_suffix(&format!(".{extension}")))
-        else {
+        {
+            lang.to_string()
+        } else if let Some(lang) = file_name_str
+            .strip_prefix(&prefix_dash)
+            .and_then(|value| value.strip_suffix(&format!(".{extension}")))
+        {
+            lang.to_string()
+        } else {
             continue;
         };
 
         subtitles.push(LocalSubtitle {
             path: entry_path.to_string_lossy().into_owned(),
-            language: language.to_string(),
+            language,
         });
     }
 
@@ -154,19 +164,32 @@ pub async fn start_download(
     let path = validate_download_path(&base_dir, &file_path)?;
     let mut client_builder = Client::builder().danger_accept_invalid_certs(true); // For scraping generic streams
 
+    let mut header_map = reqwest::header::HeaderMap::new();
+    let mut has_user_agent = false;
+
     if let Some(h) = headers {
-        let mut header_map = reqwest::header::HeaderMap::new();
         for (k, v) in h {
-            if let (Ok(name), Ok(value)) = (
-                reqwest::header::HeaderName::from_bytes(k.as_bytes()),
-                reqwest::header::HeaderValue::from_str(&v),
-            ) {
-                header_map.insert(name, value);
+            if let Ok(name) = reqwest::header::HeaderName::from_str(&k) {
+                if let Ok(value) = reqwest::header::HeaderValue::from_str(&v) {
+                    if name == reqwest::header::USER_AGENT {
+                        has_user_agent = true;
+                    }
+                    header_map.insert(name, value);
+                }
             }
         }
-        client_builder = client_builder.default_headers(header_map);
     }
 
+    if !has_user_agent {
+        header_map.insert(
+            reqwest::header::USER_AGENT,
+            reqwest::header::HeaderValue::from_static(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+            ),
+        );
+    }
+
+    client_builder = client_builder.default_headers(header_map);
     let client = client_builder.build().map_err(|e| e.to_string())?;
 
     if url.contains(".m3u8") || video_type.as_deref() == Some("m3u8") {

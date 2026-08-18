@@ -6,7 +6,11 @@ import { providerManager } from "../services/ProviderManager";
 import { settingsStorage } from "../storage";
 
 import { Stream } from "../providers/types";
-import { useDownloadStore } from "../zustand/downloadStore";
+import {
+  useDownloadStore,
+  isVideoDownloadItem,
+  isSubtitleDownloadItem,
+} from "../zustand/downloadStore";
 
 interface UseStreamOptions {
   activeEpisode: any;
@@ -20,11 +24,14 @@ const getCompletedDownload = (activeEpisode: any, routeParams: any) => {
   if (activeEpisode?.localFile) {
     return Object.values(downloads).find(
       (item) =>
-        item.status === "completed" && item.filePath === activeEpisode.link,
+        isVideoDownloadItem(item) &&
+        item.status === "completed" &&
+        item.filePath === activeEpisode.link,
     );
   }
   const sourceMatch = Object.values(downloads).find(
     (item) =>
+      isVideoDownloadItem(item) &&
       item.status === "completed" &&
       item.sourceLink &&
       item.sourceLink === activeEpisode?.link,
@@ -38,7 +45,77 @@ const getCompletedDownload = (activeEpisode: any, routeParams: any) => {
       ? `${baseTitle}_S${routeParams?.secondaryTitle}_E${(routeParams?.linkIndex || 0) + 1}`
       : `${baseTitle}_direct_${routeParams?.linkIndex || 0}`;
   const item = downloads[id];
-  return item?.status === "completed" ? item : undefined;
+  return isVideoDownloadItem(item) && item?.status === "completed" ? item : undefined;
+};
+
+const getDownloadedSubtitles = async (
+  activeEpisode: any,
+  routeParams: any,
+): Promise<any[]> => {
+  const downloads = useDownloadStore.getState().downloads;
+  const baseTitle = routeParams?.primaryTitle || "Unknown Title";
+  const episodeBaseId =
+    routeParams?.type === "series"
+      ? `${baseTitle}_S${routeParams?.secondaryTitle}_E${(routeParams?.linkIndex || 0) + 1}`
+      : `${baseTitle}_direct_${routeParams?.linkIndex || 0}`;
+
+  const downloadedSubs: any[] = [];
+  const completedSubItems = Object.values(downloads).filter(
+    (item) =>
+      isSubtitleDownloadItem(item) &&
+      item.status === "completed" &&
+      (item.id.startsWith(`${episodeBaseId}_subtitle_`) ||
+        (item.infoUrl &&
+          (item.infoUrl === routeParams?.link ||
+            item.infoUrl === routeParams?.infoUrl) &&
+          item.sourceLink === activeEpisode?.link) ||
+        (item.sourceLink && item.sourceLink === activeEpisode?.link)),
+  );
+
+  for (const sub of completedSubItems) {
+    if (!sub.filePath) continue;
+    let fullPath = sub.filePath;
+    if (sub.baseDir && !fullPath.includes(":") && !fullPath.startsWith("/")) {
+      try {
+        const { join } = await import("@tauri-apps/api/path");
+        fullPath = await join(sub.baseDir, sub.filePath);
+      } catch {}
+    }
+    const subTitle = sub.id.includes("_subtitle_")
+      ? sub.id.split("_subtitle_")[1]
+      : sub.episodeName || sub.title;
+    downloadedSubs.push({
+      url: fullPath,
+      language: subTitle || "Unknown",
+      title: `${subTitle || "Subtitle"} (Downloaded)`,
+    });
+  }
+
+  const downloadedItem = getCompletedDownload(activeEpisode, routeParams);
+  if (downloadedItem?.baseDir && downloadedItem?.filePath) {
+    try {
+      const files = await invoke<{ path: string; language: string }[]>(
+        "list_download_subtitles",
+        {
+          baseDir: downloadedItem.baseDir,
+          filePath: downloadedItem.filePath,
+        },
+      );
+      for (const file of files) {
+        if (!downloadedSubs.some((s) => s.url === file.path)) {
+          downloadedSubs.push({
+            url: file.path,
+            language: file.language || "Unknown",
+            title: `${file.language || "Subtitle"} (Downloaded)`,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load local subtitles from dir:", error);
+    }
+  }
+
+  return downloadedSubs;
 };
 
 const createLocalStream = (
@@ -56,22 +133,9 @@ const createLocalStream = (
 const loadLocalStream = async (
   filePath: string,
   baseDir?: string,
+  downloadedSubs: any[] = [],
 ): Promise<Stream> => {
-  const subtitles: any[] = [];
-  if (baseDir) {
-    try {
-      const files = await invoke<{ path: string; language: string }[]>(
-        "list_download_subtitles",
-        { baseDir, filePath },
-      );
-      for (const file of files) {
-        subtitles.push({ url: file.path, language: file.language });
-      }
-    } catch (error) {
-      console.error("Failed to load local subtitles:", error);
-    }
-  }
-  return createLocalStream(filePath, subtitles, baseDir);
+  return createLocalStream(filePath, downloadedSubs, baseDir);
 };
 
 export const useStream = ({
@@ -114,8 +178,9 @@ export const useStream = ({
       }
 
       console.log("Fetching stream for:", activeEpisode);
+      const downloadedSubs = await getDownloadedSubtitles(activeEpisode, routeParams);
       const localStream = localFilePath
-        ? await loadLocalStream(localFilePath, downloadedItem?.baseDir)
+        ? await loadLocalStream(localFilePath, downloadedItem?.baseDir, downloadedSubs)
         : null;
       const remoteLink = activeEpisode?.localFile
         ? activeEpisode.sourceLink || downloadedItem?.sourceLink
@@ -191,38 +256,7 @@ export const useStream = ({
   useEffect(() => {
     let isMounted = true;
     (async () => {
-      const downloadedSubs: any[] = [];
-      if (downloadedItem?.baseDir && downloadedItem?.filePath) {
-        try {
-          const files = await invoke<{ path: string; language: string }[]>(
-            "list_download_subtitles",
-            {
-              baseDir: downloadedItem.baseDir,
-              filePath: downloadedItem.filePath,
-            },
-          );
-          for (const file of files) {
-            downloadedSubs.push({
-              url: file.path,
-              language: file.language || "Unknown",
-              title: `${file.language || "Subtitle"} (Downloaded)`,
-            });
-          }
-        } catch (error) {
-          console.error("Failed to load local subtitles:", error);
-        }
-      }
-      if (downloadedItem?.subtitles?.length) {
-        for (const sub of downloadedItem.subtitles) {
-          if (!downloadedSubs.some((s) => s.url === sub.url)) {
-            downloadedSubs.push({
-              url: sub.url,
-              language: sub.language || "Unknown",
-              title: `${sub.language || "Subtitle"} (Downloaded)`,
-            });
-          }
-        }
-      }
+      const downloadedSubs = await getDownloadedSubtitles(activeEpisode, routeParams);
 
       const onlineSubs: any[] = [];
       if (streamData && streamData.length > 0) {

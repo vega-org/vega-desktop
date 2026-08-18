@@ -21,7 +21,7 @@ import { providerManager } from "../lib/services/ProviderManager";
 import { cacheStorage } from "../lib/storage";
 import { settingsStorage } from "../lib/storage/SettingsStorage";
 import useContentStore from "../lib/zustand/contentStore";
-import { useDownloadStore } from "../lib/zustand/downloadStore";
+import { useDownloadStore, isVideoDownloadItem, isSubtitleDownloadItem } from "../lib/zustand/downloadStore";
 import useWatchListStore from "../lib/zustand/watchListStore";
 import "./MetaPage.css";
 
@@ -57,10 +57,12 @@ export const MetaPage: React.FC = () => {
   const episodeSortOrderKey = `${EPISODE_SORT_ORDER_KEY_PREFIX}:${activeProviderValue}:${link}`;
   const { info, meta, isLoading, error, refetch } = useContentDetails(link, activeProviderValue);
   const [activeSeason, setActiveSeason] = useState<Link | null>(null);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [dialogStreams, setDialogStreams] = useState<Stream[]>([]);
   const [dialogEpisodeTitle, setDialogEpisodeTitle] = useState("");
   const [dialogContext, setDialogContext] = useState<DialogContext | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
+  const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false);
+  const [isDialogLoading, setIsDialogLoading] = useState(false);
   const [episodesProgress, setEpisodesProgress] = useState<Record<string, { position: number; duration: number }>>({});
   const [episodeSearch, setEpisodeSearch] = useState("");
   const [episodeDetails, setEpisodeDetails] = useState<EpisodeDetails | null>(null);
@@ -106,8 +108,9 @@ export const MetaPage: React.FC = () => {
     !!activeSeason?.episodesLink,
   );
 
-  const bgImage = meta?.background || info?.image;
   const cachedPosterImage = searchParams.get("poster") || "";
+  const cachedBgImage = searchParams.get("background") || searchParams.get("bg") || "";
+  const bgImage = meta?.background || info?.image || cachedBgImage;
   const posterImage = info?.poster || meta?.poster || cachedPosterImage || info?.image;
   const title = meta?.name || info?.title || "Untitled";
   const description = meta?.description || info?.synopsis || info?.description;
@@ -116,7 +119,7 @@ export const MetaPage: React.FC = () => {
   const trailerUrl = info?.trailerUrl?.trim();
   const dynamicThemeEnabled = settingsStorage.isInfoPageDynamicThemeEnabled();
   const paletteArtwork = dynamicThemeEnabled
-    ? meta?.poster || cachedPosterImage || info?.image || bgImage
+    ? bgImage || meta?.poster || cachedPosterImage || info?.image
     : null;
   const paletteStyle = useArtworkPalette(paletteArtwork);
   const paletteReady = useArtworkPaletteReady(paletteArtwork);
@@ -152,7 +155,34 @@ export const MetaPage: React.FC = () => {
     setEpisodesProgress(progressMap);
   }, [episodeList, activeSeason, title]);
 
-  if ((isLoading && !info) || (dynamicThemeEnabled && !paletteReady)) {
+  const dialogDownloadedSubtitles = useMemo(() => {
+    if (!dialogContext) return [];
+    return Object.values(downloads)
+      .filter(
+        (item) =>
+          item.status === "completed" &&
+          (item.id.startsWith(`${dialogContext.id}_subtitle_`) ||
+            (item.infoUrl === link &&
+              item.sourceLink === dialogContext.sourceLink &&
+              item.id.includes("_subtitle_"))),
+      )
+      .map((s) => {
+        let subTitle = s.title;
+        if (s.id.includes("_subtitle_")) {
+          const parts = s.id.split("_subtitle_");
+          if (parts[1]) subTitle = parts[1];
+        }
+        return {
+          id: s.id,
+          title: subTitle,
+          language: s.title,
+          filePath: s.filePath,
+        };
+      });
+  }, [downloads, dialogContext, link]);
+
+  const isThemeLoading = dynamicThemeEnabled && (isLoading || !paletteReady);
+  if ((isLoading && !info) || isThemeLoading) {
     return <ContentDetailSkeleton />;
   }
 
@@ -199,39 +229,60 @@ export const MetaPage: React.FC = () => {
     exactId?: string,
   ) => {
     const id = exactId || `${title}_S${groupTitle}_E${index + 1}`;
-    const stored = downloads[id] || Object.values(downloads).find(
-      (item) => item.infoUrl === link && item.sourceLink === episode.link,
-    );
+    const stored =
+      (downloads[id] && isVideoDownloadItem(downloads[id])
+        ? downloads[id]
+        : null) ||
+      Object.values(downloads).find(
+        (item) =>
+          isVideoDownloadItem(item) &&
+          item.infoUrl === link &&
+          item.sourceLink === episode.link,
+      );
+    const finalTitle = `${title} S${groupTitle} E${index + 1}`;
+
+    setDialogEpisodeTitle(finalTitle);
+    setDialogContext({
+      id,
+      title: finalTitle,
+      poster: posterImage,
+      showName: title,
+      episodeName: episode.title,
+      seasonTitle: groupTitle,
+      type: type as "movie" | "series",
+      imdbId: info.imdbId || meta?.imdbId,
+      sourceLink: episode.link,
+      downloaded: stored?.status === "completed",
+      downloadedServer: stored?.server,
+      downloadId: stored?.id || id,
+    });
+    setDialogStreams([]);
+    setDialogError(null);
+    setIsDownloadDialogOpen(true);
+
+    setIsDialogLoading(true);
     try {
-      setDownloadingId(id);
       const streams = await providerManager.getStream({
         link: episode.link,
         type,
         signal: new AbortController().signal,
         providerValue: activeProviderValue,
       });
-      if (!streams?.length) return;
-      const finalTitle = `${title} S${groupTitle} E${index + 1}`;
-      setDialogStreams(streams);
-      setDialogEpisodeTitle(finalTitle);
-      setDialogContext({
-        id,
-        title: finalTitle,
-        poster: posterImage,
-        showName: title,
-        episodeName: episode.title,
-        seasonTitle: groupTitle,
-        type: type as "movie" | "series",
-        imdbId: info.imdbId || meta?.imdbId,
-        sourceLink: episode.link,
-        downloaded: stored?.status === "completed",
-        downloadedServer: stored?.server,
-        downloadId: stored?.id || id,
-      });
+      const validStreams = streams || [];
+      setDialogStreams(validStreams);
+      if (validStreams.length === 0) {
+        setDialogError("No downloadable streams found.");
+      }
     } catch (caughtError) {
       console.error("Failed to extract stream for download", caughtError);
+      setDialogStreams([]);
+      setDialogError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to extract stream for download.",
+      );
     } finally {
-      setDownloadingId(null);
+      setIsDialogLoading(false);
     }
   };
 
@@ -252,15 +303,38 @@ export const MetaPage: React.FC = () => {
       type: dialogContext.type,
       imdbId: dialogContext.imdbId,
       headers: stream.headers,
-      subtitles: stream.subtitles?.map((subtitle: any) => ({
-        url: subtitle.uri || subtitle.url,
-        language: subtitle.language || "Unknown",
-        format: subtitle.type?.includes("vtt") ? "vtt" : subtitle.type?.includes("subrip") ? "srt" : undefined,
-      })),
       videoType: stream.type === "m3u8" || stream.link.includes(".m3u8") ? "m3u8" : stream.type,
     });
+    setIsDownloadDialogOpen(false);
     setDialogStreams([]);
     setDialogContext(null);
+    setDialogError(null);
+  };
+
+  const selectSubtitle = async (sub: { uri: string; title: string; language?: string; type?: string }) => {
+    if (!dialogContext) return;
+    const subId = `${dialogContext.id}_subtitle_${sub.title}`;
+    await addDownload({
+      id: subId,
+      title: `${dialogContext.title} ${sub.title} Subtitle`,
+      url: sub.uri,
+      server: "Subtitle",
+      poster: dialogContext.poster,
+      provider: activeProviderValue || "unknown",
+      infoUrl: link,
+      sourceLink: dialogContext.sourceLink,
+      showName: dialogContext.showName,
+      episodeName: dialogContext.episodeName,
+      seasonTitle: dialogContext.seasonTitle,
+      type: dialogContext.type,
+      imdbId: dialogContext.imdbId,
+      isSubtitle: true,
+      videoType: sub.type?.includes("vtt") || sub.uri.includes(".vtt") ? "vtt" : "srt",
+    });
+    setIsDownloadDialogOpen(false);
+    setDialogStreams([]);
+    setDialogContext(null);
+    setDialogError(null);
   };
 
   const rows = activeSeason?.episodesLink ? episodeList || [] : activeSeason?.directLinks || [];
@@ -372,8 +446,22 @@ export const MetaPage: React.FC = () => {
                   const progressPercent = progressData?.duration ? Math.min((progressData.position / progressData.duration) * 100, 100) : 0;
                   const groupTitle = activeSeason?.title || "Default";
                   const id = `${title}_S${groupTitle}_E${sourceIndex + 1}`;
-                  const storedDownload = downloads[id] || Object.values(downloads).find(
-                    (item) => item.infoUrl === link && item.sourceLink === episode.link,
+                  const storedDownload =
+                    (downloads[id] && isVideoDownloadItem(downloads[id])
+                      ? downloads[id]
+                      : null) ||
+                    Object.values(downloads).find(
+                      (item) =>
+                        isVideoDownloadItem(item) &&
+                        item.infoUrl === link &&
+                        item.sourceLink === episode.link,
+                    );
+                  const hasDownloadedSubtitles = Object.values(downloads).some(
+                    (item) =>
+                      isSubtitleDownloadItem(item) &&
+                      item.status === "completed" &&
+                      (item.id.startsWith(`${id}_subtitle_`) ||
+                        (item.infoUrl === link && item.sourceLink === episode.link)),
                   );
                   const storedDownloadId = storedDownload?.id || id;
                   const displayTitle = !activeSeason?.episodesLink && rows.length === 1 ? "Play" : episode.title;
@@ -387,7 +475,8 @@ export const MetaPage: React.FC = () => {
                       progressPercent={progressPercent}
                       watched={progressPercent > 85}
                       download={storedDownload}
-                      extracting={downloadingId === id}
+                      hasDownloadedSubtitles={hasDownloadedSubtitles}
+                      extracting={false}
                       onPlay={() => play(playableRows, index, rowType)}
                       onDownload={() => void prepareDownload(episode, sourceIndex, rowType, groupTitle, id)}
                       onDeleteDownload={() => void cancelDownload(storedDownloadId)}
@@ -407,18 +496,32 @@ export const MetaPage: React.FC = () => {
         </div>
 
         <DownloadServerDialog
-          isOpen={dialogStreams.length > 0}
-          onClose={() => { setDialogStreams([]); setDialogContext(null); }}
+          isOpen={isDownloadDialogOpen}
+          onClose={() => {
+            setIsDownloadDialogOpen(false);
+            setDialogStreams([]);
+            setDialogContext(null);
+            setDialogError(null);
+            setIsDialogLoading(false);
+          }}
           streams={dialogStreams}
+          loading={isDialogLoading}
+          error={dialogError}
           onSelect={selectStream}
           episodeTitle={dialogEpisodeTitle}
           downloaded={dialogContext?.downloaded}
           downloadedServer={dialogContext?.downloadedServer}
+          downloadedSubtitles={dialogDownloadedSubtitles}
+          onSelectSubtitle={selectSubtitle}
+          onDeleteSubtitle={(subId) => void cancelDownload(subId)}
           onDelete={() => {
             if (dialogContext?.downloadId) {
               void cancelDownload(dialogContext.downloadId);
+              setIsDownloadDialogOpen(false);
               setDialogStreams([]);
               setDialogContext(null);
+              setDialogError(null);
+              setIsDialogLoading(false);
             }
           }}
         />

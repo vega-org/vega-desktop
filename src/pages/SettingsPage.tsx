@@ -1,7 +1,15 @@
 import React from "react";
 import useThemeStore from "../lib/zustand/themeStore";
 import { themes } from "../lib/constants";
-import { LuMonitor as Monitor, LuCheck as Check } from "react-icons/lu";
+import {
+  LuMonitor as Monitor,
+  LuCheck as Check,
+  LuPlay as Play,
+  LuCaptions as Captions,
+  LuSlidersHorizontal as Sliders,
+  LuInfo as Info,
+} from "react-icons/lu";
+import { PlayerSettings } from "../components/settings/PlayerSettings";
 import { SubtitleSettings } from "../components/settings/SubtitleSettings";
 import { PreferencesSettings } from "../components/settings/PreferencesSettings";
 import { GitHubStarButton } from "../components/settings/GitHubStarButton";
@@ -96,16 +104,16 @@ export const SettingsPage: React.FC = () => {
           </div>
         </section>
 
-        {/* Preferences Group */}
+        {/* Player Group */}
         <section className="settings-group">
           <h2
             className="title-md flex items-center gap-2"
             style={{ marginBottom: "8px" }}
           >
-            Preferences
+            <Play size={20} /> Player
           </h2>
           <div className="settings-card">
-            <PreferencesSettings />
+            <PlayerSettings />
           </div>
         </section>
 
@@ -115,17 +123,33 @@ export const SettingsPage: React.FC = () => {
             className="title-md flex items-center gap-2"
             style={{ marginBottom: "8px" }}
           >
-            Subtitles
+            <Captions size={20} /> Subtitles
           </h2>
           <div className="settings-card">
             <SubtitleSettings />
           </div>
         </section>
 
+        {/* Preferences Group */}
+        <section className="settings-group">
+          <h2
+            className="title-md flex items-center gap-2"
+            style={{ marginBottom: "8px" }}
+          >
+            <Sliders size={20} /> Preferences
+          </h2>
+          <div className="settings-card">
+            <PreferencesSettings />
+          </div>
+        </section>
+
         {/* About Group */}
         <section className="settings-group">
-          <h2 className="title-md" style={{ marginBottom: "8px" }}>
-            About
+          <h2
+            className="title-md flex items-center gap-2"
+            style={{ marginBottom: "8px" }}
+          >
+            <Info size={20} /> About
           </h2>
           <div className="settings-card">
             <div className="settings-row">
