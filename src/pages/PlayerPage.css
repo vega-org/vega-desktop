@@ -795,7 +795,6 @@
       rgba(0, 0, 0, 0.9)
     ),
     linear-gradient(0deg, #050505, transparent 65%);
-
 }
 
 .tv-server-shell {
@@ -1382,7 +1381,6 @@
   place-items: center;
   padding: 28px;
   background: rgba(0, 0, 0, 0.66);
-
 }
 
 .player-shortcuts-dialog {
@@ -1558,7 +1556,11 @@
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease, color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease,
+    background 0.2s ease;
 }
 
 .player-episode-sidebar-toggle.visible {
@@ -1657,7 +1659,9 @@
   border: none;
   color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .player-episode-sidebar-close:hover {
@@ -1694,7 +1698,11 @@
   color: rgba(255, 255, 255, 0.85);
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
   width: 100%;
 }
 

@@ -19,6 +19,14 @@ interface UseStreamOptions {
   enabled?: boolean;
 }
 
+// Stable reference for the "no data yet" case. An inline `= []` default would
+// create a new array on every render while the query is loading, which makes
+// every effect depending on `streamData` re-run and re-render endlessly.
+const EMPTY_STREAMS: Stream[] = [];
+
+const getSubtitleKey = (subs: any[]) =>
+  subs.map((sub) => sub?.url || sub?.uri || "").join("|");
+
 const getCompletedDownload = (activeEpisode: any, routeParams: any) => {
   const downloads = useDownloadStore.getState().downloads;
   if (activeEpisode?.localFile) {
@@ -154,12 +162,19 @@ export const useStream = ({
   const localFilePath = activeEpisode?.localFile
     ? activeEpisode.link
     : downloadedItem?.filePath;
-  const localPlaceholder = localFilePath
-    ? [createLocalStream(localFilePath, [], downloadedItem?.baseDir)]
-    : undefined;
+  // Memoized so the placeholder keeps a stable identity across renders. A new
+  // array here would become a new `streamData` reference on every render while
+  // the query loads, reintroducing the render loop for downloaded episodes.
+  const localPlaceholder = useMemo(
+    () =>
+      localFilePath
+        ? [createLocalStream(localFilePath, [], downloadedItem?.baseDir)]
+        : undefined,
+    [localFilePath, downloadedItem?.baseDir],
+  );
 
   const {
-    data: streamData = [],
+    data: streamData = EMPTY_STREAMS,
     isLoading,
     error,
     refetch,
@@ -281,7 +296,13 @@ export const useStream = ({
       });
 
       if (isMounted) {
-        setExternalSubs(mergedSubs);
+        // Only replace state when the resolved list actually differs, otherwise
+        // a fresh array reference would retrigger this effect on every render.
+        setExternalSubs((prev) =>
+          getSubtitleKey(prev) === getSubtitleKey(mergedSubs)
+            ? prev
+            : mergedSubs,
+        );
       }
     })();
 

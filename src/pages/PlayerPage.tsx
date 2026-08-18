@@ -202,7 +202,8 @@ function findBestMatchingSubtitleTrack(
 
   if (saved.subLabel) {
     const match = tracks.find(
-      (t) => formatTrackLabel(t).toLowerCase() === saved.subLabel!.toLowerCase(),
+      (t) =>
+        formatTrackLabel(t).toLowerCase() === saved.subLabel!.toLowerCase(),
     );
     if (match) return match;
   }
@@ -546,10 +547,7 @@ const TvPlayer: React.FC<any> = ({
           >
             <ArrowLeft size={23} />
           </FocusableButton>
-          <div
-            className="player-loading"
-            style={{ background: "transparent" }}
-          >
+          <div className="player-loading" style={{ background: "transparent" }}>
             <AnimatedHourglass sandColor={hourglassSandColor} />
             <span className="loading-text">Fetching Stream...</span>
           </div>
@@ -901,7 +899,7 @@ const DesktopPlayer: React.FC<any> = ({
         try {
           const { position } = JSON.parse(cached);
           if (position > 5) mpv.seek(position);
-        } catch { }
+        } catch {}
       }
 
       const savedZoom = settingsStorage.getPlayerZoom();
@@ -965,17 +963,17 @@ const DesktopPlayer: React.FC<any> = ({
       const win = getCurrentWindow();
       const previousState = preFullscreenStateRef.current;
       void (async () => {
-        await win.setFullscreen(false).catch(() => { });
+        await win.setFullscreen(false).catch(() => {});
         if (previousState) {
-          await win.setAlwaysOnTop(previousState.alwaysOnTop).catch(() => { });
+          await win.setAlwaysOnTop(previousState.alwaysOnTop).catch(() => {});
           if (previousState.maximized) {
-            await win.maximize().catch(() => { });
+            await win.maximize().catch(() => {});
             await invoke("ensure_window_in_work_area", {
               maximized: true,
-            }).catch(() => { });
+            }).catch(() => {});
           } else if (manualFullscreenRef.current) {
-            await win.setPosition(previousState.pos).catch(() => { });
-            await win.setSize(previousState.size).catch(() => { });
+            await win.setPosition(previousState.pos).catch(() => {});
+            await win.setSize(previousState.size).catch(() => {});
           }
         }
         manualFullscreenRef.current = false;
@@ -1176,14 +1174,17 @@ const DesktopPlayer: React.FC<any> = ({
     }
   }, [showControls, revealControls]);
 
-  const applyZoom = useCallback((newZoom: number) => {
-    const clamped = Math.min(300, Math.max(50, Math.round(newZoom)));
-    setZoomLevel(clamped);
-    settingsStorage.setPlayerZoom(clamped);
-    const mpvZoom = clamped === 100 ? 0.0 : Math.log2(clamped / 100);
-    mpv.setProperty("video-zoom", mpvZoom);
-    toast(`Zoom: ${clamped}%${clamped === 100 ? " (Default)" : ""}`);
-  }, [mpv, toast]);
+  const applyZoom = useCallback(
+    (newZoom: number) => {
+      const clamped = Math.min(300, Math.max(50, Math.round(newZoom)));
+      setZoomLevel(clamped);
+      settingsStorage.setPlayerZoom(clamped);
+      const mpvZoom = clamped === 100 ? 0.0 : Math.log2(clamped / 100);
+      mpv.setProperty("video-zoom", mpvZoom);
+      toast(`Zoom: ${clamped}%${clamped === 100 ? " (Default)" : ""}`);
+    },
+    [mpv, toast],
+  );
 
   const handleZoomIn = useCallback(() => {
     applyZoom(zoomLevel + 10);
@@ -1203,7 +1204,7 @@ const DesktopPlayer: React.FC<any> = ({
         pause();
         return () => resume();
       })
-      .catch(() => { });
+      .catch(() => {});
 
     const handleWheel = (e: WheelEvent) => {
       const target = e.target as HTMLElement | null;
@@ -1370,7 +1371,7 @@ const DesktopPlayer: React.FC<any> = ({
       window.removeEventListener("touchstart", onTouch);
       import("@noriginmedia/norigin-spatial-navigation-core")
         .then(({ resume }) => resume())
-        .catch(() => { });
+        .catch(() => {});
     };
   }, [
     mpv,
@@ -1446,18 +1447,18 @@ const DesktopPlayer: React.FC<any> = ({
     } catch (e) {
       console.error(e);
       const previousState = preFullscreenStateRef.current;
-      await win.setFullscreen(false).catch(() => { });
+      await win.setFullscreen(false).catch(() => {});
       await win
         .setAlwaysOnTop(previousState?.alwaysOnTop ?? false)
-        .catch(() => { });
+        .catch(() => {});
       if (previousState?.maximized) {
-        await win.maximize().catch(() => { });
+        await win.maximize().catch(() => {});
         await invoke("ensure_window_in_work_area", { maximized: true }).catch(
-          () => { },
+          () => {},
         );
       } else if (previousState) {
-        await win.setPosition(previousState.pos).catch(() => { });
-        await win.setSize(previousState.size).catch(() => { });
+        await win.setPosition(previousState.pos).catch(() => {});
+        await win.setSize(previousState.size).catch(() => {});
       }
       manualFullscreenRef.current = false;
       preFullscreenStateRef.current = null;
@@ -1489,16 +1490,16 @@ const DesktopPlayer: React.FC<any> = ({
               Math.max(
                 monitor.position.x,
                 monitor.position.x +
-                monitor.size.width -
-                pipSize.width -
-                margin,
+                  monitor.size.width -
+                  pipSize.width -
+                  margin,
               ),
               Math.max(
                 monitor.position.y,
                 monitor.position.y +
-                monitor.size.height -
-                pipSize.height -
-                margin,
+                  monitor.size.height -
+                  pipSize.height -
+                  margin,
               ),
             ),
           );
@@ -1524,8 +1525,6 @@ const DesktopPlayer: React.FC<any> = ({
     setIsCropped(nextCrop);
     mpv.setProperty("panscan", nextCrop ? 1.0 : 0.0);
   };
-
-
 
   const handleStreamSelect = useCallback(
     (stream: any) => {
@@ -1725,7 +1724,9 @@ const DesktopPlayer: React.FC<any> = ({
             saveSubtitlePreference(state, "off");
             toast("Subtitles: Off");
           } else {
-            const index = mpv.subtitleTracks.findIndex((item) => item.id === id);
+            const index = mpv.subtitleTracks.findIndex(
+              (item) => item.id === id,
+            );
             const track = mpv.subtitleTracks[index];
             if (track) {
               saveSubtitlePreference(
@@ -1834,11 +1835,7 @@ const DesktopPlayer: React.FC<any> = ({
         </>
       )}
 
-      {toastMessage && (
-        <div className="player-toast">
-          {toastMessage}
-        </div>
-      )}
+      {toastMessage && <div className="player-toast">{toastMessage}</div>}
     </div>
   );
 };
