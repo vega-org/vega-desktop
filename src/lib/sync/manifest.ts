@@ -11,6 +11,7 @@ export interface SyncedDownload {
   episodeName?: string;
   seasonTitle?: string;
   type: "movie" | "series";
+  isSubtitle?: boolean;
   imdbId?: string;
   poster?: string;
   background?: string;
@@ -118,7 +119,14 @@ export const getDownloadMediaKey = (item: SyncedDownload): string => {
   const identity = item.imdbId
     ? normalizeKeyPart(item.imdbId)
     : normalizeKeyPart(item.showName || item.title);
-  return `${item.type}:${identity}:${getSeasonKey(item)}:${getEpisodeKey(item)}`;
+  const baseKey = `${item.type}:${identity}:${getSeasonKey(item)}:${getEpisodeKey(item)}`;
+  if (item.isSubtitle || item.id.includes("_subtitle_")) {
+    const subPart = item.id.includes("_subtitle_")
+      ? item.id.split("_subtitle_")[1]
+      : item.title;
+    return `${baseKey}:subtitle:${normalizeKeyPart(subPart)}`;
+  }
+  return baseKey;
 };
 
 const isManifest = (value: unknown): value is VegaSyncManifest => {

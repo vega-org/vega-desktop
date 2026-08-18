@@ -37,6 +37,9 @@ interface DialogContext {
   type: "movie" | "series";
   imdbId?: string;
   sourceLink: string;
+  downloaded?: boolean;
+  downloadedServer?: string;
+  downloadId?: string;
 }
 
 export const MetaPage: React.FC = () => {
@@ -196,6 +199,9 @@ export const MetaPage: React.FC = () => {
     exactId?: string,
   ) => {
     const id = exactId || `${title}_S${groupTitle}_E${index + 1}`;
+    const stored = downloads[id] || Object.values(downloads).find(
+      (item) => item.infoUrl === link && item.sourceLink === episode.link,
+    );
     try {
       setDownloadingId(id);
       const streams = await providerManager.getStream({
@@ -218,6 +224,9 @@ export const MetaPage: React.FC = () => {
         type: type as "movie" | "series",
         imdbId: info.imdbId || meta?.imdbId,
         sourceLink: episode.link,
+        downloaded: stored?.status === "completed",
+        downloadedServer: stored?.server,
+        downloadId: stored?.id || id,
       });
     } catch (caughtError) {
       console.error("Failed to extract stream for download", caughtError);
@@ -232,6 +241,7 @@ export const MetaPage: React.FC = () => {
       id: dialogContext.id,
       title: dialogContext.title,
       url: stream.link,
+      server: stream.server,
       poster: dialogContext.poster,
       provider: activeProviderValue || "unknown",
       infoUrl: link,
@@ -402,6 +412,15 @@ export const MetaPage: React.FC = () => {
           streams={dialogStreams}
           onSelect={selectStream}
           episodeTitle={dialogEpisodeTitle}
+          downloaded={dialogContext?.downloaded}
+          downloadedServer={dialogContext?.downloadedServer}
+          onDelete={() => {
+            if (dialogContext?.downloadId) {
+              void cancelDownload(dialogContext.downloadId);
+              setDialogStreams([]);
+              setDialogContext(null);
+            }
+          }}
         />
         <EpisodeDetailsDialog
           details={episodeDetails}

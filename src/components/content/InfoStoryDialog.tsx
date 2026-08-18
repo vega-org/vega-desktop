@@ -61,6 +61,12 @@ const formatRuntime = (minutes?: number) => {
 const compactNumber = (value?: number) =>
   value ? new Intl.NumberFormat("en", { notation: "compact" }).format(value) : undefined;
 
+const formatRating = (value?: number | string) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  const num = typeof value === "number" ? value : parseFloat(String(value));
+  return isNaN(num) ? undefined : num.toFixed(1);
+};
+
 const formatCurrency = (value?: number): string | undefined => {
   if (!value && value !== 0) return undefined;
   const abs = Math.abs(value);
@@ -155,7 +161,7 @@ export function InfoStoryDialog({
   const facts = data ? [
     data.meterRank ? { icon: LuTrendingUp, label: "IMDb Popularity", value: `#${data.meterRank}` } : null,
     data.trendingRank ? { icon: LuTrendingUp, label: "Trending this week", value: `#${data.trendingRank}` } : null,
-    data.rating ? { icon: LuStar, label: `${compactNumber(data.voteCount) || "IMDb"} votes`, value: `${data.rating.toFixed(1)}/10` } : null,
+    formatRating(data.rating) ? { icon: LuStar, label: `${compactNumber(data.voteCount) || "IMDb"} votes`, value: `${formatRating(data.rating)}/10` } : null,
     data.metascore ? { icon: LuHash, label: "Metascore", value: `${data.metascore}` } : null,
     data.certification ? { icon: LuInfo, label: "Content rating", value: data.certification } : null,
     data.releaseDate ? { icon: LuCalendar, label: "Released", value: data.releaseDate.slice(0, 4) } : null,
@@ -234,10 +240,10 @@ function AboutPage({ data, title, description, backdrops, backdropIndex }: { dat
         <div>
           <h1>{data.title || title}</h1>
           {data.tagline && <p className="info-story-tagline">{data.tagline}</p>}
-          {data.rating && (
+          {formatRating(data.rating) && (
             <div className="info-story-about-badges">
               <span className="info-story-badge info-story-badge-imdb">
-                <LuStar size={14} /> {data.rating.toFixed(1)}{data.voteCount ? ` (${compactNumber(data.voteCount)})` : ""}
+                <LuStar size={14} /> {formatRating(data.rating)}{data.voteCount ? ` (${compactNumber(data.voteCount)})` : ""}
               </span>
               {data.metascore && <span className="info-story-badge info-story-badge-meta">{data.metascore}</span>}
               {data.meterRank && <span className="info-story-badge info-story-badge-rank"><LuTrendingUp size={13} /> #{data.meterRank}</span>}
@@ -309,10 +315,11 @@ function TrailerPage({ data }: { data: any }) {
           ) : activeVideo?.youtubeKey ? (
             <iframe
               key={activeVideo.youtubeKey}
-              src={`https://www.youtube.com/embed/${encodeURIComponent(activeVideo.youtubeKey)}?playsinline=1&rel=0&modestbranding=1`}
+              src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(activeVideo.youtubeKey)}?playsinline=1&rel=0&modestbranding=1&enablejsapi=1`}
               title={activeVideo.name || `${data.title} trailer`}
-              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin"
             />
           ) : null}
         </div>
@@ -452,7 +459,7 @@ function RatingsPage({ data }: { data: any }) {
           <div className="info-story-ratings-top">
             <div className="info-story-ratings-big">
               <LuStar size={44} />
-              <strong>{data.rating?.toFixed(1)}</strong>
+              <strong>{formatRating(data.rating)}</strong>
             </div>
             <span className="info-story-ratings-count">{compactNumber(data.voteCount)}</span>
           </div>
@@ -473,7 +480,7 @@ function RatingsPage({ data }: { data: any }) {
             })}
           </div>
         </div>
-        
+
         {data.featuredReview && (
           <div className="info-story-featured-review">
             <h3>Featured Review</h3>
@@ -490,8 +497,8 @@ function RatingsPage({ data }: { data: any }) {
               {data.featuredReview.text}
             </p>
             {(isOverflowing || isReviewExpanded) && (
-              <button 
-                className="info-story-review-toggle" 
+              <button
+                className="info-story-review-toggle"
                 onClick={() => setIsReviewExpanded(p => !p)}
               >
                 {isReviewExpanded ? "Show less" : "Read more"}
@@ -566,10 +573,10 @@ function RelatedPage({ data }: { data: any }) {
             </div>
             <div className="info-story-related-meta">
               <strong>{title.title}</strong>
-              {title.rating != null && (
+              {formatRating(title.rating) && (
                 <div className="info-story-related-rating">
                   <LuStar size={12} fill="#f5c518" color="#f5c518" />
-                  <span>{title.rating.toFixed(1)}</span>
+                  <span>{formatRating(title.rating)}</span>
                 </div>
               )}
             </div>

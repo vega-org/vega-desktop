@@ -6,6 +6,7 @@ import {
   LuCircleAlert as AlertCircle,
   LuCopy as Copy,
   LuCheck as Check,
+  LuTrash2 as Trash2,
 } from "react-icons/lu";
 import { Stream } from "../lib/providers/types";
 import { FocusableButton } from "./layout/FocusableButton";
@@ -22,6 +23,9 @@ interface DownloadServerDialogProps {
   streams: Stream[];
   episodeTitle: string;
   onSelect: (stream: Stream) => void;
+  downloaded?: boolean;
+  downloadedServer?: string;
+  onDelete?: () => void;
 }
 
 export const DownloadServerDialog: React.FC<DownloadServerDialogProps> = ({
@@ -30,6 +34,9 @@ export const DownloadServerDialog: React.FC<DownloadServerDialogProps> = ({
   streams,
   episodeTitle,
   onSelect,
+  downloaded,
+  downloadedServer,
+  onDelete,
 }) => {
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
@@ -70,6 +77,8 @@ export const DownloadServerDialog: React.FC<DownloadServerDialogProps> = ({
     setTimeout(() => setCopiedLink(null), 2000);
   };
 
+  const undownloadedStreams = downloaded ? [] : streams;
+
   return (
     <FocusContext.Provider value={focusKey}>
       <div className="download-dialog-overlay" onClick={onClose}>
@@ -98,14 +107,40 @@ export const DownloadServerDialog: React.FC<DownloadServerDialogProps> = ({
           </div>
 
           <div className="download-dialog-body">
-            {streams.length === 0 ? (
+            {downloaded && (
+              <div className="downloaded-banner">
+                <div className="downloaded-banner-info">
+                  <Check size={22} className="text-primary" />
+                  <div>
+                    <h4 className="label-lg">
+                      {downloadedServer || "Video is downloaded"}
+                    </h4>
+                    <p className="body-xs text-muted">Downloaded</p>
+                  </div>
+                </div>
+                {onDelete && (
+                  <FocusableButton
+                    className="delete-download-btn"
+                    onClick={() => {
+                      onDelete();
+                      onClose();
+                    }}
+                    title="Delete download"
+                  >
+                    <Trash2 size={16} />
+                    <span>Delete</span>
+                  </FocusableButton>
+                )}
+              </div>
+            )}
+            {undownloadedStreams.length === 0 && !downloaded ? (
               <div className="empty-state-dialog">
                 <AlertCircle size={40} className="mb-sm text-yellow-500" />
                 <p>No downloadable streams found.</p>
               </div>
             ) : (
               <div className="stream-list">
-                {streams.map((stream, idx) => (
+                {undownloadedStreams.map((stream, idx) => (
                   <FocusableButton
                     key={idx}
                     className="stream-item"

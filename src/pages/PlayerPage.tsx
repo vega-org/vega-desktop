@@ -231,6 +231,12 @@ function findBestMatchingSubtitleTrack(
     return tracks[saved.subIndex];
   }
 
+  const downloadedTrack = tracks.find((t) => {
+    const title = t.title?.toLowerCase() || "";
+    return title.includes("downloaded") || title.includes("local");
+  });
+  if (downloadedTrack) return downloadedTrack;
+
   return undefined;
 }
 
@@ -641,7 +647,7 @@ const TvPlayer: React.FC<any> = ({
                   <Server size={21} />
                 </div>
                 <div>
-                  <h2>Select server</h2>
+                  <h2>Server</h2>
                   <p>{streamData?.length || 0} available</p>
                 </div>
               </div>
@@ -830,7 +836,7 @@ const DesktopPlayer: React.FC<any> = ({
         try {
           const { position } = JSON.parse(cached);
           if (position > 5) mpv.seek(position);
-        } catch {}
+        } catch { }
       }
 
       const savedZoom = settingsStorage.getPlayerZoom();
@@ -894,17 +900,17 @@ const DesktopPlayer: React.FC<any> = ({
       const win = getCurrentWindow();
       const previousState = preFullscreenStateRef.current;
       void (async () => {
-        await win.setFullscreen(false).catch(() => {});
+        await win.setFullscreen(false).catch(() => { });
         if (previousState) {
-          await win.setAlwaysOnTop(previousState.alwaysOnTop).catch(() => {});
+          await win.setAlwaysOnTop(previousState.alwaysOnTop).catch(() => { });
           if (previousState.maximized) {
-            await win.maximize().catch(() => {});
+            await win.maximize().catch(() => { });
             await invoke("ensure_window_in_work_area", {
               maximized: true,
-            }).catch(() => {});
+            }).catch(() => { });
           } else if (manualFullscreenRef.current) {
-            await win.setPosition(previousState.pos).catch(() => {});
-            await win.setSize(previousState.size).catch(() => {});
+            await win.setPosition(previousState.pos).catch(() => { });
+            await win.setSize(previousState.size).catch(() => { });
           }
         }
         manualFullscreenRef.current = false;
@@ -975,6 +981,17 @@ const DesktopPlayer: React.FC<any> = ({
             if (!targetSub.selected) {
               mpv.selectTrack("sid", targetSub.id);
             }
+          }
+        }
+      } else {
+        const downloadedTrack = mpv.subtitleTracks.find((t) => {
+          const title = t.title?.toLowerCase() || "";
+          return title.includes("downloaded") || title.includes("local");
+        });
+        if (downloadedTrack) {
+          appliedSubtitleForStreamRef.current = streamLink;
+          if (!downloadedTrack.selected) {
+            mpv.selectTrack("sid", downloadedTrack.id);
           }
         }
       }
@@ -1099,7 +1116,7 @@ const DesktopPlayer: React.FC<any> = ({
         pause();
         return () => resume();
       })
-      .catch(() => {});
+      .catch(() => { });
 
     const handleWheel = (e: WheelEvent) => {
       const target = e.target as HTMLElement | null;
@@ -1265,7 +1282,7 @@ const DesktopPlayer: React.FC<any> = ({
       window.removeEventListener("touchstart", onTouch);
       import("@noriginmedia/norigin-spatial-navigation-core")
         .then(({ resume }) => resume())
-        .catch(() => {});
+        .catch(() => { });
     };
   }, [
     mpv,
@@ -1341,18 +1358,18 @@ const DesktopPlayer: React.FC<any> = ({
     } catch (e) {
       console.error(e);
       const previousState = preFullscreenStateRef.current;
-      await win.setFullscreen(false).catch(() => {});
+      await win.setFullscreen(false).catch(() => { });
       await win
         .setAlwaysOnTop(previousState?.alwaysOnTop ?? false)
-        .catch(() => {});
+        .catch(() => { });
       if (previousState?.maximized) {
-        await win.maximize().catch(() => {});
+        await win.maximize().catch(() => { });
         await invoke("ensure_window_in_work_area", { maximized: true }).catch(
-          () => {},
+          () => { },
         );
       } else if (previousState) {
-        await win.setPosition(previousState.pos).catch(() => {});
-        await win.setSize(previousState.size).catch(() => {});
+        await win.setPosition(previousState.pos).catch(() => { });
+        await win.setSize(previousState.size).catch(() => { });
       }
       manualFullscreenRef.current = false;
       preFullscreenStateRef.current = null;
@@ -1384,16 +1401,16 @@ const DesktopPlayer: React.FC<any> = ({
               Math.max(
                 monitor.position.x,
                 monitor.position.x +
-                  monitor.size.width -
-                  pipSize.width -
-                  margin,
+                monitor.size.width -
+                pipSize.width -
+                margin,
               ),
               Math.max(
                 monitor.position.y,
                 monitor.position.y +
-                  monitor.size.height -
-                  pipSize.height -
-                  margin,
+                monitor.size.height -
+                pipSize.height -
+                margin,
               ),
             ),
           );

@@ -443,6 +443,19 @@ export const PreferencesSettings: React.FC = () => {
               setTmdbApiKey(event.target.value);
               setTmdbKeySaved(false);
             }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                saveTmdbApiKey();
+              }
+            }}
+            onBlur={() => {
+              if (
+                tmdbApiKey.trim() &&
+                tmdbApiKey.trim() !== settingsStorage.getTmdbApiKey()
+              ) {
+                saveTmdbApiKey();
+              }
+            }}
             className="tmdb-key-input"
           />
           <div className="tmdb-key-actions">

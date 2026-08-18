@@ -16,6 +16,7 @@ export interface DownloadItem {
   url: string;
   poster?: string;
   provider?: string;
+  server?: string;
   infoUrl?: string;
   sourceLink?: string;
   headers?: Record<string, string>;
@@ -78,8 +79,12 @@ const shortPathHash = (value: string) => {
 
 const safePathSegment = (value: string, maxLength: number) => {
   const normalized = value
-    .replace(/[^a-z0-9]+/gi, "_")
-    .replace(/^_+|_+$/g, "") || "media";
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\\/:*?"<>|\x00-\x1f\x7f-\x9f]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\.+$/g, "")
+    .trim() || "media";
   if (normalized.length <= maxLength) return normalized;
   const suffix = shortPathHash(value);
   return `${normalized.slice(0, maxLength - suffix.length - 1)}_${suffix}`;

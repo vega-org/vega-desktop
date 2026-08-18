@@ -87,6 +87,7 @@ const toDownloadIdentity = (item: DownloadItem): SyncedDownload => ({
   episodeName: item.episodeName,
   seasonTitle: item.seasonTitle,
   type: item.type,
+  isSubtitle: item.id.includes("_subtitle_"),
   imdbId: item.imdbId,
   provider: item.provider,
   infoUrl: item.infoUrl,
@@ -117,6 +118,7 @@ const buildManifest = async (): Promise<VegaSyncManifest> => {
           episodeName: item.episodeName,
           seasonTitle: item.seasonTitle,
           type: item.type,
+          isSubtitle: item.id.includes("_subtitle_"),
           imdbId: item.imdbId,
           poster: item.poster,
           provider: item.provider,
@@ -178,12 +180,17 @@ const applyRemoteDownloads = async (
 ) => {
   for (const item of Object.values(downloads)) {
     const currentDownloads = useDownloadStore.getState().downloads;
+    const isItemSubtitle = Boolean(
+      item.isSubtitle || item.id.includes("_subtitle_"),
+    );
     const equivalentEntries = Object.entries(currentDownloads).filter(
       ([, candidate]) => {
         if (candidate.status !== "completed") {
           return false;
         }
+        const isCandidateSub = Boolean(candidate.id.includes("_subtitle_"));
         return (
+          isCandidateSub === isItemSubtitle &&
           getDownloadMediaKey(toDownloadIdentity(candidate)) === item.mediaKey
         );
       },
@@ -293,10 +300,12 @@ const applyTombstones = (tombstones: Record<string, SyncTombstone>) => {
   for (const tombstone of Object.values(tombstones)) {
     if (tombstone.kind === "download") {
       for (const [id, item] of Object.entries(downloads)) {
+        const isItemSub = Boolean(item.id.includes("_subtitle_"));
         const matches =
           id === tombstone.id ||
           (tombstone.mediaKey &&
             item.status === "completed" &&
+            Boolean(tombstone.mediaKey.includes(":subtitle:")) === isItemSub &&
             getDownloadMediaKey(toDownloadIdentity(item)) ===
               tombstone.mediaKey);
         if (matches && tombstone.deletedAt >= (item.updatedAt || 0)) {

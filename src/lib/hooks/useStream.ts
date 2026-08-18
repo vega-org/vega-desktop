@@ -184,17 +184,77 @@ export const useStream = ({
   useEffect(() => {
     if (streamData && streamData.length > 0) {
       setSelectedStream(streamData[0]);
-
-      // Extract external subtitles
-      const subs: any[] = [];
-      streamData.forEach((track) => {
-        if (track?.subtitles?.length && track.subtitles.length > 0) {
-          subs.push(...track.subtitles);
-        }
-      });
-      setExternalSubs(subs);
     }
   }, [streamData]);
+
+  // Extract downloaded and online external subtitles
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      const downloadedSubs: any[] = [];
+      if (downloadedItem?.baseDir && downloadedItem?.filePath) {
+        try {
+          const files = await invoke<{ path: string; language: string }[]>(
+            "list_download_subtitles",
+            {
+              baseDir: downloadedItem.baseDir,
+              filePath: downloadedItem.filePath,
+            },
+          );
+          for (const file of files) {
+            downloadedSubs.push({
+              url: file.path,
+              language: file.language || "Unknown",
+              title: `${file.language || "Subtitle"} (Downloaded)`,
+            });
+          }
+        } catch (error) {
+          console.error("Failed to load local subtitles:", error);
+        }
+      }
+      if (downloadedItem?.subtitles?.length) {
+        for (const sub of downloadedItem.subtitles) {
+          if (!downloadedSubs.some((s) => s.url === sub.url)) {
+            downloadedSubs.push({
+              url: sub.url,
+              language: sub.language || "Unknown",
+              title: `${sub.language || "Subtitle"} (Downloaded)`,
+            });
+          }
+        }
+      }
+
+      const onlineSubs: any[] = [];
+      if (streamData && streamData.length > 0) {
+        streamData.forEach((track) => {
+          if (track?.subtitles?.length && track.subtitles.length > 0) {
+            onlineSubs.push(...track.subtitles);
+          }
+        });
+      }
+
+      const mergedSubs = [...downloadedSubs];
+      onlineSubs.forEach((online) => {
+        const onlineUrl = online.url || online.uri;
+        if (
+          !mergedSubs.some(
+            (existing) =>
+              existing.url === onlineUrl || existing.uri === onlineUrl,
+          )
+        ) {
+          mergedSubs.push(online);
+        }
+      });
+
+      if (isMounted) {
+        setExternalSubs(mergedSubs);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [streamData, downloadedItem]);
 
   // Handle errors
   useEffect(() => {

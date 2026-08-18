@@ -6,12 +6,12 @@ import React, {
   useState,
 } from "react";
 import {
+  LuCheck as Check,
   LuDownload as Download,
   LuListEnd as Queued,
   LuLoaderCircle as Loader,
   LuPause as Pause,
   LuRotateCcw as Retry,
-  LuTrash2 as Trash2,
 } from "react-icons/lu";
 import { IoPlayCircle } from "react-icons/io5";
 import type { DownloadItem } from "../../lib/zustand/downloadStore";
@@ -42,6 +42,10 @@ const DownloadProgressPie: React.FC<{
   progress: number;
   hasKnownTotal: boolean;
 }> = ({ progress, hasKnownTotal }) => {
+  if (!hasKnownTotal) {
+    return <Loader size={19} className="spin" />;
+  }
+
   const normalizedProgress = Math.min(1, Math.max(0, progress / 100));
   const progressPath = createProgressPiePath(normalizedProgress);
 
@@ -65,7 +69,6 @@ const DownloadProgressPie: React.FC<{
           <path className="episode-download-progress-value" d={progressPath} />
         ) : null}
       </svg>
-      {!hasKnownTotal && <Download size={17} />}
     </span>
   );
 };
@@ -81,7 +84,7 @@ interface EpisodeRowProps {
   extracting: boolean;
   onPlay: () => void;
   onDownload: () => void;
-  onDeleteDownload: () => void;
+  onDeleteDownload?: () => void;
   onShowDetails?: () => void;
 }
 
@@ -102,7 +105,7 @@ const EpisodeMedia: React.FC<{ image?: string }> = ({ image }) => {
           onError={() => setFailed(true)}
         />
       ) : (
-        <IoPlayCircle size={32} />
+        <IoPlayCircle size={38} className="episode-media-placeholder-icon" />
       )}
     </span>
   );
@@ -119,7 +122,7 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
   extracting,
   onPlay,
   onDownload,
-  onDeleteDownload,
+  onDeleteDownload: _onDeleteDownload,
   onShowDetails,
 }) => {
   const episodeDescription = description?.trim();
@@ -271,11 +274,11 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
           </span>
         ) : download?.status === "completed" ? (
           <FocusableButton
-            className="episode-action-button"
-            onClick={onDeleteDownload}
-            title="Delete download"
+            className="episode-action-button completed"
+            onClick={onDownload}
+            title="Download options"
           >
-            <Trash2 size={18} />
+            <Check size={18} />
           </FocusableButton>
         ) : download?.status === "downloading" ? (
           <span
