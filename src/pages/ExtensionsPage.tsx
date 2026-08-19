@@ -188,7 +188,10 @@ export const ExtensionsPage: React.FC = () => {
         : [],
     );
     if (nextActive) {
-      void refreshManifest(nextActive);
+      const cached = extensionStorage.getAvailableProviders(nextActive.author);
+      if (cached.length === 0) {
+        void refreshManifest(nextActive);
+      }
     } else {
       setShowAddSource(true);
     }
@@ -209,14 +212,9 @@ export const ExtensionsPage: React.FC = () => {
       .filter((provider) => !provider.disabled)
       .forEach((provider) => {
         const available = combined.get(providerKey(provider));
-        const cachedModule = extensionStorage.getProviderModules(
-          provider.value,
-          provider.source?.author,
-        );
         const hasSettings = Boolean(
           provider.hasSettings ||
-          available?.hasSettings ||
-          cachedModule?.modules?.settings
+          available?.hasSettings
         );
         combined.set(providerKey(provider), {
           ...available,

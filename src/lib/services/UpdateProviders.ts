@@ -49,7 +49,7 @@ class UpdateProvidersService {
   /**
    * Check for updates for all installed providers
    */
-  async checkForUpdates(): Promise<UpdateInfo[]> {
+  async checkForUpdates(force = false): Promise<UpdateInfo[]> {
     try {
       // Ensure legacy users are migrated before running update checks.
       await extensionManager.initialize();
@@ -72,7 +72,7 @@ class UpdateProvidersService {
       for (const [author, source] of sourceByAuthor.entries()) {
         try {
           const availableProviders =
-            await extensionManager.fetchManifest(source, true);
+            await extensionManager.fetchManifest(source, force);
           sources.set(author, availableProviders);
         } catch (error) {
           console.warn(`Failed to fetch source ${author} for updates:`, error);
@@ -199,8 +199,8 @@ class UpdateProvidersService {
   /**
    * Check for updates without auto-updating (for manual refresh)
    */
-  async checkForUpdatesManual(): Promise<UpdateInfo[]> {
-    return await this.checkForUpdates();
+  async checkForUpdatesManual(force = false): Promise<UpdateInfo[]> {
+    return await this.checkForUpdates(force);
   }
 
   /**

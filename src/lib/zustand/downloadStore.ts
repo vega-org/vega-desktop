@@ -249,12 +249,12 @@ export const useDownloadStore = create<DownloadState>()(
           const baseDir = await getDownloadBaseDir();
 
           const cleanName = item.showName || item.title;
-          const safeTitle = safePathSegment(cleanName, 64).toLowerCase();
+          const safeTitle = safePathSegment(cleanName, 64);
 
           // Always create a folder for the show/movie
           const safeDir = await join(baseDir, safeTitle);
           const safeSeason = item.seasonTitle
-            ? safePathSegment(item.seasonTitle, 48).toLowerCase()
+            ? safePathSegment(item.seasonTitle, 48)
             : undefined;
           let filePath;
           const isTorrent = item.isTorrent || item.url.startsWith("magnet:");

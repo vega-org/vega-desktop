@@ -68,10 +68,14 @@ export const getDesktopRelativePath = (
   baseDir: string,
   filePath: string,
 ): string | null => {
-  const normalizedBase = baseDir.replace(/\\/g, "/").replace(/\/$/, "");
+  const normalizedBase = baseDir.replace(/\\/g, "/").replace(/\/+$/, "");
   const normalizedFile = filePath.replace(/\\/g, "/");
   const prefix = `${normalizedBase}/`;
-  return normalizedFile.toLowerCase().startsWith(prefix.toLowerCase())
-    ? normalizedFile.slice(prefix.length)
-    : null;
+  if (normalizedFile.toLowerCase().startsWith(prefix.toLowerCase())) {
+    return normalizedFile.slice(prefix.length);
+  }
+  if (!normalizedFile.includes(":") && !normalizedFile.startsWith("/")) {
+    return normalizedFile;
+  }
+  return null;
 };

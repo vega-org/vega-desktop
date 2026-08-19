@@ -19,9 +19,12 @@ fn safe_relative_path(relative_path: &str) -> Result<PathBuf, String> {
 
 fn resolve_existing_media_path(base_dir: &Path, relative: &Path) -> Option<PathBuf> {
     let path = base_dir.join(relative);
+    // 1. Direct exact file match
     if path.is_file() {
         return Some(path);
     }
+
+    // 2. Fallback strictly in the SAME show/season folder (e.g. extension difference like .mp4 vs .mkv)
     let parent = path.parent()?;
     let expected_stem = path.file_stem()?;
     std::fs::read_dir(parent)
