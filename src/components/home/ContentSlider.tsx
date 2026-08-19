@@ -1,7 +1,7 @@
 import React, { useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Swiper, SwiperSlide } from "swiper/react";
-import { FreeMode, Mousewheel, Virtual } from "swiper/modules";
+import { FreeMode, Mousewheel } from "swiper/modules";
 import type { Swiper as SwiperInstance } from "swiper";
 import "swiper/css";
 import {
@@ -12,7 +12,6 @@ import {
   useFocusable,
   FocusContext,
 } from "@noriginmedia/norigin-spatial-navigation-react";
-import { settingsStorage } from "../../lib/storage";
 import { PostCardItem, Post } from "./PostCardItem";
 import { FocusableButton } from "../layout/FocusableButton";
 import { Skeleton } from "../ui/skeleton";
@@ -39,14 +38,13 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
 }) => {
   const swiperRef = useRef<SwiperInstance | null>(null);
   const navigate = useNavigate();
-  const tvMode = settingsStorage.isTvModeEnabled();
+  const sanitizedTitle = title.replace(/[^a-zA-Z0-9_-]/g, "_");
 
   const {
     ref: focusRef,
     focusKey,
     hasFocusedChild,
   } = useFocusable({
-    focusable: tvMode,
     trackChildren: true,
   });
 
@@ -123,13 +121,14 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
             className="slider-arrow left"
             onClick={() => handleScroll("left")}
             aria-label="Scroll left"
+            tabIndex={-1}
           >
             <ChevronLeft size={32} />
           </button>
 
           <Swiper
             className="slider-row"
-            modules={[Virtual, Mousewheel, FreeMode]}
+            modules={[Mousewheel, FreeMode]}
             onSwiper={(swiper) => {
               swiperRef.current = swiper;
             }}
@@ -152,15 +151,7 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
               0: { slidesOffsetBefore: 16, slidesOffsetAfter: 16 },
               769: { slidesOffsetBefore: 44, slidesOffsetAfter: 44 },
             }}
-            virtual={
-              posts.length > 24
-                ? {
-                    enabled: true,
-                    addSlidesBefore: 12,
-                    addSlidesAfter: 12,
-                  }
-                : false
-            }>
+            virtual={false}>
             {posts.map((post, index) => (
               <SwiperSlide
                 className="content-slider-slide"
@@ -168,6 +159,7 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
                 virtualIndex={index}>
                 <PostCardItem
                   post={post}
+                  focusKey={`CARD_${sanitizedTitle}_${index}_${post.link.replace(/[^a-zA-Z0-9_-]/g, "_")}`}
                   onClick={handlePostClick}
                   onRemove={onRemove}
                 />
@@ -179,6 +171,7 @@ export const ContentSlider: React.FC<ContentSliderProps> = ({
             className="slider-arrow right"
             onClick={() => handleScroll("right")}
             aria-label="Scroll right"
+            tabIndex={-1}
           >
             <ChevronRight size={32} />
           </button>

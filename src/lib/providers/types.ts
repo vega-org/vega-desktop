@@ -188,6 +188,57 @@ export interface OpenWebViewResult {
   url: string;
 }
 
+export interface ProviderKvStore {
+  get: <T = unknown>(key: string) => Promise<T | undefined>;
+  set: (key: string, value: unknown) => Promise<void>;
+  delete: (key: string) => Promise<boolean>;
+  keys: () => Promise<string[]>;
+  clear: () => Promise<void>;
+}
+
+interface SettingsFieldBase {
+  key: string;
+  label: string;
+  description?: string;
+}
+
+interface SettingsTextField extends SettingsFieldBase {
+  type: "text";
+  defaultValue?: string;
+  placeholder?: string;
+}
+
+interface SettingsToggleField extends SettingsFieldBase {
+  type: "toggle";
+  defaultValue?: boolean;
+}
+
+interface SettingsSelectField extends SettingsFieldBase {
+  type: "select";
+  options: { label: string; value: string }[];
+  defaultValue?: string;
+}
+
+interface SettingsMultiSelectField extends SettingsFieldBase {
+  type: "multiselect";
+  options: { label: string; value: string }[];
+  defaultValue?: string[];
+}
+
+interface SettingsNumberField extends SettingsFieldBase {
+  type: "number";
+  defaultValue?: number;
+  min?: number;
+  max?: number;
+}
+
+export type SettingsField =
+  | SettingsTextField
+  | SettingsToggleField
+  | SettingsSelectField
+  | SettingsMultiSelectField
+  | SettingsNumberField;
+
 export type ProviderContext = {
   axios: AxiosStatic;
   Crypto: typeof Crypto;
@@ -199,6 +250,7 @@ export type ProviderContext = {
     url: string,
     options?: OpenWebViewOptions,
   ) => Promise<OpenWebViewResult>;
+  kvStore: ProviderKvStore;
 };
 
 export type ISO639_1 =

@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { FocusContext, useFocusable } from "@noriginmedia/norigin-spatial-navigation-react";
-import { LuArrowDownNarrowWide, LuArrowDownWideNarrow, LuArrowLeft, LuCircleAlert, LuRefreshCw, LuSearch } from "react-icons/lu";
+import { resume } from "@noriginmedia/norigin-spatial-navigation-core";
+import { LuArrowDownNarrowWide, LuArrowDownWideNarrow, LuArrowLeft, LuCircleAlert, LuRefreshCw, LuSearch, LuX } from "react-icons/lu";
 import { ContentDetailSkeleton } from "../components/content/ContentDetailSkeleton";
 import { ContentHero } from "../components/content/ContentHero";
 import { ContentOverview } from "../components/content/ContentOverview";
@@ -42,6 +43,89 @@ interface DialogContext {
   downloadId?: string;
 }
 
+interface EpisodeSearchFieldProps {
+  value: string;
+  onChange: (value: string) => void;
+  tvMode: boolean;
+}
+
+const EpisodeSearchField: React.FC<EpisodeSearchFieldProps> = ({
+  value,
+  onChange,
+  tvMode,
+}) => {
+  const [isTyping, setIsTyping] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const { ref, focused, focusSelf } = useFocusable({
+    focusable: tvMode,
+    focusKey: "EPISODE_SEARCH_INPUT",
+    onEnterPress: () => {
+      setIsTyping(true);
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    },
+    onFocus: (layout) => {
+      layout.node.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    },
+  });
+
+  const stopTyping = () => {
+    setIsTyping(false);
+    window.setTimeout(() => {
+      resume();
+      focusSelf();
+    }, 0);
+  };
+
+  return (
+    <div
+      ref={ref as any}
+      className={`episode-search-field ${focused ? "tv-focus" : ""}`}
+      onClick={() => {
+        setIsTyping(true);
+        window.setTimeout(() => inputRef.current?.focus(), 0);
+      }}
+    >
+      <LuSearch size={21} />
+      <input
+        ref={inputRef}
+        aria-label="Find episode"
+        placeholder="Find episode"
+        tabIndex={tvMode ? -1 : 0}
+        readOnly={tvMode ? !isTyping : false}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={stopTyping}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (
+            e.key === "Escape" ||
+            e.key === "ArrowDown" ||
+            e.key === "ArrowUp"
+          ) {
+            e.preventDefault();
+            inputRef.current?.blur();
+          }
+        }}
+      />
+      {value && (
+        <button
+          type="button"
+          className="episode-search-clear"
+          onClick={(e) => {
+            e.stopPropagation();
+            onChange("");
+            inputRef.current?.focus();
+          }}
+          aria-label="Clear episode search"
+        >
+          <LuX size={18} />
+        </button>
+      )}
+    </div>
+  );
+};
+
 export const MetaPage: React.FC = () => {
   const { url } = useParams<{ url: string }>();
   const [searchParams] = useSearchParams();
@@ -49,7 +133,8 @@ export const MetaPage: React.FC = () => {
   const { provider, installedProviders } = useContentStore();
   const { addDownload, downloads, cancelDownload } = useDownloadStore();
   const { watchList, addItem, removeItem } = useWatchListStore();
-  const tvMode = settingsStorage.isTvModeEnabled();
+  const isAndroid = navigator.userAgent.toLowerCase().includes("android");
+  const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
   const { ref: focusRef, focusKey } = useFocusable({ focusable: tvMode, trackChildren: true });
 
   const link = decodeURIComponent(url || "");
@@ -392,19 +477,16 @@ export const MetaPage: React.FC = () => {
             {(showEpisodeSearch || showEpisodeSort) && (
               <div className="episode-tools">
                 {showEpisodeSearch && (
-                  <label className="episode-search-field">
-                    <LuSearch size={21} />
-                    <input
-                      aria-label="Find episode"
-                      placeholder="Find episode"
-                      value={episodeSearch}
-                      onChange={(event) => setEpisodeSearch(event.target.value)}
-                    />
-                  </label>
+                  <EpisodeSearchField
+                    value={episodeSearch}
+                    onChange={setEpisodeSearch}
+                    tvMode={tvMode}
+                  />
                 )}
                 {showEpisodeSort && (
                   <FocusableButton
                     className="episode-sort-button"
+                    focusKey="EPISODE_SORT_BUTTON"
                     aria-label={sortOrder === "asc" ? "Sort episodes descending" : "Sort episodes ascending"}
                     title={sortOrder === "asc" ? "Sort episodes descending" : "Sort episodes ascending"}
                     onClick={() => {

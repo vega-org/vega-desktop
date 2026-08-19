@@ -180,14 +180,25 @@
 
 .post-card:hover .post-remove-btn,
 .post-card.tv-focus .post-remove-btn,
+.post-card.child-focused .post-remove-btn,
+.post-remove-btn.tv-focus,
 .post-remove-btn:focus-visible {
   opacity: 1;
 }
 
-.post-remove-btn:hover {
+.post-remove-btn:hover,
+.post-remove-btn.tv-focus {
   background-color: var(--error-container);
   color: var(--on-error-container);
-  transform: scale(1.08);
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  transform: scale(1.18);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 40%, transparent);
+}
+
+.post-card.child-focused {
+  border-color: color-mix(in srgb, var(--primary) 60%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--primary) 20%, transparent);
 }
 
 .post-progress-bar-container {

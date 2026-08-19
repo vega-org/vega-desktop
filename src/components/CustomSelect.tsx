@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useId } from "react";
 import {
   LuCheck as Check,
   LuChevronDown as ChevronDown,
-  LuChevronUp as ChevronUp,
 } from "react-icons/lu";
 import { FocusableButton } from "./layout/FocusableButton";
 import {
@@ -90,8 +89,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
         <span className="custom-select-value">
           {selectedOption ? selectedOption.label : placeholder}
         </span>
-        <span className="custom-select-icon">
-          {isOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+        <span className={`custom-select-icon ${isOpen ? "open" : ""}`}>
+          <ChevronDown size={17} />
         </span>
       </FocusableButton>
 
@@ -145,9 +144,11 @@ const SelectOptionItem: React.FC<{
       aria-selected={isSelected}
       onClick={onClick}
     >
-      <span>{option.label}</span>
+      <span className="custom-select-option-label">{option.label}</span>
       {isSelected && (
-        <Check className="custom-select-check" aria-hidden="true" />
+        <div className="custom-select-check-wrap">
+          <Check className="custom-select-check" aria-hidden="true" />
+        </div>
       )}
     </li>
   );

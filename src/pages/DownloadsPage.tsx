@@ -126,11 +126,6 @@ export const DownloadsPage = () => {
     navigate(`/downloads/series/${encodeURIComponent(group.showName)}`);
   };
 
-  const deleteGroup = (group: CompletedGroup, event: React.MouseEvent) => {
-    event.stopPropagation();
-    group.items.forEach((item) => void cancelDownload(item.id));
-  };
-
   const isEmpty = activeDownloads.length === 0 && completedGroups.length === 0;
 
   return (
@@ -343,34 +338,14 @@ export const DownloadsPage = () => {
 
               <div className="download-library-grid">
                 {completedGroups.map((group) => (
-                  <article
-                    className="download-library-card"
+                  <DownloadedLibraryCard
                     key={group.showName}
-                  >
-                    <DownloadedPoster
-                      title={group.showName}
-                      poster={group.poster}
-                      onClick={() => openGroup(group)}
-                    />
-                    <div className="download-library-copy">
-                      <h3 title={group.showName}>{group.showName}</h3>
-                      <p>
-                        {group.items.length > 1
-                          ? `${group.items.length} episodes · `
-                          : ""}
-                        {formatBytes(group.totalBytes)}
-                      </p>
-                    </div>
-                    <FocusableButton
-                      className="download-library-delete"
-                      onClick={(event: React.MouseEvent) =>
-                        deleteGroup(group, event)
-                      }
-                      title={`Delete ${group.showName}`}
-                    >
-                      <Trash2 size={18} />
-                    </FocusableButton>
-                  </article>
+                    group={group}
+                    onOpen={() => openGroup(group)}
+                    onDelete={() => {
+                      group.items.forEach((item) => void cancelDownload(item.id));
+                    }}
+                  />
                 ))}
               </div>
             </section>
@@ -381,33 +356,112 @@ export const DownloadsPage = () => {
   );
 };
 
-const DownloadedPoster: React.FC<{
-  title: string;
-  poster: string;
-  onClick: () => void;
-}> = ({ title, poster, onClick }) => {
-  const tvMode = settingsStorage.isTvModeEnabled();
-  const { ref, focused } = useFocusable({
+const DownloadedLibraryCard: React.FC<{
+  group: CompletedGroup;
+  onOpen: () => void;
+  onDelete: () => void;
+}> = ({ group, onOpen, onDelete }) => {
+  const isAndroid = navigator.userAgent.toLowerCase().includes("android");
+  const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
+
+  const cardFocusKey = `DOWNLOAD_GROUP_${group.showName.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+  const deleteFocusKey = `${cardFocusKey}_DELETE`;
+
+  const {
+    ref: deleteRef,
+    focused: deleteFocused,
+    focusSelf: focusDelete,
+  } = useFocusable({
+    focusKey: deleteFocusKey,
     focusable: tvMode,
-    onEnterPress: onClick,
+    onEnterPress: onDelete,
+    onArrowPress: (direction) => {
+      if (direction === "down") {
+        focusCard();
+        return false;
+      }
+      return true;
+    },
+    onFocus: (layout) => {
+      layout.node.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    },
+  });
+
+  const {
+    ref: cardRef,
+    focused: cardFocused,
+    focusSelf: focusCard,
+  } = useFocusable({
+    focusKey: cardFocusKey,
+    focusable: tvMode,
+    onEnterPress: onOpen,
+    onArrowPress: (direction) => {
+      if (direction === "up") {
+        focusDelete();
+        return false;
+      }
+      return true;
+    },
     onFocus: (layout) => {
       layout.node.scrollIntoView({ behavior: "smooth", block: "nearest" });
     },
   });
 
   return (
-    <div
-      ref={ref}
-      className={`download-library-poster ${focused ? "tv-focus" : ""}`}
-      style={{ backgroundImage: poster ? `url(${poster})` : undefined }}
-      onClick={onClick}
-      role="button"
-      aria-label={`Play or open ${title}`}
+    <article
+      className={`download-library-card ${cardFocused ? "is-focused" : ""} ${deleteFocused ? "is-child-focused" : ""}`}
     >
-      {!poster && <Download size={30} />}
-      <span className="download-library-play" aria-hidden="true">
-        <Play size={22} fill="currentColor" />
-      </span>
-    </div>
+      <div
+        ref={cardRef as any}
+        className={`download-library-poster ${cardFocused ? "tv-focus" : ""} ${deleteFocused ? "child-focused" : ""}`}
+        style={{ backgroundImage: group.poster ? `url(${group.poster})` : undefined }}
+        onClick={onOpen}
+        onKeyDown={(e) => {
+          if (
+            e.key === "Delete" ||
+            e.key === "Backspace" ||
+            e.key === "x" ||
+            e.key === "X"
+          ) {
+            e.preventDefault();
+            e.stopPropagation();
+            onDelete();
+          }
+        }}
+        role="button"
+        aria-label={`Play or open ${group.showName}`}
+        tabIndex={tvMode ? -1 : 0}
+      >
+        {!group.poster && <Download size={30} />}
+        <span className="download-library-play" aria-hidden="true">
+          <Play size={22} fill="currentColor" />
+        </span>
+      </div>
+
+      <div className="download-library-copy">
+        <h3 title={group.showName}>{group.showName}</h3>
+        <p>
+          {group.items.length > 1
+            ? `${group.items.length} episodes · `
+            : ""}
+          {formatBytes(group.totalBytes)}
+        </p>
+      </div>
+
+      <button
+        ref={deleteRef as any}
+        type="button"
+        className={`download-library-delete ${deleteFocused ? "tv-focus focused" : ""}`}
+        onClick={(event: React.MouseEvent) => {
+          event.stopPropagation();
+          onDelete();
+        }}
+        title={`Delete ${group.showName}`}
+        aria-label={`Delete ${group.showName}`}
+        tabIndex={tvMode ? -1 : 0}
+      >
+        <Trash2 size={18} />
+      </button>
+    </article>
   );
 };

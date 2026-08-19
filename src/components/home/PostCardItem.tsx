@@ -22,14 +22,19 @@ interface PostCardItemProps {
   post: Post;
   onClick: (post: Post) => void;
   onRemove?: (post: Post, e: React.MouseEvent) => void;
+  focusKey?: string;
+  onFocus?: () => void;
 }
 
 export const PostCardItem: React.FC<PostCardItemProps> = ({
   post,
   onClick,
   onRemove,
+  focusKey: customFocusKey,
+  onFocus: customOnFocus,
 }) => {
-  const tvMode = settingsStorage.isTvModeEnabled();
+  const isAndroid = navigator.userAgent.toLowerCase().includes("android");
+  const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => setImageFailed(false), [post.image]);
@@ -44,30 +49,96 @@ export const PostCardItem: React.FC<PostCardItemProps> = ({
     }
   };
 
-  const { ref, focused } = useFocusable({
-    focusable: tvMode,
-    onEnterPress: () => onClick(post),
+  const cardFocusKey = customFocusKey || `POST_CARD_${post.link.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+  const removeFocusKey = `${cardFocusKey}_REMOVE`;
+
+  const {
+    ref: removeRef,
+    focused: removeFocused,
+    focusSelf: focusRemove,
+  } = useFocusable({
+    focusKey: removeFocusKey,
+    focusable: tvMode && Boolean(onRemove),
+    onEnterPress: () => {
+      if (onRemove) {
+        onRemove(post, {
+          stopPropagation: () => {},
+          preventDefault: () => {},
+        } as any);
+      }
+    },
+    onArrowPress: (direction) => {
+      if (direction === "down") {
+        focusCard();
+        return false;
+      }
+      return true;
+    },
     onFocus: (layout) => {
-      prepareTheme();
       layout.node.scrollIntoView({
         behavior: "smooth",
         block: "nearest",
-        inline: "center",
+        inline: "nearest",
+      });
+    },
+  });
+
+  const {
+    ref: cardRef,
+    focused: cardFocused,
+    focusSelf: focusCard,
+  } = useFocusable({
+    focusKey: cardFocusKey,
+    focusable: tvMode,
+    onEnterPress: () => onClick(post),
+    onArrowPress: (direction) => {
+      if (direction === "up" && onRemove) {
+        focusRemove();
+        return false;
+      }
+      return true;
+    },
+    onFocus: (layout) => {
+      prepareTheme();
+      customOnFocus?.();
+      layout.node.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
       });
     },
   });
 
   return (
     <div
-      ref={ref}
-      className={cn("post-card", focused && "tv-focus")}
+      ref={cardRef as any}
+      className={cn(
+        "post-card",
+        cardFocused && "tv-focus",
+        removeFocused && "child-focused",
+      )}
       onPointerEnter={prepareTheme}
       onClick={() => {
         prepareTheme();
         onClick(post);
       }}
+      onKeyDown={(e) => {
+        if (
+          e.key === "Delete" ||
+          e.key === "Backspace" ||
+          e.key === "x" ||
+          e.key === "X"
+        ) {
+          if (onRemove) {
+            e.preventDefault();
+            e.stopPropagation();
+            onRemove(post, e as any);
+          }
+        }
+      }}
       role="button"
       aria-label={`Open ${post.title}`}
+      tabIndex={tvMode ? -1 : 0}
     >
       <div className="post-image-container">
         {post.image && !imageFailed && (
@@ -82,13 +153,19 @@ export const PostCardItem: React.FC<PostCardItemProps> = ({
         )}
         {onRemove && (
           <button
-            className="post-remove-btn"
+            ref={removeRef as any}
+            type="button"
+            className={cn(
+              "post-remove-btn",
+              removeFocused && "tv-focus focused",
+            )}
             onClick={(e) => {
               e.stopPropagation();
               onRemove(post, e);
             }}
             title="Remove from history"
             aria-label={`Remove ${post.title} from history`}
+            tabIndex={tvMode ? -1 : 0}
           >
             <X size={20} />
           </button>

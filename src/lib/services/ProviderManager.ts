@@ -1,11 +1,79 @@
+import axios from "axios";
 import { providerFetch } from "../providers/tauriAxiosAdapter";
-import { Catalog, EpisodeLink, Info, Post } from "../providers/types";
+import { Catalog, EpisodeLink, Info, Post, SettingsField } from "../providers/types";
 import { getBaseUrl } from "../providers/getBaseUrl";
 import { openWebView } from "../../platform/waf";
 import { extensionManager } from "./ExtensionManager";
+import { extensionStorage } from "../storage/extensionStorage";
 import { getErrorMessage } from "./providerErrors";
 
 const MAX_PROVIDER_STATE_SIZE = 1_000_000;
+const KV_PREFIX = "vega_provider_kv:";
+const MAX_KV_KEY_LENGTH = 256;
+const MAX_KV_VALUE_BYTES = 1_000_000;
+
+const validateKvKey = (key: unknown): string => {
+  if (typeof key !== "string" || !key.trim() || key.length > MAX_KV_KEY_LENGTH) {
+    throw new Error(
+      `Invalid KV key: must be a non-empty string <= ${MAX_KV_KEY_LENGTH} characters`,
+    );
+  }
+  return key;
+};
+
+const handleKvGet = (args: any): unknown => {
+  const key = validateKvKey(args?.key);
+  const raw = localStorage.getItem(KV_PREFIX + key);
+  if (raw === null) return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+};
+
+const handleKvSet = (args: any): void => {
+  const key = validateKvKey(args?.key);
+  const value = args?.value;
+  if (value === undefined) {
+    localStorage.removeItem(KV_PREFIX + key);
+    return;
+  }
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) {
+    throw new Error("KV value must be JSON-serializable");
+  }
+  if (serialized.length > MAX_KV_VALUE_BYTES) {
+    throw new Error(`KV value exceeds limit of ${MAX_KV_VALUE_BYTES} bytes`);
+  }
+  localStorage.setItem(KV_PREFIX + key, serialized);
+};
+
+const handleKvDelete = (args: any): boolean => {
+  const key = validateKvKey(args?.key);
+  const fullKey = KV_PREFIX + key;
+  const exists = localStorage.getItem(fullKey) !== null;
+  localStorage.removeItem(fullKey);
+  return exists;
+};
+
+const handleKvKeys = (): string[] => {
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith(KV_PREFIX)) {
+      keys.push(k.slice(KV_PREFIX.length));
+    }
+  }
+  return keys;
+};
+
+const handleKvClear = (): void => {
+  const keysToRemove = handleKvKeys();
+  for (const k of keysToRemove) {
+    localStorage.removeItem(KV_PREFIX + k);
+  }
+};
 
 export class ProviderManager {
   private readonly providerState = new Map<string, Record<string, unknown>>();
@@ -194,6 +262,21 @@ export class ProviderManager {
         headers: Array.from(response.headers.entries()),
         data,
       };
+    }
+    if (operation === "kvGet") {
+      return handleKvGet(args);
+    }
+    if (operation === "kvSet") {
+      return handleKvSet(args);
+    }
+    if (operation === "kvDelete") {
+      return handleKvDelete(args);
+    }
+    if (operation === "kvKeys") {
+      return handleKvKeys();
+    }
+    if (operation === "kvClear") {
+      return handleKvClear();
     }
     throw new Error(`Unsupported provider operation: ${operation}`);
   }
@@ -433,6 +516,56 @@ export class ProviderManager {
       );
       console.warn(errorMessage);
       throw new Error(errorMessage);
+    }
+  };
+  getSettingsSchema = async ({
+    providerValue,
+  }: {
+    providerValue: string;
+  }): Promise<SettingsField[]> => {
+    let providerModule = (
+      await extensionManager.getProviderModulesAsync(providerValue)
+    );
+    let settingsModule = providerModule?.modules?.settings;
+
+    if (!settingsModule) {
+      try {
+        const source = extensionStorage.getProviderSource();
+        const testUrl = `http://localhost:3001/dist/${providerValue}/settings.js?v=${Date.now()}`;
+        const sourceUrl = source?.url ? `${source.url}/dist/${providerValue}/settings.js` : null;
+
+        let res;
+        try {
+          res = await axios.get(testUrl, { timeout: 2000 });
+        } catch {
+          if (sourceUrl) {
+            res = await axios.get(sourceUrl, { timeout: 8000 });
+          }
+        }
+
+        if (res?.data) {
+          settingsModule = res.data;
+          if (providerModule) {
+            providerModule.modules.settings = settingsModule;
+            extensionStorage.cacheProviderModules(providerModule);
+          }
+        }
+      } catch (err) {
+        console.warn(`Failed to fetch settings module on-demand for ${providerValue}:`, err);
+      }
+    }
+
+    if (!settingsModule) return [];
+    try {
+      return await this.executeModule<SettingsField[]>(
+        settingsModule,
+        providerValue,
+        "getSettingsSchema",
+        {},
+      );
+    } catch (error) {
+      console.error("Error loading settings schema:", error);
+      return [];
     }
   };
 }

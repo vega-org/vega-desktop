@@ -135,6 +135,7 @@ export class ExtensionManager {
         icon: item.icon || "",
         type: item.type || "global",
         installed: false,
+        hasSettings: item.hasSettings || false,
       }));
 
       // Cache the manifest
@@ -169,7 +170,7 @@ export class ExtensionManager {
     }
     try {
       const requiredFiles = ["posts", "meta", "stream", "catalog"];
-      const optionalFiles = ["episodes"];
+      const optionalFiles = ["episodes", "settings"];
       const allFiles = [...requiredFiles, ...optionalFiles];
 
       const modules: Record<string, string> = {};
@@ -221,6 +222,7 @@ export class ExtensionManager {
           stream: modules.stream,
           catalog: modules.catalog,
           episodes: modules.episodes,
+          settings: modules.settings,
         },
         cachedAt: Date.now(),
       };
@@ -242,7 +244,7 @@ export class ExtensionManager {
       const url = `${this.baseUrlTestMode}/dist/${providerValue}/`;
       const cacheBust = Date.now();
       const requiredFiles = ["posts", "meta", "stream", "catalog"];
-      const optionalFiles = ["episodes"];
+      const optionalFiles = ["episodes", "settings"];
       const allFiles = [...requiredFiles, ...optionalFiles];
       const modules: Record<string, string> = {};
       const downloadPromises = allFiles.map(async (fileName) => {
@@ -290,6 +292,7 @@ export class ExtensionManager {
           stream: modules.stream,
           catalog: modules.catalog,
           episodes: modules.episodes,
+          settings: modules.settings,
         },
         cachedAt: Date.now(),
       };

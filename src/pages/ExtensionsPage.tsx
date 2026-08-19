@@ -12,9 +12,11 @@ import {
   LuPackageOpen as PackageOpen,
   LuPlus as Plus,
   LuRefreshCw as RefreshCw,
+  LuSettings as SettingsIcon,
   LuTrash2 as Trash2,
   LuX as X,
 } from "react-icons/lu";
+import { ProviderSettingsDialog } from "../components/settings/ProviderSettingsDialog";
 import { FocusableButton } from "../components/layout/FocusableButton";
 import { extensionManager } from "../lib/services/ExtensionManager";
 import { settingsStorage } from "../lib/storage";
@@ -143,6 +145,8 @@ export const ExtensionsPage: React.FC = () => {
   );
   const [providerToRemove, setProviderToRemove] =
     useState<ProviderExtension | null>(null);
+  const [settingsProvider, setSettingsProvider] =
+    useState<ProviderExtension | null>(null);
   const tvMode = settingsStorage.isTvModeEnabled();
 
   const refreshManifest = async (source: ProviderSource) => {
@@ -200,9 +204,29 @@ export const ExtensionsPage: React.FC = () => {
     availableProviders
       .filter((provider) => !provider.disabled)
       .forEach((provider) => combined.set(providerKey(provider), provider));
+
     installedProviders
       .filter((provider) => !provider.disabled)
-      .forEach((provider) => combined.set(providerKey(provider), provider));
+      .forEach((provider) => {
+        const available = combined.get(providerKey(provider));
+        const cachedModule = extensionStorage.getProviderModules(
+          provider.value,
+          provider.source?.author,
+        );
+        const hasSettings = Boolean(
+          provider.hasSettings ||
+          available?.hasSettings ||
+          cachedModule?.modules?.settings ||
+          provider.value === "torrentio" ||
+          provider.value === "1cinevood" ||
+          provider.value === "example"
+        );
+        combined.set(providerKey(provider), {
+          ...available,
+          ...provider,
+          hasSettings,
+        });
+      });
 
     return Array.from(combined.values()).sort((left, right) =>
       left.display_name.localeCompare(right.display_name),
@@ -473,6 +497,16 @@ export const ExtensionsPage: React.FC = () => {
                             <Check size={15} /> In use
                           </span>
                         ) : null}
+                        {provider.hasSettings && (
+                          <FocusableButton
+                            className="provider-settings-button"
+                            onClick={() => setSettingsProvider(provider)}
+                            title={`${provider.display_name} Settings`}
+                            focusKey={`PROVIDER_SETTINGS_${key}`}
+                          >
+                            <SettingsIcon size={18} />
+                          </FocusableButton>
+                        )}
                         <FocusableButton
                           className="provider-remove-button"
                           onClick={() => setProviderToRemove(provider)}
@@ -676,6 +710,12 @@ export const ExtensionsPage: React.FC = () => {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      <ProviderSettingsDialog
+        provider={settingsProvider}
+        open={Boolean(settingsProvider)}
+        onOpenChange={(open) => !open && setSettingsProvider(null)}
+      />
     </main>
   );
 };

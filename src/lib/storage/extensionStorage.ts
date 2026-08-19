@@ -23,6 +23,7 @@ export interface ProviderExtension {
   installed: boolean;
   installedAt?: number;
   lastUpdated?: number;
+  hasSettings?: boolean;
 }
 
 /**
@@ -38,6 +39,7 @@ export interface ProviderModule {
     stream?: string;
     catalog?: string;
     episodes?: string;
+    settings?: string;
   };
   cachedAt: number;
 }
@@ -252,6 +254,7 @@ export class ExtensionStorage {
       existing.version = provider.version;
       existing.source = provider.source;
       existing.lastUpdated = Date.now();
+      existing.hasSettings = provider.hasSettings ?? existing.hasSettings;
     } else {
       // Add new provider
       installed.push({
@@ -261,6 +264,7 @@ export class ExtensionStorage {
           url: provider.source.url,
         },
         installed: true,
+        hasSettings: provider.hasSettings,
         installedAt: Date.now(),
       });
     }

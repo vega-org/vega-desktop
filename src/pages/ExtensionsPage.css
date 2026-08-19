@@ -392,6 +392,7 @@
 }
 
 .provider-remove-button,
+.provider-settings-button,
 .source-picker-remove {
   display: grid;
   width: 42px;
@@ -401,6 +402,12 @@
   border-radius: 14px;
   color: var(--on-surface-variant);
   background: var(--surface-container-highest);
+}
+
+.provider-settings-button:hover,
+.provider-settings-button.tv-focus {
+  color: var(--on-primary-container);
+  background: var(--primary-container);
 }
 
 .provider-remove-button:hover,

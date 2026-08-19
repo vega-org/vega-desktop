@@ -323,10 +323,17 @@
   box-shadow: 0 16px 34px color-mix(in srgb, var(--surface) 72%, transparent);
   transform: translateY(-5px);
 }
+
 .download-library-poster.tv-focus {
   border-color: var(--primary);
   box-shadow: 0 16px 34px color-mix(in srgb, var(--surface) 72%, transparent);
   transform: translateY(-5px);
+}
+
+.download-library-poster.child-focused {
+  border-color: color-mix(in srgb, var(--primary) 60%, transparent);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--primary) 25%, transparent);
+  transform: translateY(-3px);
 }
 
 .download-library-poster:hover::after,
@@ -350,16 +357,41 @@
   position: absolute;
   top: 9px;
   right: 9px;
-  z-index: 3;
+  z-index: 120;
   width: 36px;
   height: 36px;
+  border-radius: 12px;
+  border: none;
   opacity: 0;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--surface-container-lowest) 78%, transparent);
+  color: var(--on-surface);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    background-color 180ms ease;
 }
 
 .download-library-card:hover .download-library-delete,
 .download-library-card:focus-within .download-library-delete,
+.download-library-card.is-focused .download-library-delete,
+.download-library-card.is-child-focused .download-library-delete,
+.download-library-poster.tv-focus ~ .download-library-delete,
+.download-library-poster.child-focused ~ .download-library-delete,
 .download-library-delete.tv-focus {
   opacity: 1;
+  pointer-events: auto;
+}
+
+.download-library-delete:hover,
+.download-library-delete.tv-focus {
+  z-index: 130;
+  background: var(--error-container);
+  color: var(--on-error-container);
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  transform: scale(1.18);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 40%, transparent);
 }
 
 .downloads-empty-state {
@@ -483,6 +515,16 @@
   background: var(--surface-container);
 }
 
+.downloaded-episode-row:has(.downloaded-episode-main.tv-focus) {
+  border-color: var(--primary);
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 15px color-mix(in srgb, var(--primary) 40%, transparent);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface-container));
+  transform: scale(1.015);
+  z-index: 10;
+}
+
 .downloaded-episode-main {
   display: flex;
   align-items: center;
@@ -495,8 +537,9 @@
 }
 
 .downloaded-episode-main.tv-focus {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px;
+  outline: none;
+  box-shadow: none;
+  transform: none;
 }
 
 .downloaded-video-thumbnail {
