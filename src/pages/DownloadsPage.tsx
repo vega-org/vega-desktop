@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   LuCircleAlert as AlertCircle,
   LuClock3 as Clock,
@@ -18,6 +18,7 @@ import {
   type DownloadItem,
   useDownloadStore,
 } from "../lib/zustand/downloadStore";
+import { syncFromSharedFolder } from "../lib/sync/syncService";
 import "./DownloadsPage.css";
 
 type CompletedGroup = {
@@ -56,6 +57,12 @@ export const DownloadsPage = () => {
     useDownloadStore();
   const navigate = useNavigate();
   const allDownloads = Object.values(downloads);
+
+  useEffect(() => {
+    syncFromSharedFolder().catch((err) =>
+      console.warn("[VegaSync] Downloads page sync failed:", err),
+    );
+  }, []);
 
   const activeDownloads = useMemo(
     () =>

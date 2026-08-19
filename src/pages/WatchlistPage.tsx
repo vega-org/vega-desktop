@@ -1,14 +1,21 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { LuBookmark as Bookmark, LuSparkles as Sparkles } from "react-icons/lu";
 import { useNavigate } from "react-router-dom";
 import { PostCardItem, type Post } from "../components/home/PostCardItem";
 import useWatchListStore from "../lib/zustand/watchListStore";
+import { syncFromSharedFolder } from "../lib/sync/syncService";
 import "../components/home/ContentSlider.css";
 import "./WatchlistPage.css";
 
 export const WatchlistPage: React.FC = () => {
   const navigate = useNavigate();
   const { watchList, removeItem } = useWatchListStore();
+
+  useEffect(() => {
+    syncFromSharedFolder().catch((err) =>
+      console.warn("[VegaSync] Watchlist page sync failed:", err),
+    );
+  }, []);
 
   const openItem = (post: Post) => {
     const params = new URLSearchParams();

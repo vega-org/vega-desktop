@@ -7,6 +7,7 @@ import { useDownloadStore } from "../../lib/zustand/downloadStore";
 import { Switch } from "../ui/switch";
 import { Input } from "../ui/input";
 import { CustomSelect } from "../CustomSelect";
+import { syncFromSharedFolder } from "../../lib/sync/syncService";
 
 const QUALITIES = ["360p", "480p", "720p", "1080p", "4k"];
 
@@ -48,6 +49,9 @@ export const PreferencesSettings: React.FC = () => {
       if (selected && typeof selected === "string") {
         setDownloadLocation(selected);
         settingsStorage.setDownloadLocation(selected);
+        syncFromSharedFolder().catch((err) =>
+          console.warn("[VegaSync] Folder change sync failed:", err),
+        );
       }
     } catch (err) {
       console.error("Failed to open dialog:", err);
@@ -57,6 +61,9 @@ export const PreferencesSettings: React.FC = () => {
   const handleResetDir = () => {
     setDownloadLocation("vega");
     settingsStorage.resetDownloadLocation();
+    syncFromSharedFolder().catch((err) =>
+      console.warn("[VegaSync] Folder reset sync failed:", err),
+    );
   };
 
   const handleToggleQuality = (quality: string) => {
