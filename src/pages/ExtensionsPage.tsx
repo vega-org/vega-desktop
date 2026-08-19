@@ -216,10 +216,7 @@ export const ExtensionsPage: React.FC = () => {
         const hasSettings = Boolean(
           provider.hasSettings ||
           available?.hasSettings ||
-          cachedModule?.modules?.settings ||
-          provider.value === "torrentio" ||
-          provider.value === "1cinevood" ||
-          provider.value === "example"
+          cachedModule?.modules?.settings
         );
         combined.set(providerKey(provider), {
           ...available,
