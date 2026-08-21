@@ -12,6 +12,14 @@ const KV_PREFIX = "vega_provider_kv:";
 const MAX_KV_KEY_LENGTH = 256;
 const MAX_KV_VALUE_BYTES = 1_000_000;
 
+export const getScopedKvKey = (providerValue: string, key: string): string => {
+  return `${KV_PREFIX}${providerValue}:${key}`;
+};
+
+export const getProviderPrefix = (providerValue: string): string => {
+  return `${KV_PREFIX}${providerValue}:`;
+};
+
 const validateKvKey = (key: unknown): string => {
   if (typeof key !== "string" || !key.trim() || key.length > MAX_KV_KEY_LENGTH) {
     throw new Error(
@@ -21,9 +29,9 @@ const validateKvKey = (key: unknown): string => {
   return key;
 };
 
-const handleKvGet = (args: any): unknown => {
+const handleKvGet = (providerValue: string, args: any): unknown => {
   const key = validateKvKey(args?.key);
-  const raw = localStorage.getItem(KV_PREFIX + key);
+  const raw = localStorage.getItem(getScopedKvKey(providerValue, key));
   if (raw === null) return undefined;
   try {
     return JSON.parse(raw);
@@ -32,11 +40,12 @@ const handleKvGet = (args: any): unknown => {
   }
 };
 
-const handleKvSet = (args: any): void => {
+const handleKvSet = (providerValue: string, args: any): void => {
   const key = validateKvKey(args?.key);
+  const fullKey = getScopedKvKey(providerValue, key);
   const value = args?.value;
   if (value === undefined) {
-    localStorage.removeItem(KV_PREFIX + key);
+    localStorage.removeItem(fullKey);
     return;
   }
   const serialized = JSON.stringify(value);
@@ -46,32 +55,40 @@ const handleKvSet = (args: any): void => {
   if (serialized.length > MAX_KV_VALUE_BYTES) {
     throw new Error(`KV value exceeds limit of ${MAX_KV_VALUE_BYTES} bytes`);
   }
-  localStorage.setItem(KV_PREFIX + key, serialized);
+  localStorage.setItem(fullKey, serialized);
 };
 
-const handleKvDelete = (args: any): boolean => {
+const handleKvDelete = (providerValue: string, args: any): boolean => {
   const key = validateKvKey(args?.key);
-  const fullKey = KV_PREFIX + key;
+  const fullKey = getScopedKvKey(providerValue, key);
   const exists = localStorage.getItem(fullKey) !== null;
   localStorage.removeItem(fullKey);
   return exists;
 };
 
-const handleKvKeys = (): string[] => {
+const handleKvKeys = (providerValue: string): string[] => {
   const keys: string[] = [];
+  const prefix = getProviderPrefix(providerValue);
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && k.startsWith(KV_PREFIX)) {
-      keys.push(k.slice(KV_PREFIX.length));
+    if (k && k.startsWith(prefix)) {
+      keys.push(k.slice(prefix.length));
     }
   }
   return keys;
 };
 
-const handleKvClear = (): void => {
-  const keysToRemove = handleKvKeys();
-  for (const k of keysToRemove) {
-    localStorage.removeItem(KV_PREFIX + k);
+const handleKvClear = (providerValue: string): void => {
+  const prefix = getProviderPrefix(providerValue);
+  const toRemove: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith(prefix)) {
+      toRemove.push(k);
+    }
+  }
+  for (const k of toRemove) {
+    localStorage.removeItem(k);
   }
 };
 
@@ -189,6 +206,7 @@ export class ProviderManager {
         if (message.type === "rpc") {
           try {
             const result = await this.handleRpc(
+              providerValue,
               message.operation,
               message.args,
             );
@@ -233,7 +251,11 @@ export class ProviderManager {
     });
   }
 
-  private async handleRpc(operation: string, args: any): Promise<unknown> {
+  private async handleRpc(
+    providerValue: string,
+    operation: string,
+    args: any,
+  ): Promise<unknown> {
     if (operation === "getBaseUrl") {
       return getBaseUrl(String(args?.providerValue ?? ""));
     }
@@ -264,19 +286,19 @@ export class ProviderManager {
       };
     }
     if (operation === "kvGet") {
-      return handleKvGet(args);
+      return handleKvGet(providerValue, args);
     }
     if (operation === "kvSet") {
-      return handleKvSet(args);
+      return handleKvSet(providerValue, args);
     }
     if (operation === "kvDelete") {
-      return handleKvDelete(args);
+      return handleKvDelete(providerValue, args);
     }
     if (operation === "kvKeys") {
-      return handleKvKeys();
+      return handleKvKeys(providerValue);
     }
     if (operation === "kvClear") {
-      return handleKvClear();
+      return handleKvClear(providerValue);
     }
     throw new Error(`Unsupported provider operation: ${operation}`);
   }
@@ -570,6 +592,11 @@ export class ProviderManager {
       console.error("Error loading settings schema:", error);
       return [];
     }
+  };
+
+  clearProviderStorage = async (providerValue: string): Promise<void> => {
+    this.providerState.delete(providerValue);
+    handleKvClear(providerValue);
   };
 }
 

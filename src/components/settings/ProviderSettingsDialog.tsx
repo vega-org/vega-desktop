@@ -4,12 +4,10 @@ import { LuCheck as Check, LuRefreshCw as RefreshCw, LuSettings as SettingsIcon,
 import { FocusableButton } from "../layout/FocusableButton";
 import { CustomSelect } from "../CustomSelect";
 import { Switch } from "../ui/switch";
-import { providerManager } from "../../lib/services/ProviderManager";
+import { providerManager, getScopedKvKey } from "../../lib/services/ProviderManager";
 import { ProviderExtension } from "../../lib/storage/extensionStorage";
 import { SettingsField } from "../../lib/providers/types";
 import "./ProviderSettingsDialog.css";
-
-const KV_PREFIX = "vega_provider_kv:";
 
 interface ProviderSettingsDialogProps {
   provider: ProviderExtension | null;
@@ -26,12 +24,14 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
   const [values, setValues] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     if (!open || !provider) {
       setFields([]);
       setValues({});
       setSaved(false);
+      setResetting(false);
       return;
     }
 
@@ -45,10 +45,10 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
         if (!isMounted) return;
         setFields(schema);
 
-        // Load values from KV storage or default
+        // Load values from scoped KV storage or default
         const initialValues: Record<string, any> = {};
         for (const field of schema) {
-          const raw = localStorage.getItem(KV_PREFIX + field.key);
+          const raw = localStorage.getItem(getScopedKvKey(provider.value, field.key));
           if (raw !== null) {
             try {
               initialValues[field.key] = JSON.parse(raw);
@@ -79,11 +79,13 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
   };
 
   const handleSave = () => {
+    if (!provider) return;
     for (const [key, value] of Object.entries(values)) {
-      if (value === undefined) {
-        localStorage.removeItem(KV_PREFIX + key);
+      const fullKey = getScopedKvKey(provider.value, key);
+      if (value === undefined || value === null || value === "") {
+        localStorage.removeItem(fullKey);
       } else {
-        localStorage.setItem(KV_PREFIX + key, JSON.stringify(value));
+        localStorage.setItem(fullKey, JSON.stringify(value));
       }
     }
     setSaved(true);
@@ -92,13 +94,27 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
     }, 600);
   };
 
-  const handleResetDefaults = () => {
-    const defaultValues: Record<string, any> = {};
-    for (const field of fields) {
-      defaultValues[field.key] = field.defaultValue;
+  const handleResetDefaults = async () => {
+    if (!provider) return;
+    const confirmed = window.confirm(
+      `Reset all settings and storage for ${provider.display_name} to defaults?`,
+    );
+    if (!confirmed) return;
+
+    setResetting(true);
+    try {
+      await providerManager.clearProviderStorage(provider.value);
+      const defaultValues: Record<string, any> = {};
+      for (const field of fields) {
+        defaultValues[field.key] = field.defaultValue;
+      }
+      setValues(defaultValues);
+      setSaved(false);
+    } catch (err) {
+      console.error("Failed to reset provider storage:", err);
+    } finally {
+      setResetting(false);
     }
-    setValues(defaultValues);
-    setSaved(false);
   };
 
   if (!provider) return null;
@@ -283,8 +299,10 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
               <FocusableButton
                 className="dialog-text-button"
                 onClick={handleResetDefaults}
+                disabled={resetting}
                 focusKey={`PROVIDER_SETTINGS_RESET_${provider.value}`}
               >
+                {resetting ? <RefreshCw size={14} className="spin mr-1" /> : null}
                 Reset Defaults
               </FocusableButton>
               <FocusableButton
