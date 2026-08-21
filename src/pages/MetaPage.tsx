@@ -365,6 +365,7 @@ export const MetaPage: React.FC = () => {
         type,
         signal: new AbortController().signal,
         providerValue: activeProviderValue,
+        isDownload: true,
       });
       const validStreams = streams || [];
       setDialogStreams(validStreams);

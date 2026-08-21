@@ -444,11 +444,13 @@ export class ProviderManager {
     type,
     signal,
     providerValue,
+    isDownload,
   }: {
     link: string;
     type: string;
     signal?: AbortSignal;
     providerValue: string;
+    isDownload?: boolean;
   }): Promise<Stream[]> => {
     // Use extensionManager which now handles test mode automatically
     const getStreamModule = (
@@ -461,13 +463,14 @@ export class ProviderManager {
       console.log(`[Provider:${providerValue}] Executing stream module`, {
         link,
         type,
+        isDownload: Boolean(isDownload),
         moduleBytes: getStreamModule.length,
       });
       const streams = await this.executeModule<Stream[]>(
         getStreamModule,
         providerValue,
         "getStream",
-        { link, type },
+        { link, type, isDownload: Boolean(isDownload) },
         signal,
       );
       console.log(

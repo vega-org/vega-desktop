@@ -562,6 +562,14 @@ export function initDownloadListeners() {
   if (initialized) return;
   initialized = true;
 
+  // Sync download progress to the OS taskbar/dock
+  import("../utils/taskbarProgress").then(({ updateTaskbarProgress }) => {
+    useDownloadStore.subscribe((state) => {
+      updateTaskbarProgress(state.downloads);
+    });
+    updateTaskbarProgress(useDownloadStore.getState().downloads);
+  });
+
   listen("download-progress", (event: any) => {
     const { id, downloaded, total, speed } = event.payload;
     useDownloadStore.getState().updateProgress(id, downloaded, total, speed);
