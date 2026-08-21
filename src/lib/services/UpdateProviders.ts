@@ -2,6 +2,7 @@ import { extensionStorage, ProviderExtension } from "../storage/extensionStorage
 import { extensionManager } from "./ExtensionManager";
 import { settingsStorage } from "../storage";
 import { toast } from "../zustand/toastStore";
+import useContentStore from "../zustand/contentStore";
 
 export interface UpdateInfo {
   provider: ProviderExtension;
@@ -172,6 +173,20 @@ class UpdateProvidersService {
         }
       }
 
+      if (updated.length > 0) {
+        const latestInstalled = extensionStorage.getInstalledProviders();
+        useContentStore.getState().setInstalledProviders(latestInstalled);
+        const currentActive = useContentStore.getState().provider;
+        if (currentActive) {
+          const updatedActive = latestInstalled.find(
+            (p) => p.value === currentActive.value,
+          );
+          if (updatedActive) {
+            useContentStore.getState().setProvider(updatedActive);
+          }
+        }
+      }
+
       // Show completion notification
       if (shouldNotify) {
         await this.showUpdateCompleteNotification(updated, failed);
@@ -193,8 +208,7 @@ class UpdateProvidersService {
       // Automatically start updating instead of just showing notification.
       const providersToUpdate = availableUpdates.map((update) => update.provider);
       const showNotifications = settingsStorage.isNotificationsEnabled();
-      // Don't await here to avoid blocking - let it run in background
-      this.updateProviders(providersToUpdate, { showNotifications });
+      await this.updateProviders(providersToUpdate, { showNotifications });
     }
     return updateInfos;
   }

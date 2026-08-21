@@ -221,9 +221,8 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
                             <button
                               key={opt.value}
                               type="button"
-                              className={`provider-settings-checkbox-item ${
-                                isSelected ? "selected" : ""
-                              }`}
+                              className={`provider-settings-checkbox-item ${isSelected ? "selected" : ""
+                                }`}
                               onClick={() => toggleOption(opt.value)}
                             >
                               <span className="provider-settings-checkbox-box">
@@ -295,7 +294,7 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
           )}
 
           {fields.length > 0 && !loading && (
-            <div className="extensions-dialog-actions" style={{ marginTop: 20 }}>
+            <div className="extensions-dialog-actions provider-settings-actions">
               <FocusableButton
                 className="dialog-text-button"
                 onClick={handleResetDefaults}
@@ -303,16 +302,19 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
                 focusKey={`PROVIDER_SETTINGS_RESET_${provider.value}`}
               >
                 {resetting ? <RefreshCw size={14} className="spin mr-1" /> : null}
-                Reset Defaults
+                Reset
               </FocusableButton>
-              <FocusableButton
-                className="dialog-primary-button"
-                onClick={handleSave}
-                focusKey={`PROVIDER_SETTINGS_SAVE_${provider.value}`}
-              >
-                {saved ? <Check size={18} /> : null}
-                {saved ? "Saved" : "Save Changes"}
-              </FocusableButton>
+              <div className="provider-settings-right-actions">
+
+                <FocusableButton
+                  className="dialog-primary-button"
+                  onClick={handleSave}
+                  focusKey={`PROVIDER_SETTINGS_SAVE_${provider.value}`}
+                >
+                  {saved ? <Check size={18} /> : null}
+                  {saved ? "Saved" : "Save Changes"}
+                </FocusableButton>
+              </div>
             </div>
           )}
         </Dialog.Content>
