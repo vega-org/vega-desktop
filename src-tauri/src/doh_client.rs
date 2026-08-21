@@ -17,21 +17,29 @@ struct CustomDnsResolver {
 impl CustomDnsResolver {
     fn new(provider: &str, custom_url: Option<String>) -> Self {
         let mut opts = ResolverOpts::default();
-        opts.use_hosts_file = false;
-        opts.ip_strategy = hickory_resolver::config::LookupIpStrategy::Ipv4Only;
+        opts.use_hosts_file = true;
+        opts.ip_strategy = hickory_resolver::config::LookupIpStrategy::Ipv4AndIpv6;
 
-        let config = if let Some(_url) = custom_url.filter(|u| !u.is_empty()) {
-            // Very simplified setup for custom DoH: hickory requires name server groups
-            // In reality, this requires parsing the URL to get the IP.
-            // For simplicity, we just fallback to Cloudflare if a custom URL is provided but not fully supported here,
-            // or we could use the default system resolver for custom URLs if it's too complex.
-            // Let's stick to known providers for hickory configuration:
-            ResolverConfig::cloudflare_https()
+        let config = if let Some(url) = custom_url.filter(|u| !u.is_empty()) {
+            if url.to_lowercase().contains("google") {
+                ResolverConfig::google_https()
+            } else if url.to_lowercase().contains("adguard") {
+                let mut config = ResolverConfig::new();
+                let name_server = NameServerConfig::new(
+                    SocketAddr::from_str("94.140.14.14:443").unwrap(),
+                    Protocol::Https,
+                );
+                config.add_name_server(name_server);
+                config
+            } else if url.to_lowercase().contains("quad9") {
+                ResolverConfig::quad9_https()
+            } else {
+                ResolverConfig::cloudflare_https()
+            }
         } else {
             match provider.to_lowercase().as_str() {
                 "google" => ResolverConfig::google_https(),
                 "adguard" => {
-                    // AdGuard DNS over HTTPS config
                     let mut config = ResolverConfig::new();
                     let name_server = NameServerConfig::new(
                         SocketAddr::from_str("94.140.14.14:443").unwrap(),
@@ -40,6 +48,7 @@ impl CustomDnsResolver {
                     config.add_name_server(name_server);
                     config
                 }
+                "quad9" => ResolverConfig::quad9_https(),
                 _ => ResolverConfig::cloudflare_https(),
             }
         };
@@ -56,6 +65,19 @@ impl Resolve for CustomDnsResolver {
         let resolver = self.resolver.clone();
         let name_str = name.as_str().to_string();
         Box::pin(async move {
+            // Direct IP addresses (v4 or v6) do not need DNS lookup
+            if let Ok(ip) = name_str.parse::<std::net::IpAddr>() {
+                return Ok(Box::new(std::iter::once(SocketAddr::new(ip, 0))) as wreq::dns::Addrs);
+            }
+
+            // Localhost bypass
+            if name_str.eq_ignore_ascii_case("localhost") {
+                let local_addrs = vec![
+                    SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 0),
+                ];
+                return Ok(Box::new(local_addrs.into_iter()) as wreq::dns::Addrs);
+            }
+
             println!("[DoH] Resolving: {}", name_str);
             match resolver.lookup_ip(name_str.as_str()).await {
                 Ok(response) => {
@@ -67,8 +89,24 @@ impl Resolve for CustomDnsResolver {
                     Ok(Box::new(addrs.into_iter()) as wreq::dns::Addrs)
                 }
                 Err(e) => {
-                    eprintln!("[DoH] Resolution failed for {}: {:?}", name_str, e);
-                    Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+                    eprintln!(
+                        "[DoH] DoH resolution failed for {}: {:?}. Falling back to system DNS...",
+                        name_str, e
+                    );
+                    match tokio::net::lookup_host(format!("{}:0", name_str)).await {
+                        Ok(std_addrs) => {
+                            let addrs: Vec<SocketAddr> = std_addrs.collect();
+                            println!("[DoH] System DNS resolved {} to {:?}", name_str, addrs);
+                            Ok(Box::new(addrs.into_iter()) as wreq::dns::Addrs)
+                        }
+                        Err(sys_err) => {
+                            eprintln!(
+                                "[DoH] System DNS also failed for {}: {:?}",
+                                name_str, sys_err
+                            );
+                            Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+                        }
+                    }
                 }
             }
         })
@@ -89,16 +127,19 @@ async fn get_client(provider: &str, custom_url: Option<String>) -> Result<Client
         }
     }
 
-    let resolver = CustomDnsResolver::new(provider, custom_url);
-
-    // Keep TLS and HTTP/2 behavior aligned with a real Chrome client.
-    let client = Client::builder()
+    let mut builder = Client::builder()
         .emulation(Emulation::Chrome137)
-        .dns_resolver(Arc::new(resolver))
         .cookie_store(true)
-        .redirect(Policy::limited(10))
+        .redirect(Policy::limited(10));
+
+    if !provider.eq_ignore_ascii_case("system") && !provider.eq_ignore_ascii_case("none") {
+        let resolver = CustomDnsResolver::new(provider, custom_url);
+        builder = builder.dns_resolver(Arc::new(resolver));
+    }
+
+    let client = builder
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Failed to build wreq client: {:#?}", e))?;
 
     let mut cache = CLIENT_CACHE.write().await;
     cache.insert(key, client.clone());
@@ -106,22 +147,36 @@ async fn get_client(provider: &str, custom_url: Option<String>) -> Result<Client
     Ok(client)
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(untagged)]
-enum FetchBody {
+pub enum FetchBody {
     Text(String),
     Bytes(Vec<u8>),
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct FetchArgs {
-    url: String,
-    method: String,
-    headers: HashMap<String, String>,
-    body: Option<FetchBody>,
-    max_redirects: Option<usize>,
-    doh_provider: String,
-    doh_custom_url: Option<String>,
+    pub url: String,
+    #[serde(default = "default_method")]
+    pub method: String,
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
+    #[serde(default)]
+    pub body: Option<FetchBody>,
+    #[serde(default)]
+    pub max_redirects: Option<usize>,
+    #[serde(default = "default_doh_provider")]
+    pub doh_provider: String,
+    #[serde(default)]
+    pub doh_custom_url: Option<String>,
+}
+
+fn default_method() -> String {
+    "GET".to_string()
+}
+
+fn default_doh_provider() -> String {
+    "cloudflare".to_string()
 }
 
 #[derive(Serialize)]
@@ -140,7 +195,7 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
         .keys()
         .any(|k| k.eq_ignore_ascii_case("cookie"));
     println!(
-        "[doh_fetch] {} {} | has_cookie_header: {}",
+        "[doh_fetch] {} {} | has_cookie: {}",
         args.method, args.url, has_cookie
     );
 
@@ -158,11 +213,11 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
         request = request.redirect(redirect_policy);
     }
 
-    for (k, v) in args.headers {
+    for (k, v) in &args.headers {
         if k.eq_ignore_ascii_case("accept-encoding") {
             continue;
         }
-        request = request.header(&k, &v);
+        request = request.header(k, v);
     }
 
     if let Some(body) = args.body {
@@ -172,11 +227,10 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
         };
     }
 
-    let response = request.send().await.map_err(|e| format!("{:#?}", e));
-    if let Err(ref e) = response {
-        eprintln!("[doh_fetch] request error: {}", e);
-    }
-    let response = response?;
+    let response = request.send().await.map_err(|e| {
+        eprintln!("[doh_fetch] request error for {}: {:#?}", args.url, e);
+        format!("{:#?}", e)
+    })?;
 
     let status = response.status().as_u16();
     let status_text = response

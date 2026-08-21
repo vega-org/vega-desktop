@@ -29,6 +29,7 @@ import {
 } from "./lib/sync/syncService";
 
 import { applyThemeTokens } from "./lib/theme";
+import { ToastContainer } from "./components/ui/ToastContainer";
 
 let isNavInitialized = false;
 
@@ -112,6 +113,7 @@ export default function App() {
   return (
     <QueryClientProvider client={client}>
       <WafDialog />
+      <ToastContainer />
       <BrowserRouter>
         <WindowControls />
         <Routes>

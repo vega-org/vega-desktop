@@ -1,4 +1,5 @@
 import axios from "axios";
+import { tauriAxiosAdapter } from "../providers/tauriAxiosAdapter";
 import {
   extensionStorage,
   ProviderExtension,
@@ -114,12 +115,16 @@ export class ExtensionManager {
         }
       }
 
-      const manifestUrl = this.testMode
+      const manifestBase = this.testMode
         ? `${this.baseUrlTestMode}/manifest.json`
         : this.getManifest(activeSource.url);
+      const manifestUrl = shouldForce
+        ? `${manifestBase}${manifestBase.includes("?") ? "&" : "?"}t=${Date.now()}`
+        : manifestBase;
       console.log("Fetching manifest from:", manifestUrl);
       const response = await axios.get(manifestUrl, {
         timeout: 10000,
+        adapter: tauriAxiosAdapter,
       });
 
       if (!response.data || !Array.isArray(response.data)) {
@@ -176,11 +181,12 @@ export class ExtensionManager {
       const modules: Record<string, string> = {};
       const downloadPromises = allFiles.map(async (fileName) => {
         try {
-          const url = `${sourceUrl}/dist/${providerValue}/${fileName}.js`;
+          const url = `${sourceUrl}/dist/${providerValue}/${fileName}.js?t=${Date.now()}`;
           console.log(`Downloading: ${url}`);
 
           const response = await axios.get(url, {
             timeout: 15000,
+            adapter: tauriAxiosAdapter,
           });
 
           if (response.data) {
@@ -254,6 +260,7 @@ export class ExtensionManager {
 
           const response = await axios.get(fileUrl, {
             timeout: 15000,
+            adapter: tauriAxiosAdapter,
           });
 
           if (response.data) {

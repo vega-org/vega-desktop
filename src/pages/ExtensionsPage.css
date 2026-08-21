@@ -360,6 +360,29 @@
   background: var(--primary-container);
 }
 
+.provider-update-button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--on-primary, #ffffff);
+  background: var(--primary, #6366f1);
+  transition: filter 0.15s, background-color 0.15s;
+}
+
+.provider-update-button:hover,
+.provider-update-button.tv-focus {
+  filter: brightness(1.12);
+}
+
 .provider-install-button:hover,
 .provider-install-button.tv-focus,
 .empty-add-source:hover,

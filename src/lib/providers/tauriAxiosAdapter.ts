@@ -17,9 +17,14 @@ async function executeNativeFetch(
   responseHeaders: AxiosHeaders;
   requestUrl: string;
 }> {
+  const plainHeaders: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    plainHeaders[key] = value;
+  });
+
   const response = await tauriFetch(url, {
     method,
-    headers,
+    headers: plainHeaders,
     body,
     redirect: config.maxRedirects === 0 ? "manual" : "follow",
   });

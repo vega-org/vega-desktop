@@ -19,7 +19,9 @@ import {
 import { ProviderSettingsDialog } from "../components/settings/ProviderSettingsDialog";
 import { FocusableButton } from "../components/layout/FocusableButton";
 import { extensionManager } from "../lib/services/ExtensionManager";
+import { updateProvidersService } from "../lib/services/UpdateProviders";
 import { settingsStorage } from "../lib/storage";
+import { toast } from "../lib/zustand/toastStore";
 import {
   extensionStorage,
   type ProviderExtension,
@@ -28,6 +30,20 @@ import {
 import { createProviderSource } from "../lib/utils/helpers";
 import useContentStore from "../lib/zustand/contentStore";
 import "./ExtensionsPage.css";
+
+const isNewerVersion = (newVersion: string, currentVersion: string): boolean => {
+  const parseVersion = (v: string) =>
+    v.split(".").map((p) => parseInt(p, 10) || 0);
+  const n = parseVersion(newVersion);
+  const c = parseVersion(currentVersion);
+  for (let i = 0; i < Math.max(n.length, c.length); i++) {
+    const np = n[i] || 0;
+    const cp = c[i] || 0;
+    if (np > cp) return true;
+    if (np < cp) return false;
+  }
+  return false;
+};
 
 const providerKey = (provider: ProviderExtension) =>
   `${provider.source?.author ?? ""}:${provider.value}`;
@@ -155,6 +171,8 @@ export const ExtensionsPage: React.FC = () => {
       setError("");
       const providers = await extensionManager.fetchManifest(source, true);
       setAvailableProviders(providers);
+      await updateProvidersService.checkForUpdatesAndAutoUpdate(true);
+      setInstalledProviders(extensionStorage.getInstalledProviders());
     } catch (caughtError: unknown) {
       setError(
         caughtError instanceof Error
@@ -202,7 +220,10 @@ export const ExtensionsPage: React.FC = () => {
   }, []);
 
   const providers = useMemo(() => {
-    const combined = new Map<string, ProviderExtension>();
+    const combined = new Map<
+      string,
+      ProviderExtension & { hasUpdate?: boolean; latestVersion?: string }
+    >();
 
     availableProviders
       .filter((provider) => !provider.disabled)
@@ -213,13 +234,17 @@ export const ExtensionsPage: React.FC = () => {
       .forEach((provider) => {
         const available = combined.get(providerKey(provider));
         const hasSettings = Boolean(
-          provider.hasSettings ||
-          available?.hasSettings
+          provider.hasSettings || available?.hasSettings,
+        );
+        const hasUpdate = Boolean(
+          available && isNewerVersion(available.version, provider.version),
         );
         combined.set(providerKey(provider), {
           ...available,
           ...provider,
           hasSettings,
+          hasUpdate,
+          latestVersion: available?.version,
         });
       });
 
@@ -273,6 +298,36 @@ export const ExtensionsPage: React.FC = () => {
         caughtError instanceof Error
           ? caughtError.message
           : `Could not install ${provider.display_name}.`,
+      );
+    } finally {
+      setOperationKey(null);
+    }
+  };
+
+  const handleUpdate = async (
+    provider: ProviderExtension & { latestVersion?: string },
+  ) => {
+    const key = providerKey(provider);
+    try {
+      setOperationKey(key);
+      setError("");
+      const targetProvider: ProviderExtension = {
+        ...provider,
+        version: provider.latestVersion || provider.version,
+      };
+      await updateProvidersService.updateProvider(targetProvider);
+      const nextInstalled = extensionStorage.getInstalledProviders();
+      setInstalledProviders(nextInstalled);
+      toast({
+        title: "Extension Updated",
+        message: `${provider.display_name} updated to v${targetProvider.version}`,
+        type: "success",
+      });
+    } catch (caughtError: unknown) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : `Could not update ${provider.display_name}.`,
       );
     } finally {
       setOperationKey(null);
@@ -492,6 +547,22 @@ export const ExtensionsPage: React.FC = () => {
                             <Check size={15} /> In use
                           </span>
                         ) : null}
+                        {provider.hasUpdate && (
+                          <FocusableButton
+                            className="provider-update-button"
+                            onClick={() => void handleUpdate(provider)}
+                            disabled={busy}
+                            title={`Update ${provider.display_name} to v${provider.latestVersion || ""}`}
+                            focusKey={`PROVIDER_UPDATE_${key}`}
+                          >
+                            {busy ? (
+                              <RefreshCw size={16} className="spin" />
+                            ) : (
+                              <RefreshCw size={16} />
+                            )}
+                            {busy ? "Updating" : "Update"}
+                          </FocusableButton>
+                        )}
                         {provider.hasSettings && (
                           <FocusableButton
                             className="provider-settings-button"
