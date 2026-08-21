@@ -148,6 +148,7 @@ export const MetaPage: React.FC = () => {
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false);
   const [isDialogLoading, setIsDialogLoading] = useState(false);
+  const [extractingId, setExtractingId] = useState<string | null>(null);
   const [episodesProgress, setEpisodesProgress] = useState<Record<string, { position: number; duration: number }>>({});
   const [episodeSearch, setEpisodeSearch] = useState("");
   const [episodeDetails, setEpisodeDetails] = useState<EpisodeDetails | null>(null);
@@ -325,9 +326,7 @@ export const MetaPage: React.FC = () => {
           item.sourceLink === episode.link,
       );
     const finalTitle = `${title} S${groupTitle} E${index + 1}`;
-
-    setDialogEpisodeTitle(finalTitle);
-    setDialogContext({
+    const newContext: DialogContext = {
       id,
       title: finalTitle,
       poster: posterImage,
@@ -340,12 +339,26 @@ export const MetaPage: React.FC = () => {
       downloaded: stored?.status === "completed",
       downloadedServer: stored?.server,
       downloadId: stored?.id || id,
-    });
+    };
+
+    setDialogEpisodeTitle(finalTitle);
+    setDialogContext(newContext);
     setDialogStreams([]);
     setDialogError(null);
-    setIsDownloadDialogOpen(true);
+
+    const isQuickDownload =
+      Boolean(
+        info.quickDownload ||
+          activeSeason?.quickDownload ||
+          (episode as any)?.quickDownload,
+      ) && stored?.status !== "completed";
+
+    if (!isQuickDownload) {
+      setIsDownloadDialogOpen(true);
+    }
 
     setIsDialogLoading(true);
+    setExtractingId(id);
     try {
       const streams = await providerManager.getStream({
         link: episode.link,
@@ -357,6 +370,15 @@ export const MetaPage: React.FC = () => {
       setDialogStreams(validStreams);
       if (validStreams.length === 0) {
         setDialogError("No downloadable streams found.");
+        if (isQuickDownload) {
+          setIsDownloadDialogOpen(true);
+        }
+      } else if (isQuickDownload) {
+        await executeQuickDownload(newContext, validStreams[0]);
+        setIsDownloadDialogOpen(false);
+        setDialogStreams([]);
+        setDialogContext(null);
+        setDialogError(null);
       }
     } catch (caughtError) {
       console.error("Failed to extract stream for download", caughtError);
@@ -366,30 +388,64 @@ export const MetaPage: React.FC = () => {
           ? caughtError.message
           : "Failed to extract stream for download.",
       );
+      if (isQuickDownload) {
+        setIsDownloadDialogOpen(true);
+      }
     } finally {
       setIsDialogLoading(false);
+      setExtractingId(null);
+    }
+  };
+
+  const executeDownloadVideo = async (targetContext: DialogContext, stream: Stream) => {
+    await addDownload({
+      id: targetContext.id,
+      title: targetContext.title,
+      url: stream.link,
+      server: stream.server,
+      poster: targetContext.poster,
+      provider: activeProviderValue || "unknown",
+      infoUrl: link,
+      sourceLink: targetContext.sourceLink,
+      showName: targetContext.showName,
+      episodeName: targetContext.episodeName,
+      seasonTitle: targetContext.seasonTitle,
+      type: targetContext.type,
+      imdbId: targetContext.imdbId,
+      headers: stream.headers,
+      videoType: stream.type === "m3u8" || stream.link.includes(".m3u8") ? "m3u8" : stream.type,
+    });
+  };
+
+  const executeQuickDownload = async (targetContext: DialogContext, stream: Stream) => {
+    await executeDownloadVideo(targetContext, stream);
+
+    if (stream.subtitles && stream.subtitles.length > 0) {
+      const sub = stream.subtitles[0];
+      const subId = `${targetContext.id}_subtitle_${sub.title}`;
+      await addDownload({
+        id: subId,
+        title: `${targetContext.title} ${sub.title} Subtitle`,
+        url: sub.uri,
+        server: "Subtitle",
+        poster: targetContext.poster,
+        provider: activeProviderValue || "unknown",
+        infoUrl: link,
+        sourceLink: targetContext.sourceLink,
+        showName: targetContext.showName,
+        episodeName: targetContext.episodeName,
+        seasonTitle: targetContext.seasonTitle,
+        type: targetContext.type,
+        imdbId: targetContext.imdbId,
+        isSubtitle: true,
+        videoType: sub.type?.includes("vtt") || sub.uri.includes(".vtt") ? "vtt" : "srt",
+      });
     }
   };
 
   const selectStream = async (stream: Stream) => {
     if (!dialogContext) return;
-    await addDownload({
-      id: dialogContext.id,
-      title: dialogContext.title,
-      url: stream.link,
-      server: stream.server,
-      poster: dialogContext.poster,
-      provider: activeProviderValue || "unknown",
-      infoUrl: link,
-      sourceLink: dialogContext.sourceLink,
-      showName: dialogContext.showName,
-      episodeName: dialogContext.episodeName,
-      seasonTitle: dialogContext.seasonTitle,
-      type: dialogContext.type,
-      imdbId: dialogContext.imdbId,
-      headers: stream.headers,
-      videoType: stream.type === "m3u8" || stream.link.includes(".m3u8") ? "m3u8" : stream.type,
-    });
+    await executeDownloadVideo(dialogContext, stream);
     setIsDownloadDialogOpen(false);
     setDialogStreams([]);
     setDialogContext(null);
@@ -558,7 +614,7 @@ export const MetaPage: React.FC = () => {
                       watched={progressPercent > 85}
                       download={storedDownload}
                       hasDownloadedSubtitles={hasDownloadedSubtitles}
-                      extracting={false}
+                      extracting={extractingId === id}
                       onPlay={() => play(playableRows, index, rowType)}
                       onDownload={() => void prepareDownload(episode, sourceIndex, rowType, groupTitle, id)}
                       onDeleteDownload={() => void cancelDownload(storedDownloadId)}

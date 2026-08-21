@@ -54,6 +54,7 @@ export interface Info {
   imdbId?: string;
   tmdbId?: number | string;
   type: string;
+  quickDownload?: boolean;
   populateMeta?: boolean;
   webUrl?: string;
   trailerUrl?: string;
@@ -70,18 +71,21 @@ export interface EpisodeLink {
   sourceLink?: string;
   description?: string;
   image?: string;
+  quickDownload?: boolean;
 }
 
 export interface Link {
   title: string;
   quality?: string;
   episodesLink?: string;
+  quickDownload?: boolean;
   directLinks?: {
     title: string;
     link: string;
     type?: "movie" | "series";
     description?: string;
     image?: string;
+    quickDownload?: boolean;
   }[];
 }
 
@@ -106,7 +110,7 @@ export interface ProviderType {
   }: {
     link: string;
     type: string;
-    signal: AbortSignal;
+    signal?: AbortSignal;
     providerContext: ProviderContext;
   }) => Promise<Stream[]>;
   GetHomePosts: ({

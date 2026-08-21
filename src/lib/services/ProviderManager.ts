@@ -1,6 +1,6 @@
 import axios from "axios";
 import { providerFetch } from "../providers/tauriAxiosAdapter";
-import { Catalog, EpisodeLink, Info, Post, SettingsField } from "../providers/types";
+import { Catalog, EpisodeLink, Info, Post, SettingsField, Stream } from "../providers/types";
 import { getBaseUrl } from "../providers/getBaseUrl";
 import { openWebView } from "../../platform/waf";
 import { extensionManager } from "./ExtensionManager";
@@ -447,9 +447,9 @@ export class ProviderManager {
   }: {
     link: string;
     type: string;
-    signal: AbortSignal;
+    signal?: AbortSignal;
     providerValue: string;
-  }): Promise<any[]> => {
+  }): Promise<Stream[]> => {
     // Use extensionManager which now handles test mode automatically
     const getStreamModule = (
       await extensionManager.getProviderModulesAsync(providerValue)
@@ -463,7 +463,7 @@ export class ProviderManager {
         type,
         moduleBytes: getStreamModule.length,
       });
-      const streams = await this.executeModule<any[]>(
+      const streams = await this.executeModule<Stream[]>(
         getStreamModule,
         providerValue,
         "getStream",
