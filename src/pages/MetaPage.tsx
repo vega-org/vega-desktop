@@ -313,6 +313,7 @@ export const MetaPage: React.FC = () => {
     type: string,
     groupTitle: string,
     exactId?: string,
+    isLongPress = false,
   ) => {
     const id = exactId || `${title}_S${groupTitle}_E${index + 1}`;
     const stored =
@@ -351,7 +352,9 @@ export const MetaPage: React.FC = () => {
         info.quickDownload ||
           activeSeason?.quickDownload ||
           (episode as any)?.quickDownload,
-      ) && stored?.status !== "completed";
+      ) &&
+      !isLongPress &&
+      stored?.status !== "completed";
 
     if (!isQuickDownload) {
       setIsDownloadDialogOpen(true);
@@ -617,7 +620,10 @@ export const MetaPage: React.FC = () => {
                       hasDownloadedSubtitles={hasDownloadedSubtitles}
                       extracting={extractingId === id}
                       onPlay={() => play(playableRows, index, rowType)}
-                      onDownload={() => void prepareDownload(episode, sourceIndex, rowType, groupTitle, id)}
+                      onDownload={(e) => {
+                        const isLongPress = Boolean(e?.ctrlKey || e?.metaKey);
+                        void prepareDownload(episode, sourceIndex, rowType, groupTitle, id, isLongPress);
+                      }}
                       onDeleteDownload={() => void cancelDownload(storedDownloadId)}
                       onShowDetails={episode.description?.trim() ? () => setEpisodeDetails({
                         title: episode.title || displayTitle,

@@ -84,7 +84,12 @@ interface EpisodeRowProps {
   hasDownloadedSubtitles?: boolean;
   extracting: boolean;
   onPlay: () => void;
-  onDownload: () => void;
+  onDownload: (
+    event?:
+      | React.MouseEvent
+      | React.KeyboardEvent
+      | { ctrlKey?: boolean; metaKey?: boolean },
+  ) => void;
   onDeleteDownload?: () => void;
   onShowDetails?: () => void;
 }
@@ -133,6 +138,36 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
   const [visibleDescription, setVisibleDescription] = useState(
     episodeDescription ?? "",
   );
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLongPressedRef = useRef(false);
+
+  const handlePointerDown = () => {
+    isLongPressedRef.current = false;
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressedRef.current = true;
+      onDownload({ ctrlKey: true });
+    }, 500);
+  };
+
+  const handlePointerUp = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleDownloadClick = (e?: React.MouseEvent | React.KeyboardEvent) => {
+    if (isLongPressedRef.current) {
+      isLongPressedRef.current = false;
+      return;
+    }
+    handlePointerUp();
+    onDownload(e);
+  };
+
   const progress =
     download?.status === "downloading" && download.totalBytes
       ? Math.min((download.downloadedBytes / download.totalBytes) * 100, 100)
@@ -305,7 +340,10 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
         ) : download?.status === "error" ? (
           <FocusableButton
             className="episode-action-button error"
-            onClick={onDownload}
+            onClick={handleDownloadClick}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
             title="Retry download"
           >
             <Retry size={18} />
@@ -313,7 +351,10 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
         ) : download?.status === "completed" || hasDownloadedSubtitles ? (
           <FocusableButton
             className="episode-action-button completed"
-            onClick={onDownload}
+            onClick={handleDownloadClick}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
             title="Download options"
           >
             <Check size={18} />
@@ -321,8 +362,11 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
         ) : (
           <FocusableButton
             className="episode-action-button"
-            onClick={onDownload}
-            title="Download"
+            onClick={handleDownloadClick}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
+            title="Download (Ctrl+Click to choose server)"
           >
             <Download size={18} />
           </FocusableButton>
