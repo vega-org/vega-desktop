@@ -1,3 +1,5 @@
+import type { SkipInterval } from "../providers/types";
+
 export const VEGA_SYNC_SCHEMA_VERSION = 1;
 export const VEGA_SYNC_DIRECTORY = ".vega-sync";
 
@@ -23,6 +25,7 @@ export interface SyncedDownload {
   totalBytes: number;
   completedAt: number;
   updatedAt: number;
+  skip?: SkipInterval[];
 }
 
 export interface SyncedHistory {
@@ -46,6 +49,7 @@ export interface SyncedHistory {
     sourceLink?: string;
     description?: string;
     image?: string;
+    skip?: SkipInterval[];
   };
   type?: string;
   cachedInfoData?: unknown;

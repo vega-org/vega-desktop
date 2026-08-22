@@ -172,7 +172,7 @@ export const HomePage: React.FC = () => {
     );
   }
 
-  if (homeError) {
+  if (homeError && (!homeData || homeData.length === 0)) {
     return (
       <div className="error-state">
         <h2 className="headline-md">Failed to load content</h2>

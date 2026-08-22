@@ -33,7 +33,8 @@ export const useContentInfo = (link: string, providerValue: string) => {
     gcTime: 60 * 60 * 1000, // 1 hour
     retry: 2,
     initialData: () => {
-      const cached = cacheStorage.getString(cacheKey) || cacheStorage.getString(link);
+      const cached =
+        cacheStorage.getString(cacheKey) || cacheStorage.getString(link);
       if (cached) {
         try {
           return JSON.parse(cached);
@@ -50,8 +51,9 @@ export const useContentInfo = (link: string, providerValue: string) => {
   useEffect(() => {
     if (query.data) {
       cacheStorage.setString(cacheKey, JSON.stringify(query.data));
+      cacheStorage.setString(link, JSON.stringify(query.data));
     }
-  }, [cacheKey, query.data]);
+  }, [cacheKey, link, query.data]);
 
   return query;
 };
@@ -83,7 +85,7 @@ export const useEnhancedMetadata = (
       }
     },
     enabled: enabled && !!imdbId && !!type,
-    staleTime: 30 * 60 * 1000, // 30 minutes - metadata changes rarely
+    staleTime: 0, // Instantly revalidate in background
     gcTime: 2 * 60 * 60 * 1000, // 2 hours
     retry: 1, // Don't retry too much for external API
     initialData: () => {
@@ -102,11 +104,13 @@ export const useEnhancedMetadata = (
       return undefined;
     },
     initialDataUpdatedAt: 0,
+    refetchOnMount: 'always',
   });
 
   useEffect(() => {
     if (query.data && imdbId) {
       cacheStorage.setString(cacheKey, JSON.stringify(query.data));
+      cacheStorage.setString(imdbId, JSON.stringify(query.data));
     }
   }, [cacheKey, imdbId, query.data]);
 

@@ -81,6 +81,7 @@ export const DownloadsSeriesPage = () => {
       link: episode.filePath,
       localFile: true,
       sourceLink: episode.sourceLink,
+      skip: episode.skip,
     }));
 
     navigate("/player", {

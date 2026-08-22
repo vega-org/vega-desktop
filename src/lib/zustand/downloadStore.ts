@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { documentDir, join } from "@tauri-apps/api/path";
 import { settingsStorage } from "../storage/SettingsStorage";
+import type { SkipInterval } from "../providers/types";
 
 export interface DownloadItem {
   id: string;
@@ -35,6 +36,7 @@ export interface DownloadItem {
   createdAt?: number;
   updatedAt?: number;
   completedAt?: number;
+  skip?: SkipInterval[];
 }
 
 export const isSubtitleDownloadItem = (

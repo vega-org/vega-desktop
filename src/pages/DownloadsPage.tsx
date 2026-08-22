@@ -108,6 +108,7 @@ export const DownloadsPage = () => {
             link: item.filePath,
             localFile: true,
             sourceLink: item.sourceLink,
+            skip: item.skip,
           },
         ],
         linkIndex: 0,

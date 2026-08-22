@@ -128,6 +128,7 @@ const buildManifest = async (): Promise<VegaSyncManifest> => {
           totalBytes: item.totalBytes,
           completedAt: item.completedAt || updatedAt,
           updatedAt,
+          skip: item.skip,
         };
         synced.mediaKey = getDownloadMediaKey(synced);
         return [[item.id, synced]];
@@ -243,6 +244,7 @@ const applyRemoteDownloads = async (
           createdAt: item.completedAt,
           completedAt: item.completedAt,
           updatedAt: item.updatedAt,
+          skip: item.skip,
         },
       },
     }));

@@ -12,6 +12,7 @@ import { usePlayerProgress } from "../lib/hooks/usePlayerSettings";
 import { useMediaSession } from "../lib/hooks/useMediaSession";
 import useContentStore from "../lib/zustand/contentStore";
 import useWatchHistoryStore from "../lib/zustand/watchHistrory";
+import { useDownloadStore } from "../lib/zustand/downloadStore";
 import { cacheStorage, mainStorage } from "../lib/storage";
 import { PlayerControls } from "./PlayerControls";
 import { PlayerInitError } from "./PlayerInitError";
@@ -797,6 +798,35 @@ const DesktopPlayer: React.FC<any> = ({
   const manualFullscreenRef = useRef(false);
   const isWindows = navigator.userAgent.toLowerCase().includes("windows");
 
+  const downloads = useDownloadStore((state) => state.downloads);
+
+  const getCachedSkips = (keys: (string | undefined)[]): SkipInterval[] => {
+    for (const key of keys) {
+      if (!key) continue;
+      try {
+        const cached = cacheStorage.getString(`skips_${key}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        }
+      } catch {}
+    }
+    return [];
+  };
+
+  const cacheSkips = (keys: (string | undefined)[], skips: SkipInterval[]) => {
+    if (!skips || skips.length === 0) return;
+    const serialized = JSON.stringify(skips);
+    for (const key of keys) {
+      if (!key) continue;
+      try {
+        cacheStorage.setString(`skips_${key}`, serialized);
+      } catch {}
+    }
+  };
+
   const combinedSkips: SkipInterval[] = useMemo(() => {
     const list: SkipInterval[] = [];
     const addSkips = (items?: SkipInterval[]) => {
@@ -843,8 +873,63 @@ const DesktopPlayer: React.FC<any> = ({
       }
     }
 
-    return list.sort((a, b) => a.from - b.from);
-  }, [activeEpisode, selectedStream, state?.linkList]);
+    // Check downloadStore for matching download item with skip intervals
+    const allDownloadsList = Object.values(downloads);
+    const matchedDownload = allDownloadsList.find(
+      (d) =>
+        (activeEpisode?.id && d.id === activeEpisode.id) ||
+        (activeEpisode?.link &&
+          (d.filePath === activeEpisode.link ||
+            d.url === activeEpisode.link ||
+            d.sourceLink === activeEpisode.link)) ||
+        (activeEpisode?.sourceLink &&
+          (d.sourceLink === activeEpisode.sourceLink ||
+            d.url === activeEpisode.sourceLink ||
+            d.filePath === activeEpisode.sourceLink)) ||
+        (selectedStream?.link &&
+          (d.filePath === selectedStream.link ||
+            d.url === selectedStream.link)),
+    );
+    if (matchedDownload?.skip) {
+      addSkips(matchedDownload.skip);
+    }
+
+    // Check cacheStorage if no skips found yet
+    const episodeCacheKey =
+      activeEpisode?.link ||
+      activeEpisode?.sourceLink ||
+      activeEpisode?.id ||
+      (state?.infoUrl && activeEpisode?.title
+        ? `${state.infoUrl}:${activeEpisode.title}`
+        : undefined);
+
+    if (list.length === 0) {
+      const cached = getCachedSkips([
+        activeEpisode?.link,
+        activeEpisode?.sourceLink,
+        activeEpisode?.id,
+        episodeCacheKey,
+      ]);
+      addSkips(cached);
+    }
+
+    const sorted = list.sort((a, b) => a.from - b.from);
+
+    // Save to cache for future offline / download playback if skips exist
+    if (sorted.length > 0) {
+      cacheSkips(
+        [
+          activeEpisode?.link,
+          activeEpisode?.sourceLink,
+          activeEpisode?.id,
+          episodeCacheKey,
+        ],
+        sorted,
+      );
+    }
+
+    return sorted;
+  }, [activeEpisode, downloads, selectedStream, state?.infoUrl, state?.linkList]);
 
   useEffect(() => {
     return () => {

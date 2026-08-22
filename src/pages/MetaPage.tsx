@@ -17,7 +17,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { useArtworkPalette, useArtworkPaletteReady } from "../lib/hooks/useArtworkPalette";
 import { useContentDetails } from "../lib/hooks/useContentInfo";
 import { useEpisodes } from "../lib/hooks/useEpisodes";
-import type { EpisodeLink, Link, Stream } from "../lib/providers/types";
+import type { EpisodeLink, Link, Stream, SkipInterval } from "../lib/providers/types";
 import { providerManager } from "../lib/services/ProviderManager";
 import { cacheStorage } from "../lib/storage";
 import { settingsStorage } from "../lib/storage/SettingsStorage";
@@ -41,6 +41,7 @@ interface DialogContext {
   downloaded?: boolean;
   downloadedServer?: string;
   downloadId?: string;
+  skip?: SkipInterval[];
 }
 
 interface EpisodeSearchFieldProps {
@@ -340,6 +341,11 @@ export const MetaPage: React.FC = () => {
       downloaded: stored?.status === "completed",
       downloadedServer: stored?.server,
       downloadId: stored?.id || id,
+      skip:
+        (episode as any)?.skip ||
+        (episode as any)?.skips ||
+        (activeSeason as any)?.skip ||
+        (activeSeason as any)?.skips,
     };
 
     setDialogEpisodeTitle(finalTitle);
@@ -402,6 +408,13 @@ export const MetaPage: React.FC = () => {
   };
 
   const executeDownloadVideo = async (targetContext: DialogContext, stream: Stream) => {
+    const resolvedSkip =
+      stream.skip && stream.skip.length > 0
+        ? stream.skip
+        : (stream as any)?.skips && (stream as any).skips.length > 0
+          ? (stream as any).skips
+          : targetContext.skip;
+
     await addDownload({
       id: targetContext.id,
       title: targetContext.title,
@@ -417,6 +430,7 @@ export const MetaPage: React.FC = () => {
       type: targetContext.type,
       imdbId: targetContext.imdbId,
       headers: stream.headers,
+      skip: resolvedSkip,
       videoType: stream.type === "m3u8" || stream.link.includes(".m3u8") ? "m3u8" : stream.type,
     });
   };

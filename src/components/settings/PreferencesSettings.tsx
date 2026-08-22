@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { settingsStorage } from "../../lib/storage";
 import { open } from "@tauri-apps/plugin-dialog";
-import { LuFolderOpen as FolderOpen } from "react-icons/lu";
+import {
+  LuFolderOpen as FolderOpen,
+  LuTrash2 as Trash2,
+  LuCheck as Check,
+} from "react-icons/lu";
 import { FocusableButton } from "../layout/FocusableButton";
 import { useDownloadStore } from "../../lib/zustand/downloadStore";
 import { Switch } from "../ui/switch";
 import { Input } from "../ui/input";
 import { CustomSelect } from "../CustomSelect";
 import { syncFromSharedFolder } from "../../lib/sync/syncService";
+import { clearAppCache } from "../../lib/clearAppCache";
 
 const QUALITIES = ["360p", "480p", "720p", "1080p", "4k"];
 
@@ -25,6 +30,7 @@ export const PreferencesSettings: React.FC = () => {
   const [downloadConcurrency, setDownloadConcurrency] = useState<number>(2);
   const [tmdbApiKey, setTmdbApiKey] = useState<string>("");
   const [tmdbKeySaved, setTmdbKeySaved] = useState(false);
+  const [cacheCleared, setCacheCleared] = useState(false);
 
   useEffect(() => {
     setDownloadLocation(settingsStorage.getDownloadLocation());
@@ -136,6 +142,12 @@ export const PreferencesSettings: React.FC = () => {
     setTmdbApiKey("");
     settingsStorage.setTmdbApiKey("");
     setTmdbKeySaved(false);
+  };
+
+  const handleClearCache = async () => {
+    await clearAppCache();
+    setCacheCleared(true);
+    window.setTimeout(() => setCacheCleared(false), 2000);
   };
 
   return (
@@ -408,6 +420,33 @@ export const PreferencesSettings: React.FC = () => {
             })}
           </div>
         </div>
+      </div>
+
+      <div className="settings-divider" />
+
+      {/* Clear App Cache */}
+      <div className="settings-row">
+        <div className="settings-info">
+          <h3 className="label-lg">Clear App Cache</h3>
+          <p className="body-md text-muted">
+            Remove all cached home page catalogs, metadata, and temporary data.
+          </p>
+        </div>
+        <FocusableButton
+          className={`theme-toggle-btn ${cacheCleared ? "active" : ""}`}
+          style={{ display: "flex", alignItems: "center", gap: "8px" }}
+          onClick={handleClearCache}
+        >
+          {cacheCleared ? (
+            <>
+              <Check size={16} /> Cleared
+            </>
+          ) : (
+            <>
+              <Trash2 size={16} /> Clear Cache
+            </>
+          )}
+        </FocusableButton>
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import {useEffect} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {getHomePageData, HomePageData} from '../getHomepagedata';
 import {Content} from '../zustand/contentStore';
@@ -12,16 +13,17 @@ export const useHomePageData = ({
   provider,
   enabled = true,
 }: UseHomePageDataOptions) => {
-  return useQuery<HomePageData[], Error>({
+  const cacheKey = 'homeData' + (provider?.value || '');
+  const query = useQuery<HomePageData[], Error>({
     queryKey: ['homePageData', provider.value],
     queryFn: async ({signal}) => {
-      // Fetch fresh data - cache is handled by React Query
+      // Fetch fresh data from provider
       const data = await getHomePageData(provider, signal);
       return data;
     },
     enabled: enabled && !!provider?.value,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 30 * 60 * 1000, // 30 minutes
+    staleTime: 0, // Mark stale immediately so it revalidates in the background
+    gcTime: 60 * 60 * 1000, // 1 hour
     retry: (failureCount, error) => {
       if (error.name === 'AbortError') {
         return false;
@@ -29,9 +31,9 @@ export const useHomePageData = ({
       return failureCount < 3;
     },
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
-    // Add initial data from cache for instant loading
+    // Add initial data from cache for instant loading without loading screen
     initialData: () => {
-      const cache = cacheStorage.getString('homeData' + provider.value);
+      const cache = cacheStorage.getString(cacheKey);
       if (cache) {
         try {
           return JSON.parse(cache);
@@ -41,18 +43,19 @@ export const useHomePageData = ({
       }
       return undefined;
     },
-    // Cache successful responses
-    meta: {
-      onSuccess: (data: HomePageData[]) => {
-        if (data && data.length > 0) {
-          cacheStorage.setString(
-            'homeData' + provider.value,
-            JSON.stringify(data),
-          );
-        }
-      },
-    },
+    initialDataUpdatedAt: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: 'always',
   });
+
+  useEffect(() => {
+    if (query.data && query.data.length > 0 && provider?.value) {
+      cacheStorage.setString(cacheKey, JSON.stringify(query.data));
+    }
+  }, [cacheKey, provider?.value, query.data]);
+
+  return query;
 };
 
 // Store hero selection per provider to prevent re-randomization on tab switch
@@ -113,9 +116,10 @@ export const clearHeroCache = (providerValue?: string) => {
   }
 };
 
-// New hook for hero metadata with React Query
+// New hook for hero metadata with React Query, instant cache load & background revalidation
 export const useHeroMetadata = (heroLink: string, providerValue: string) => {
-  return useQuery({
+  const cacheKey = `heroMeta:${providerValue}:${heroLink}`;
+  const query = useQuery({
     queryKey: ['heroMetadata', heroLink, providerValue],
     queryFn: async () => {
       const {providerManager} = await import('../services/ProviderManager');
@@ -142,18 +146,13 @@ export const useHeroMetadata = (heroLink: string, providerValue: string) => {
       return info;
     },
     enabled: !!heroLink && !!providerValue,
-    staleTime: 10 * 60 * 1000, // 10 minutes - hero metadata changes less frequently
+    staleTime: 0, // Instantly revalidate in background
     gcTime: 60 * 60 * 1000, // 1 hour
     retry: 2,
-    // Cache hero metadata separately
-    meta: {
-      onSuccess: (data: any) => {
-        cacheStorage.setString(heroLink, JSON.stringify(data));
-      },
-    },
     // Use cached data as initial data
     initialData: () => {
-      const cached = cacheStorage.getString(heroLink);
+      const cached =
+        cacheStorage.getString(cacheKey) || cacheStorage.getString(heroLink);
       if (cached) {
         try {
           return JSON.parse(cached);
@@ -163,5 +162,16 @@ export const useHeroMetadata = (heroLink: string, providerValue: string) => {
       }
       return undefined;
     },
+    initialDataUpdatedAt: 0,
+    refetchOnMount: 'always',
   });
+
+  useEffect(() => {
+    if (query.data && heroLink) {
+      cacheStorage.setString(cacheKey, JSON.stringify(query.data));
+      cacheStorage.setString(heroLink, JSON.stringify(query.data));
+    }
+  }, [cacheKey, heroLink, query.data]);
+
+  return query;
 };
