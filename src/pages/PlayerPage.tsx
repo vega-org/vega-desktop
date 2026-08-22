@@ -15,6 +15,7 @@ import useWatchHistoryStore from "../lib/zustand/watchHistrory";
 import { cacheStorage, mainStorage } from "../lib/storage";
 import { PlayerControls } from "./PlayerControls";
 import { PlayerInitError } from "./PlayerInitError";
+import type { SkipInterval } from "../lib/providers/types";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
@@ -795,6 +796,55 @@ const DesktopPlayer: React.FC<any> = ({
   } | null>(null);
   const manualFullscreenRef = useRef(false);
   const isWindows = navigator.userAgent.toLowerCase().includes("windows");
+
+  const combinedSkips: SkipInterval[] = useMemo(() => {
+    const list: SkipInterval[] = [];
+    const addSkips = (items?: SkipInterval[]) => {
+      if (!items || !Array.isArray(items)) return;
+      for (const item of items) {
+        if (
+          item &&
+          typeof item.from === "number" &&
+          typeof item.to === "number" &&
+          item.to > item.from &&
+          item.from >= 0
+        ) {
+          const exists = list.some(
+            (s) =>
+              Math.abs(s.from - item.from) < 1 &&
+              Math.abs(s.to - item.to) < 1,
+          );
+          if (!exists) {
+            list.push({
+              title: item.title || "Intro",
+              from: item.from,
+              to: item.to,
+            });
+          }
+        }
+      }
+    };
+
+    addSkips(activeEpisode?.skip);
+    addSkips(activeEpisode?.skips);
+    addSkips(selectedStream?.skip);
+    addSkips(selectedStream?.skips);
+
+    if (Array.isArray(state?.linkList)) {
+      for (const linkGroup of state.linkList) {
+        if (Array.isArray(linkGroup?.directLinks)) {
+          const match = linkGroup.directLinks.find(
+            (d: any) => d?.link === activeEpisode?.link,
+          );
+          if (match) {
+            addSkips(match.skip);
+          }
+        }
+      }
+    }
+
+    return list.sort((a, b) => a.from - b.from);
+  }, [activeEpisode, selectedStream, state?.linkList]);
 
   useEffect(() => {
     return () => {
@@ -1750,6 +1800,7 @@ const DesktopPlayer: React.FC<any> = ({
         onToggleShortcuts={() => setShowShortcuts((current) => !current)}
         onOpenVlc={openInVlc}
         onCopyLink={selectedStream?.link ? copyStreamLink : undefined}
+        skips={combinedSkips}
       />
       {showEpisodeSidebarSetting && hasMultipleEpisodes && (
         <button

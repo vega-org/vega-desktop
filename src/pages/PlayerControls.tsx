@@ -5,6 +5,7 @@ import {
   LuPause as Pause,
   LuMaximize as Maximize,
   LuMinimize as Minimize,
+  LuChevronsRight as ChevronsRight,
   LuSkipForward as NextIcon,
   LuCaptions as Subtitles,
   LuGauge as Gauge,
@@ -35,6 +36,7 @@ import {
   MdForward10,
 } from "react-icons/md";
 import type { MpvChapter, MpvTrack } from "../lib/hooks/useMpvPlayer";
+import type { SkipInterval } from "../lib/providers/types";
 import { SearchSubtitlesModal } from "../components/SearchSubtitlesModal";
 import { settingsStorage } from "../lib/storage";
 
@@ -45,6 +47,7 @@ interface PlayerControlsProps {
   currentTime: number;
   duration: number;
   cacheDuration?: number;
+  skips?: SkipInterval[];
   primaryTitle: string;
   secondaryTitle?: string;
   nextEpisodeTitle?: string;
@@ -184,7 +187,11 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   onRequestThumbnail,
   thumbnailKey,
   onScrubbingChange,
+  skips = [],
 }) => {
+  const activeSkip = skips?.find(
+    (s) => currentTime >= s.from && currentTime < s.to,
+  );
   const trackRef = useRef<HTMLDivElement>(null);
   const previewTimerRef = useRef<number | null>(null);
   const previewRequestRef = useRef(0);
@@ -611,6 +618,37 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                   aria-hidden="true"
                 />
               ))}
+            {duration > 0 &&
+              skips.map((skip, index) => {
+                const gaps = [];
+                if (skip.from > 0 && skip.from < duration) {
+                  gaps.push(
+                    <span
+                      key={`skip-from-${index}-${skip.from}`}
+                      className="timeline-skip-gap"
+                      style={{
+                        left: `${Math.min(100, Math.max(0, (skip.from / duration) * 100))}%`,
+                      }}
+                      title={`${skip.title || "Skip"} Start · ${formatTime(skip.from)}`}
+                      aria-hidden="true"
+                    />,
+                  );
+                }
+                if (skip.to > 0 && skip.to < duration) {
+                  gaps.push(
+                    <span
+                      key={`skip-to-${index}-${skip.to}`}
+                      className="timeline-skip-gap"
+                      style={{
+                        left: `${Math.min(100, Math.max(0, (skip.to / duration) * 100))}%`,
+                      }}
+                      title={`${skip.title || "Skip"} End · ${formatTime(skip.to)}`}
+                      aria-hidden="true"
+                    />,
+                  );
+                }
+                return gaps;
+              })}
           </div>
           <span className="timeline-time right">{formatTime(duration)}</span>
         </div>
@@ -1103,6 +1141,26 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
             </div>
           </div>
         </div>
+
+        {activeSkip && (
+          <button
+            className="player-skip-btn"
+            onClick={(e) => {
+              stop(e);
+              onSeek(activeSkip.to);
+            }}
+            title={`Skip to ${formatTime(activeSkip.to)}`}
+          >
+            <span>
+              {activeSkip.title
+                ? activeSkip.title.toLowerCase().startsWith("skip")
+                  ? activeSkip.title
+                  : `Skip ${activeSkip.title}`
+                : "Skip Intro"}
+            </span>
+            <ChevronsRight size={18} />
+          </button>
+        )}
       </div>
 
       {showShortcuts && (

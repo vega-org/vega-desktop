@@ -219,8 +219,7 @@ export const DownloadServerDialog: React.FC<DownloadServerDialogProps> = ({
                   </div>
                 ) : loading ? (
                   <div className="empty-state-dialog">
-                    <Loader size={38} className="spin text-primary mb-sm" />
-                    <p>Finding download servers...</p>
+                    <Loader size={68} className="spin text-primary mb-sm" />
                   </div>
                 ) : error || streams.length === 0 ? (
                   <div className="empty-state-dialog">
