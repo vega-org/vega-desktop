@@ -1,0 +1,2 @@
+# Vega Resources
+This file ensures the resources directory is tracked by Git so bundling glob patterns succeed across all target platforms.
