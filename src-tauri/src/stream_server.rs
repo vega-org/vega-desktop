@@ -26,9 +26,10 @@ use crate::media_probe;
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct RemuxStreamInfo {
     pub session_id: String,
+    pub generation: u64,
     pub requested_start: f64,
-    pub actual_start: f64,
-    pub initial_skip: f64,
+    pub source_reference_pts: f64,
+    pub output_reference_pts: f64,
 }
 
 pub type LocalFileRegistry = Arc<Mutex<HashMap<String, PathBuf>>>;
@@ -68,6 +69,8 @@ pub struct RemuxQuery {
     url: String,
     #[serde(default)]
     start: Option<f64>,
+    #[serde(default)]
+    generation: Option<u64>,
     #[serde(default)]
     audio_index: Option<u32>,
     #[serde(default)]
@@ -733,6 +736,89 @@ async fn handle_subs(
     }
 }
 
+fn extract_mp4_output_reference_pts(buf: &[u8]) -> Option<f64> {
+    let mut timescale = 16000.0;
+    if let Some(mdhd_rel) = buf.windows(4).position(|w| w == b"mdhd") {
+        let ver_pos = mdhd_rel + 4;
+        if ver_pos + 12 <= buf.len() {
+            let ver = buf[ver_pos];
+            let ts_offset = if ver == 1 { ver_pos + 4 + 16 } else { ver_pos + 4 + 8 };
+            if ts_offset + 4 <= buf.len() {
+                if let Ok(bytes) = buf[ts_offset..ts_offset + 4].try_into() {
+                    let ts = u32::from_be_bytes(bytes);
+                    if ts > 0 {
+                        timescale = ts as f64;
+                    }
+                }
+            }
+        }
+    }
+
+    let moof_pos = buf.windows(4).position(|w| w == b"moof")?;
+    if moof_pos < 4 {
+        return None;
+    }
+    let moof_box_start = moof_pos - 4;
+    if moof_box_start + 4 > buf.len() {
+        return None;
+    }
+    let moof_size = u32::from_be_bytes(buf[moof_box_start..moof_box_start + 4].try_into().ok()?) as usize;
+    if moof_size < 8 {
+        return None;
+    }
+    let moof_end = (moof_box_start + moof_size).min(buf.len());
+    let moof_bytes = &buf[moof_box_start..moof_end];
+
+    let traf_pos = moof_bytes.windows(4).position(|w| w == b"traf")?;
+    let traf_bytes = &moof_bytes[traf_pos..];
+
+    let mut decode_time: f64 = 0.0;
+    if let Some(tfdt_pos) = traf_bytes.windows(4).position(|w| w == b"tfdt") {
+        let v_pos = tfdt_pos + 4;
+        if v_pos < traf_bytes.len() {
+            let ver = traf_bytes[v_pos];
+            if ver == 1 && v_pos + 4 + 8 <= traf_bytes.len() {
+                if let Ok(bytes) = traf_bytes[v_pos + 4..v_pos + 12].try_into() {
+                    decode_time = u64::from_be_bytes(bytes) as f64;
+                }
+            } else if ver == 0 && v_pos + 4 + 4 <= traf_bytes.len() {
+                if let Ok(bytes) = traf_bytes[v_pos + 4..v_pos + 8].try_into() {
+                    decode_time = u32::from_be_bytes(bytes) as f64;
+                }
+            }
+        }
+    }
+
+    let mut comp_offset: f64 = 0.0;
+    if let Some(trun_pos) = traf_bytes.windows(4).position(|w| w == b"trun") {
+        let v_pos = trun_pos + 4;
+        if v_pos + 8 <= traf_bytes.len() {
+            let ver = traf_bytes[v_pos];
+            let flags = ((traf_bytes[v_pos + 1] as u32) << 16)
+                | ((traf_bytes[v_pos + 2] as u32) << 8)
+                | (traf_bytes[v_pos + 3] as u32);
+            let mut pos = v_pos + 8;
+            if flags & 0x01 != 0 { pos += 4; }
+            if flags & 0x04 != 0 { pos += 4; }
+            if flags & 0x100 != 0 { pos += 4; }
+            if flags & 0x200 != 0 { pos += 4; }
+            if flags & 0x400 != 0 { pos += 4; }
+            if flags & 0x800 != 0 && pos + 4 <= traf_bytes.len() {
+                if let Ok(bytes) = traf_bytes[pos..pos + 4].try_into() {
+                    let co = if ver == 0 {
+                        u32::from_be_bytes(bytes) as i64
+                    } else {
+                        i32::from_be_bytes(bytes) as i64
+                    };
+                    comp_offset = co as f64;
+                }
+            }
+        }
+    }
+
+    Some((decode_time + comp_offset) / timescale)
+}
+
 async fn handle_remux(
     State(state): State<ProxyState>,
     Query(query): Query<RemuxQuery>,
@@ -790,12 +876,15 @@ async fn handle_remux(
         }
     }
 
-    cmd.arg("-v").arg("error").arg("-stats");
+    cmd.arg("-v").arg("error");
 
-    if let Some(start) = query.start {
-        if start > 0.05 {
-            cmd.arg("-ss").arg(format!("{:.3}", start));
+    let is_transcode = query.mode.as_deref() == Some("transcode");
+    let seek_start = query.start.filter(|&s| s > 0.05);
+    if let Some(start) = seek_start {
+        if !is_transcode {
+            cmd.arg("-noaccurate_seek");
         }
+        cmd.arg("-ss").arg(format!("{:.3}", start));
     }
 
     let is_network = source.starts_with("http://") || source.starts_with("https://");
@@ -846,7 +935,6 @@ async fn handle_remux(
         cmd.arg("-map").arg("0:a:0?");
     }
 
-    let is_transcode = query.mode.as_deref() == Some("transcode");
     if is_transcode {
         cmd.arg("-c:v")
             .arg("libx264")
@@ -905,66 +993,78 @@ async fn handle_remux(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let stdout = child.stdout.take().ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut stdout = child.stdout.take().ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
     let stderr = child.stderr.take();
 
+    let mut source_reference_pts = 0.0;
+    if let Some(start) = seek_start {
+        let headers_map: Option<HashMap<String, String>> = if !headers_str.is_empty() {
+            let mut hm = HashMap::new();
+            if let Some(ref r) = query.referer { hm.insert("Referer".to_string(), r.clone()); }
+            if let Some(ref ua) = query.ua { hm.insert("User-Agent".to_string(), ua.clone()); }
+            if let Some(ref orig) = query.origin { hm.insert("Origin".to_string(), orig.clone()); }
+            Some(hm)
+        } else {
+            None
+        };
+
+        if let Some(k_pts) = media_probe::find_seek_keyframe(&source, start, headers_map).await {
+            source_reference_pts = k_pts;
+        } else {
+            eprintln!("[remux] Keyframe probe returned None for {:.3}s, using requested start as fallback", start);
+            source_reference_pts = start;
+        }
+    }
+
+    let mut initial_bytes = Vec::new();
+    let mut chunk = [0u8; 8192];
+    let mut output_reference_pts = 0.0;
+
+    while initial_bytes.len() < 24576 {
+        match tokio::time::timeout(std::time::Duration::from_millis(500), stdout.read(&mut chunk)).await {
+            Ok(Ok(n)) if n > 0 => {
+                initial_bytes.extend_from_slice(&chunk[..n]);
+                if let Some(pts) = extract_mp4_output_reference_pts(&initial_bytes) {
+                    output_reference_pts = pts;
+                    break;
+                }
+            }
+            _ => break,
+        }
+    }
+
     let session_id_opt = query.session_id.clone();
+    let generation = query.generation.unwrap_or(0);
     let requested_start = query.start.unwrap_or(0.0);
     let remux_infos = state.remux_infos.clone();
     let app_opt = state.app.clone();
 
+    {
+        let info = RemuxStreamInfo {
+            session_id: session_id_opt.clone().unwrap_or_default(),
+            generation,
+            requested_start,
+            source_reference_pts,
+            output_reference_pts,
+        };
+        if let Some(ref sid) = session_id_opt {
+            remux_infos.lock().await.insert(sid.clone(), info.clone());
+        }
+        if let Some(ref app) = app_opt {
+            let _ = app.emit("remux_stream_info", &info);
+        }
+        eprintln!(
+            "[remux] Stream started: gen={}, req={:.3}s, src_pts={:.3}s, out_pts={:.3}s, offset={:.3}s",
+            generation, requested_start, source_reference_pts, output_reference_pts,
+            source_reference_pts - output_reference_pts
+        );
+    }
+
     if let Some(mut err_pipe) = stderr {
-        let sid_for_task = session_id_opt.clone();
         tokio::spawn(async move {
-            let mut buffer = Vec::new();
-            let mut chunk = [0u8; 1024];
-            let mut captured = false;
+            let mut chunk = [0u8; 4096];
             while let Ok(n) = err_pipe.read(&mut chunk).await {
-                if n == 0 {
-                    break;
-                }
-                if !captured {
-                    buffer.extend_from_slice(&chunk[..n]);
-                    let text = String::from_utf8_lossy(&buffer);
-                    if let Some(pos) = text.find("time=") {
-                        let after = &text[pos + 5..];
-                        if let Some(token) = after.split_whitespace().next() {
-                            let token = token.trim_matches(|c| c == '\r' || c == '\n');
-                            let negative = token.starts_with('-');
-                            let clean = token.trim_start_matches('-').trim_start_matches('+');
-                            let parts: Vec<&str> = clean.split(':').collect();
-                            if parts.len() == 3 {
-                                if let (Ok(h), Ok(m), Ok(s)) = (
-                                    parts[0].parse::<f64>(),
-                                    parts[1].parse::<f64>(),
-                                    parts[2].parse::<f64>(),
-                                ) {
-                                    captured = true;
-                                    let total_sec = h * 3600.0 + m * 60.0 + s;
-                                    let offset_sec = if negative { -total_sec } else { total_sec };
-                                    let actual_start = (requested_start + offset_sec).max(0.0);
-                                    let initial_skip = (requested_start - actual_start).max(0.0);
-                                    let info = RemuxStreamInfo {
-                                        session_id: sid_for_task.clone().unwrap_or_default(),
-                                        requested_start,
-                                        actual_start,
-                                        initial_skip,
-                                    };
-                                    if let Some(ref sid) = sid_for_task {
-                                        remux_infos.lock().await.insert(sid.clone(), info.clone());
-                                    }
-                                    if let Some(ref app) = app_opt {
-                                        let _ = app.emit("remux_stream_info", &info);
-                                    }
-                                    eprintln!(
-                                        "[remux] Stream timing aligned: requested={:.3}s, actual={:.3}s (offset={:.3}s)",
-                                        requested_start, actual_start, offset_sec
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
+                if n == 0 { break; }
             }
         });
     }
@@ -979,9 +1079,18 @@ async fn handle_remux(
         sessions.insert(sid.clone(), cancel_tx);
     }
 
+    let init_chunk = if !initial_bytes.is_empty() {
+        Some(Bytes::from(initial_bytes))
+    } else {
+        None
+    };
+
     let body_stream = stream::try_unfold(
-        (stdout, child, cancel_rx),
-        move |(mut stdout, child, mut cancel_rx)| async move {
+        (stdout, child, cancel_rx, init_chunk),
+        move |(mut stdout, child, mut cancel_rx, mut init_chunk)| async move {
+            if let Some(first) = init_chunk.take() {
+                return Ok(Some((first, (stdout, child, cancel_rx, None))));
+            }
             let mut buffer = vec![0u8; 64 * 1024];
             tokio::select! {
                 _ = &mut cancel_rx => {
@@ -992,7 +1101,7 @@ async fn handle_remux(
                         Ok(0) => Ok(None),
                         Ok(n) => {
                             buffer.truncate(n);
-                            Ok(Some((Bytes::from(buffer), (stdout, child, cancel_rx))))
+                            Ok(Some((Bytes::from(buffer), (stdout, child, cancel_rx, None))))
                         }
                         Err(e) => Err(e),
                     }

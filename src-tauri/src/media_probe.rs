@@ -611,9 +611,9 @@ pub async fn find_seek_keyframe(
     source: &str,
     target_time: f64,
     headers: Option<HashMap<String, String>>,
-) -> f64 {
+) -> Option<f64> {
     if target_time <= 0.05 {
-        return 0.0;
+        return Some(0.0);
     }
 
     let clean_source = if let Some(stripped) = source.strip_prefix("file:///") {
@@ -626,7 +626,7 @@ pub async fn find_seek_keyframe(
 
     let ffprobe_path = match ffmpeg_resolver::get_ffprobe_path() {
         Ok(p) => p,
-        Err(_) => return target_time,
+        Err(_) => return None,
     };
 
     let mut cmd = Command::new(&ffprobe_path);
@@ -665,11 +665,11 @@ pub async fn find_seek_keyframe(
 
     let output = match tokio::time::timeout(std::time::Duration::from_millis(1500), cmd.output()).await {
         Ok(Ok(o)) => o,
-        _ => return target_time,
+        _ => return None,
     };
 
     if !output.status.success() {
-        return target_time;
+        return None;
     }
 
     let text = String::from_utf8_lossy(&output.stdout);
@@ -681,13 +681,13 @@ pub async fn find_seek_keyframe(
         if let Some((pts_str, flags)) = trimmed.split_once(',') {
             if flags.contains('K') {
                 if let Ok(pts) = pts_str.trim().parse::<f64>() {
-                    return pts;
+                    return Some(pts);
                 }
             }
         }
     }
 
-    target_time
+    None
 }
 
 

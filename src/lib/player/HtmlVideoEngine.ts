@@ -44,9 +44,10 @@ interface MediaProbeResult {
 
 interface RemuxStreamInfo {
   session_id: string;
+  generation: number;
   requested_start: number;
-  actual_start: number;
-  initial_skip: number;
+  source_reference_pts: number;
+  output_reference_pts: number;
 }
 
 const WEB_FRIENDLY_AUDIO_CODECS = new Set([
@@ -136,6 +137,11 @@ export class HtmlVideoEngine implements PlayerEngine {
   private requestedStartTime: number = 0;
   private subtitleRequestId: number = 0;
   private subtitleContentMap: Map<number, string> = new Map();
+  private streamGeneration: number = 0;
+  private sourceReferencePTS: number = 0;
+  private outputReferencePTS: number = 0;
+  private timelineOffset: number = 0;
+  private targetMediaTime: number = 0;
 
   constructor(videoElement: HTMLVideoElement) {
     this.video = videoElement;
@@ -205,36 +211,26 @@ export class HtmlVideoEngine implements PlayerEngine {
   }
 
   private applyStreamInfo(info: RemuxStreamInfo): void {
-    const { actual_start, requested_start } = info;
-    if (Math.abs(requested_start - this.requestedStartTime) > 0.5) {
+    const { session_id, generation, requested_start, source_reference_pts, output_reference_pts } = info;
+    if (session_id && session_id !== this.sessionId) return;
+    if (generation !== undefined && generation !== this.streamGeneration) {
       console.log(
-        `[HtmlVideoEngine] Discarding stale stream info: requested=${requested_start.toFixed(3)}s, currentTarget=${this.requestedStartTime.toFixed(3)}s`,
+        `[HtmlVideoEngine] Discarding stale stream info: gen=${generation}, currentGen=${this.streamGeneration}`,
       );
       return;
     }
-    console.log(
-      `[HtmlVideoEngine] Remux stream timing aligned: requested=${requested_start.toFixed(3)}s, actual=${actual_start.toFixed(3)}s`,
-    );
-    this.virtualTimeOffset = actual_start;
-    this.updateJassubTimeOffset();
-    if (!this.isSeeking) {
-      this.updateState({ currentTime: this.virtualTimeOffset + this.video.currentTime });
-    }
-  }
+    if (Math.abs(requested_start - this.requestedStartTime) > 0.5) return;
 
-  private async checkStreamInfoFallback(): Promise<void> {
-    if (this.playbackMode === "direct" || !this.proxyPort || !this.sessionId) return;
-    try {
-      const resp = await fetch(
-        `http://127.0.0.1:${this.proxyPort}/remux/info?session_id=${this.sessionId}`,
-      );
-      if (resp.ok) {
-        const info = await resp.json();
-        if (info && info.session_id === this.sessionId) {
-          this.applyStreamInfo(info);
-        }
-      }
-    } catch { }
+    this.sourceReferencePTS = source_reference_pts;
+    this.outputReferencePTS = output_reference_pts;
+    this.timelineOffset = source_reference_pts - output_reference_pts;
+    this.targetMediaTime = output_reference_pts + (requested_start - source_reference_pts);
+    this.virtualTimeOffset = this.timelineOffset;
+    this.updateJassubTimeOffset();
+
+    console.log(
+      `[HtmlVideoEngine] Stream timing aligned (gen ${generation}): req=${requested_start.toFixed(3)}s, srcPTS=${source_reference_pts.toFixed(3)}s, outPTS=${output_reference_pts.toFixed(3)}s, offset=${this.timelineOffset.toFixed(3)}s, targetMediaTime=${this.targetMediaTime.toFixed(3)}s`,
+    );
   }
 
   public get state(): PlayerEngineState {
@@ -243,6 +239,20 @@ export class HtmlVideoEngine implements PlayerEngine {
 
   public get selectedSubtitle(): number | "off" {
     return this.selectedSubtitleIndex;
+  }
+
+  public get streamTiming(): {
+    sourceReferencePTS: number;
+    outputReferencePTS: number;
+    timelineOffset: number;
+    targetMediaTime: number;
+  } {
+    return {
+      sourceReferencePTS: this.sourceReferencePTS,
+      outputReferencePTS: this.outputReferencePTS,
+      timelineOffset: this.timelineOffset,
+      targetMediaTime: this.targetMediaTime,
+    };
   }
 
   public subscribe(listener: (state: PlayerEngineState) => void): () => void {
@@ -267,7 +277,7 @@ export class HtmlVideoEngine implements PlayerEngine {
 
   private updateJassubTimeOffset(): void {
     if (this.jassub) {
-      const baseOffset = this.playbackMode === "direct" ? 0 : this.virtualTimeOffset;
+      const baseOffset = this.playbackMode === "direct" ? 0 : this.timelineOffset;
       const delayOffset = -(this.subtitleDelay / 1000);
       this.jassub.setTimeOffset(baseOffset + delayOffset);
     }
@@ -302,7 +312,7 @@ export class HtmlVideoEngine implements PlayerEngine {
       const actualTime =
         this.playbackMode === "direct"
           ? v.currentTime
-          : this.virtualTimeOffset + v.currentTime;
+          : this.timelineOffset + v.currentTime;
       this.updateState({
         currentTime: actualTime,
         duration: this.probedDuration || v.duration || 0,
@@ -337,9 +347,6 @@ export class HtmlVideoEngine implements PlayerEngine {
     v.addEventListener("canplay", () => {
       finishSeeking();
       this.updateState({ isBuffering: false });
-      if (this.playbackMode === "remux") {
-        void this.checkStreamInfoFallback();
-      }
       if (this.jassub) {
         this.jassub.setBuffering(false);
         this.jassub.resize();
@@ -394,9 +401,6 @@ export class HtmlVideoEngine implements PlayerEngine {
         videoHeight: v.videoHeight,
         duration: this.probedDuration || v.duration || 0,
       });
-      if (this.playbackMode === "remux") {
-        void this.checkStreamInfoFallback();
-      }
       if (this.jassub) {
         this.jassub.resize();
       }
@@ -850,7 +854,13 @@ export class HtmlVideoEngine implements PlayerEngine {
   }
 
   private async startStream(startTime: number): Promise<void> {
+    this.streamGeneration++;
+    const gen = this.streamGeneration;
     this.requestedStartTime = startTime;
+    this.sourceReferencePTS = startTime;
+    this.outputReferencePTS = 0;
+    this.timelineOffset = startTime;
+    this.targetMediaTime = 0;
     this.virtualTimeOffset = startTime;
     this.updateJassubTimeOffset();
     const port = await this.getProxyPort();
@@ -885,6 +895,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     params.set("url", this.currentSource);
     params.set("mode", this.playbackMode === "direct" ? "remux" : this.playbackMode);
     params.set("session_id", this.sessionId);
+    params.set("generation", String(this.streamGeneration));
 
     if (startTime > 0) {
       params.set("start", startTime.toFixed(3));
@@ -922,6 +933,32 @@ export class HtmlVideoEngine implements PlayerEngine {
     const streamUrl = `http://127.0.0.1:${port}/remux?${params.toString()}`;
     this.video.src = streamUrl;
     this.video.load();
+
+    if (startTime > 0.05 && this.playbackMode !== "direct") {
+      let attempts = 0;
+      const maxAttempts = 30;
+      const checkAndAdvance = () => {
+        if (this.isDestroyed || this.streamGeneration !== gen) return;
+        attempts++;
+        const v = this.video;
+        const target = this.targetMediaTime;
+        if (target > 0.05 && v.seekable && v.seekable.length > 0 && target <= v.seekable.end(0)) {
+          console.log(`[HtmlVideoEngine] Advancing preroll to targetMediaTime=${target.toFixed(3)}s`);
+          v.currentTime = target;
+          this.isSeeking = false;
+          return;
+        }
+        if (attempts >= maxAttempts) {
+          this.isSeeking = false;
+          return;
+        }
+        setTimeout(checkAndAdvance, 100);
+      };
+      this.video.addEventListener("loadeddata", () => {
+        if (this.streamGeneration !== gen) return;
+        checkAndAdvance();
+      }, { once: true });
+    }
   }
 
   public async play(): Promise<void> {
@@ -950,8 +987,6 @@ export class HtmlVideoEngine implements PlayerEngine {
       return;
     }
 
-    this.virtualTimeOffset = clamped;
-    this.updateJassubTimeOffset();
     this.updateState({ currentTime: clamped, isBuffering: true });
 
     const wasPlaying = !this.video.paused || !this.state.isPaused;

@@ -151,7 +151,9 @@ async fn get_seek_keyframe(
     target_time: f64,
     headers: Option<HashMap<String, String>>,
 ) -> Result<f64, String> {
-    Ok(media_probe::find_seek_keyframe(&source, target_time, headers).await)
+    media_probe::find_seek_keyframe(&source, target_time, headers)
+        .await
+        .ok_or_else(|| "Keyframe not found".to_string())
 }
 
 /// Decodes a single frame in an isolated MPV core. This deliberately does not
