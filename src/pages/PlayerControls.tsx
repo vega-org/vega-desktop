@@ -525,7 +525,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
             onDoubleClick={onTogglePip}
           >
             <div className="player-pip-controls">
-              {!isBuffering || isPaused ? (
+              {!isBuffering ? (
                 <FocusableButton
                   className="center-btn play-pause"
                   focusable={true}
@@ -623,7 +623,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
             <div style={{ width: 44 }} />
           )}
 
-          {!isBuffering || isPaused ? (
+          {!isBuffering ? (
             <FocusableButton
               className="center-btn play-pause"
               focusable={true}
@@ -1015,21 +1015,23 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                   ["D-Pad / Arrows", "Navigate controls and scrub timeline"],
                   ["OK / Enter / A Button", "Select focused control or play/pause"],
                   ["Back / B Button / Esc", "Close menus / Hide controls / Exit"],
-                  ["X Button / Space / K", "Play or pause"],
+                  ["Space / K (or X Button)", "Play or pause"],
+                  ["← / → (or J / L)", "Rewind 10s / Fast Forward 10s"],
+                  ["↑ / ↓", "Change volume (+/- 5%)"],
                   ["Y Button", "Toggle episode drawer"],
                   ["LB / RB (or LT / RT)", "Rewind 10s / Fast Forward 10s"],
-                  ["↑ / ↓", "Change volume (when timeline not focused)"],
                   ["A", "Next audio track"],
                   ["Z / X (or [ / ])", "Adjust audio sync (+/- 50ms)"],
-                  ["T", "Next subtitle track"],
+                  ["C / T", "Next subtitle track / toggle"],
                   ["G / H", "Adjust subtitle sync (+/- 50ms)"],
                   ["Shift + , / .", "Decrease or increase speed"],
                   ["+ / -", "Zoom in or out"],
                   ["0", "Reset zoom (100%)"],
-                  ["S", "Skip intro / interval"],
+                  ["S", "Skip intro / interval (Ctrl+S for chapter)"],
                   ["M", "Mute or unmute"],
                   ["F", "Toggle fullscreen"],
-                  ["N", "Next episode"],
+                  ["I", "Toggle picture-in-picture"],
+                  ["N / P", "Next / Previous episode"],
                   ["?", "Show or hide shortcuts"],
                 ].map(([shortcut, action]) => (
                   <div className="player-shortcut-row" key={shortcut}>

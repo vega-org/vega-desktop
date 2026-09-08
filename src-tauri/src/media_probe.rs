@@ -111,13 +111,9 @@ pub async fn probe_media(
     #[cfg(target_os = "windows")]
     cmd.creation_flags(0x08000000);
 
-    if let Some(parent) = ffprobe_path.parent() {
+    if let Some(parent) = ffprobe_path.parent().filter(|p| !p.as_os_str().is_empty()) {
         cmd.current_dir(parent);
-        if let Ok(path_var) = std::env::var("PATH") {
-            cmd.env("PATH", format!("{};{}", parent.display(), path_var));
-        } else {
-            cmd.env("PATH", parent);
-        }
+        crate::ffmpeg_resolver::prepend_to_path_tokio(&mut cmd, parent);
     }
 
     cmd.arg("-v")
@@ -138,7 +134,8 @@ pub async fn probe_media(
         }
     }
 
-    cmd.arg(source);
+    let clean_source = crate::ffmpeg_resolver::clean_source(source);
+    cmd.arg(&clean_source);
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     let output = tokio::time::timeout(std::time::Duration::from_secs(25), cmd.output())
@@ -342,13 +339,7 @@ pub async fn extract_subtitles_to_string(
     sub_index: u32,
     headers: Option<HashMap<String, String>>,
 ) -> Result<String, String> {
-    let clean_source = if let Some(stripped) = source.strip_prefix("file:///") {
-        stripped.replace('/', "\\")
-    } else if let Some(stripped) = source.strip_prefix("file://") {
-        stripped.replace('/', "\\")
-    } else {
-        source.to_string()
-    };
+    let clean_source = crate::ffmpeg_resolver::clean_source(source);
 
     let cache_dir = get_subs_cache_dir();
     let cache_key = compute_sub_cache_key(&clean_source, sub_index);
@@ -414,13 +405,9 @@ pub async fn extract_subtitles_to_string(
     #[cfg(target_os = "windows")]
     cmd.creation_flags(0x08000000);
 
-    if let Some(parent) = ffmpeg_path.parent() {
+    if let Some(parent) = ffmpeg_path.parent().filter(|p| !p.as_os_str().is_empty()) {
         cmd.current_dir(parent);
-        if let Ok(path_var) = std::env::var("PATH") {
-            cmd.env("PATH", format!("{};{}", parent.display(), path_var));
-        } else {
-            cmd.env("PATH", parent);
-        }
+        crate::ffmpeg_resolver::prepend_to_path_tokio(&mut cmd, parent);
     }
 
     cmd.arg("-v").arg("error");
@@ -616,13 +603,7 @@ pub async fn find_seek_keyframe(
         return Some(0.0);
     }
 
-    let clean_source = if let Some(stripped) = source.strip_prefix("file:///") {
-        stripped.replace('/', "\\")
-    } else if let Some(stripped) = source.strip_prefix("file://") {
-        stripped.replace('/', "\\")
-    } else {
-        source.to_string()
-    };
+    let clean_source = crate::ffmpeg_resolver::clean_source(source);
 
     let ffprobe_path = match ffmpeg_resolver::get_ffprobe_path() {
         Ok(p) => p,
@@ -634,13 +615,9 @@ pub async fn find_seek_keyframe(
     #[cfg(target_os = "windows")]
     cmd.creation_flags(0x08000000);
 
-    if let Some(parent) = ffprobe_path.parent() {
+    if let Some(parent) = ffprobe_path.parent().filter(|p| !p.as_os_str().is_empty()) {
         cmd.current_dir(parent);
-        if let Ok(path_var) = std::env::var("PATH") {
-            cmd.env("PATH", format!("{};{}", parent.display(), path_var));
-        } else {
-            cmd.env("PATH", parent);
-        }
+        crate::ffmpeg_resolver::prepend_to_path_tokio(&mut cmd, parent);
     }
 
     cmd.arg("-v")

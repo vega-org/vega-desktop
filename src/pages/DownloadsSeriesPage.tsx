@@ -9,6 +9,7 @@ import { CustomSelect } from "../components/CustomSelect";
 import { DownloadedVideoThumbnail } from "../components/DownloadedVideoThumbnail";
 import { FocusableButton } from "../components/layout/FocusableButton";
 import { sortDownloadedEpisodes } from "../lib/downloadLibrary";
+import { getDownloadedVideoThumbnail } from "../lib/downloadThumbnailCache";
 import {
   type DownloadItem,
   useDownloadStore,
@@ -68,6 +69,19 @@ export const DownloadsSeriesPage = () => {
   if (!showDownloads.length) return null;
 
   const poster = showDownloads[0]?.poster;
+  const [extractedThumb, setExtractedThumb] = useState<string | null>(null);
+  const firstVideoPath = showDownloads[0]?.filePath;
+
+  useEffect(() => {
+    if (!poster && firstVideoPath) {
+      void getDownloadedVideoThumbnail(firstVideoPath).then((thumb) => {
+        if (thumb) setExtractedThumb(thumb);
+      });
+    }
+  }, [poster, firstVideoPath]);
+
+  const displayPoster = poster || extractedThumb;
+
   const currentSeasonDownloads = sortDownloadedEpisodes(
     showDownloads.filter(
       (item) => (item.seasonTitle || "Extras") === activeSeason,
@@ -123,10 +137,10 @@ export const DownloadsSeriesPage = () => {
         <aside className="series-downloads-summary">
           <div
             className="series-downloads-poster"
-            style={{ backgroundImage: poster ? `url(${poster})` : undefined }}
+            style={{ backgroundImage: displayPoster ? `url(${displayPoster})` : undefined }}
             aria-label={`${decodedShowName} poster`}
           >
-            {!poster && <Download size={38} />}
+            {!displayPoster && <Download size={38} />}
           </div>
           <div className="series-downloads-stats">
             <span>

@@ -359,13 +359,11 @@ const PlayerInner: React.FC<PlayerInnerProps> = ({ state }) => {
   });
 
   const isAndroid = navigator.userAgent.toLowerCase().includes("android");
-  const isLinux =
-    navigator.userAgent.toLowerCase().includes("linux") && !isAndroid;
   const useExternalPlayer =
     isAndroid && settingsStorage.isExternalPlayerEnabled();
   const useVlc = !isAndroid && settingsStorage.isVlcEnabled();
 
-  if (isAndroid || isLinux || useVlc) {
+  if (isAndroid || useVlc) {
     return (
       <TvPlayer
         state={state}
@@ -376,7 +374,6 @@ const PlayerInner: React.FC<PlayerInnerProps> = ({ state }) => {
         selectedStream={selectedStream}
         setSelectedStream={setSelectedStream}
         isAndroid={isAndroid}
-        isLinux={isLinux}
         useExternalPlayer={useExternalPlayer}
         useVlc={useVlc}
         hourglassSandColor={hourglassSandColor}
@@ -410,7 +407,6 @@ const TvPlayer: React.FC<any> = ({
   selectedStream,
   setSelectedStream,
   isAndroid,
-  isLinux,
   useExternalPlayer,
   useVlc,
   hourglassSandColor,
@@ -512,7 +508,7 @@ const TvPlayer: React.FC<any> = ({
           const external = useExternalPlayer ? "&external=1" : "";
           const intentUrl = `vega://play?url=${encodeURIComponent(playUrl)}&headers=${encodeURIComponent(headers)}${external}`;
           await openUrl(intentUrl);
-        } else if (isLinux || useVlc) {
+        } else if (useVlc) {
           const { invoke } = await import("@tauri-apps/api/core");
           await invoke("open_external_player", {
             url: playUrl,
@@ -527,7 +523,7 @@ const TvPlayer: React.FC<any> = ({
         setTimeout(() => setIsLaunching(false), 2000);
       }
     },
-    [isAndroid, isLinux, useExternalPlayer, useVlc],
+    [isAndroid, useExternalPlayer, useVlc],
   );
 
   if (streamLoading) {
@@ -831,6 +827,7 @@ const DesktopPlayer: React.FC<any> = ({
     alwaysOnTop: boolean;
   } | null>(null);
   const manualFullscreenRef = useRef(false);
+  const prevVolumeRef = useRef<number>(100);
   const isWindows = navigator.userAgent.toLowerCase().includes("windows");
   const isAndroid = navigator.userAgent.toLowerCase().includes("android");
   const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
@@ -1571,315 +1568,7 @@ const DesktopPlayer: React.FC<any> = ({
     applyZoom(100);
   }, [applyZoom]);
 
-  useEffect(() => {
-    // Keep spatial navigation running so directional remote/controller navigation works!
-    import("@noriginmedia/norigin-spatial-navigation-core")
-      .then(({ resume }) => resume())
-      .catch(() => { });
-
-    const handleWheel = (e: WheelEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (
-        target?.closest(
-          ".inline-menu, .inline-menu-container, .player-shortcuts-overlay, .player-shortcuts-dialog, .search-subtitles-modal, .search-subtitles-container, .player-episode-sidebar, .player-episode-sidebar-list, [data-prevent-wheel-volume]",
-        )
-      ) {
-        return;
-      }
-      revealControls();
-      const newVol =
-        e.deltaY < 0
-          ? Math.min(200, mpv.volume + 5)
-          : Math.max(0, mpv.volume - 5);
-      mpv.setVolumeLevel(newVol);
-      toast(`Volume: ${Math.round(newVol)}%`);
-    };
-
-    const onMouseMoveEvent = () => revealControls();
-    const onTouch = () => revealControls();
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (
-        target?.isContentEditable ||
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.tagName === "SELECT" ||
-        target?.closest("input, textarea, select, [contenteditable='true']")
-      ) {
-        return;
-      }
-      revealControls();
-      const key = e.key.toLowerCase();
-
-      // Remote media keys
-      if (key === "mediaplaypause") {
-        e.preventDefault();
-        mpv.togglePause();
-        return;
-      }
-      if (key === "mediaplay") {
-        e.preventDefault();
-        if (mpv.isPaused) mpv.togglePause();
-        return;
-      }
-      if (key === "mediapause") {
-        e.preventDefault();
-        if (!mpv.isPaused) mpv.togglePause();
-        return;
-      }
-      if (key === "mediafastforward") {
-        e.preventDefault();
-        mpv.seek(10, "relative");
-        toast("+10s");
-        return;
-      }
-      if (key === "mediarewind") {
-        e.preventDefault();
-        mpv.seek(-10, "relative");
-        toast("-10s");
-        return;
-      }
-      if (key === "mediatracknext") {
-        e.preventDefault();
-        handleNextEpisode();
-        return;
-      }
-      if (key === "mediatrackprevious") {
-        e.preventDefault();
-        handlePrevEpisode();
-        return;
-      }
-      if (key === "mediastop") {
-        e.preventDefault();
-        navigate(-1);
-        return;
-      }
-
-      // Remote back key (Escape, Back, BrowserBack, Android keycode 4)
-      if (
-        key === "escape" ||
-        key === "back" ||
-        key === "browserback" ||
-        e.keyCode === 27 ||
-        e.keyCode === 10009
-      ) {
-        e.preventDefault();
-        if (showEpisodeSidebar) setShowEpisodeSidebar(false);
-        else if (showShortcuts) setShowShortcuts(false);
-        else if (showControls) setShowControls(false);
-        else if (isFullscreen) toggleFullscreen();
-        else navigate(-1);
-        return;
-      }
-
-      // When controls are hidden, any arrow / Enter wakes up controls!
-      if (!showControls) {
-        if (key === "arrowleft") {
-          e.preventDefault();
-          mpv.seek(-10, "relative");
-          return;
-        }
-        if (key === "arrowright") {
-          e.preventDefault();
-          mpv.seek(10, "relative");
-          return;
-        }
-        if (key === "arrowup" || key === "arrowdown" || key === "enter" || key === " ") {
-          e.preventDefault();
-          if (key === " " || key === "enter") {
-            mpv.togglePause();
-          }
-          return;
-        }
-      }
-
-      switch (key) {
-        case " ":
-        case "k":
-          // Only toggle pause on Space / K if not actively focused on a button
-          if (!target || target === document.body || target.classList.contains("player-controls-wrapper")) {
-            e.preventDefault();
-            mpv.togglePause();
-          }
-          break;
-        case "f":
-          e.preventDefault();
-          toggleFullscreen();
-          break;
-        case "m":
-          e.preventDefault();
-          mpv.setVolumeLevel(mpv.volume > 0 ? 0 : 100);
-          toast(mpv.volume > 0 ? "Muted" : "Unmuted");
-          break;
-        case "n":
-          e.preventDefault();
-          handleNextEpisode();
-          break;
-        case "p":
-          e.preventDefault();
-          handlePrevEpisode();
-          break;
-        case "a": {
-          if (!mpv.audioTracks.length) break;
-          e.preventDefault();
-          appliedAudioForStreamRef.current = selectedStream?.link || null;
-          const selectedIndex = mpv.audioTracks.findIndex(
-            (track) => track.selected,
-          );
-          const nextIndex = (selectedIndex + 1) % mpv.audioTracks.length;
-          const nextTrack = mpv.audioTracks[nextIndex];
-          mpv.selectTrack("aid", nextTrack.id);
-          saveAudioPreference(state, nextTrack, nextIndex);
-          toast(`Audio: ${formatTrackLabel(nextTrack)}`);
-          break;
-        }
-        case "z":
-        case "[": {
-          e.preventDefault();
-          const step = e.shiftKey ? 250 : 50;
-          const newDelay = (mpv.audioDelay || 0) - step;
-          mpv.setAudioDelay?.(newDelay);
-          toast(`Audio Sync: ${newDelay > 0 ? `+${newDelay}` : newDelay}ms`);
-          break;
-        }
-        case "x":
-        case "]": {
-          e.preventDefault();
-          const step = e.shiftKey ? 250 : 50;
-          const newDelay = (mpv.audioDelay || 0) + step;
-          mpv.setAudioDelay?.(newDelay);
-          toast(`Audio Sync: ${newDelay > 0 ? `+${newDelay}` : newDelay}ms`);
-          break;
-        }
-        case "t": {
-          e.preventDefault();
-          appliedSubtitleForStreamRef.current = selectedStream?.link || null;
-          const selectedIndex = mpv.subtitleTracks.findIndex(
-            (track) => track.selected,
-          );
-          if (
-            !mpv.subtitleTracks.length ||
-            selectedIndex === mpv.subtitleTracks.length - 1
-          ) {
-            mpv.selectTrack("sid", "no");
-            saveSubtitlePreference(state, "off");
-            toast("Subtitles: Off");
-          } else {
-            const nextIndex = selectedIndex + 1;
-            const nextTrack = mpv.subtitleTracks[nextIndex];
-            mpv.selectTrack("sid", nextTrack.id);
-            saveSubtitlePreference(state, nextTrack, nextIndex);
-            toast(`Subtitles: ${formatTrackLabel(nextTrack)}`);
-          }
-          break;
-        }
-        case "g": {
-          e.preventDefault();
-          const step = e.shiftKey ? 250 : 50;
-          const newDelay = (mpv.subtitleDelay || 0) - step;
-          mpv.setSubtitleDelay?.(newDelay);
-          toast(`Subtitle Sync: ${newDelay > 0 ? `+${newDelay}` : newDelay}ms`);
-          break;
-        }
-        case "h": {
-          e.preventDefault();
-          const step = e.shiftKey ? 250 : 50;
-          const newDelay = (mpv.subtitleDelay || 0) + step;
-          mpv.setSubtitleDelay?.(newDelay);
-          toast(`Subtitle Sync: ${newDelay > 0 ? `+${newDelay}` : newDelay}ms`);
-          break;
-        }
-        case "<":
-        case ">": {
-          e.preventDefault();
-          const step = key === "<" ? -0.25 : 0.25;
-          const nextRate = Math.min(
-            4,
-            Math.max(0.25, Math.round((playbackRate + step) * 100) / 100),
-          );
-          setPlaybackRate(nextRate);
-          mpv.setPlaybackSpeed(nextRate);
-          toast(`Speed: ${nextRate.toFixed(2)}x`);
-          break;
-        }
-        case "s": {
-          e.preventDefault();
-          if (e.ctrlKey || e.metaKey) {
-            const nextChapter = mpv.chapters.find(
-              (chapter) => chapter.time > mpv.currentTime + 1,
-            );
-            if (nextChapter) {
-              mpv.seek(nextChapter.time);
-              toast(`Chapter: ${nextChapter.title || "Next"}`);
-            } else {
-              toast("No next chapter");
-            }
-          } else {
-            const activeSkip = combinedSkips.find(
-              (skip) => mpv.currentTime >= skip.from && mpv.currentTime < skip.to,
-            );
-            if (activeSkip) {
-              mpv.seek(activeSkip.to);
-              const title = activeSkip.title
-                ? activeSkip.title.toLowerCase().startsWith("skip")
-                  ? activeSkip.title
-                  : `Skip ${activeSkip.title}`
-                : "Intro";
-              toast(`Skipped ${title}`);
-            } else {
-              toast("No intro to skip");
-            }
-          }
-          break;
-        }
-        case "+":
-        case "=":
-          e.preventDefault();
-          handleZoomIn();
-          break;
-        case "-":
-        case "_":
-          e.preventDefault();
-          handleZoomOut();
-          break;
-        case "0":
-          e.preventDefault();
-          handleResetZoom();
-          break;
-        case "?":
-          e.preventDefault();
-          setShowShortcuts((current) => !current);
-          break;
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("wheel", handleWheel);
-    window.addEventListener("mousemove", onMouseMoveEvent);
-    window.addEventListener("touchstart", onTouch);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("wheel", handleWheel);
-      window.removeEventListener("mousemove", onMouseMoveEvent);
-      window.removeEventListener("touchstart", onTouch);
-    };
-  }, [
-    mpv,
-    isFullscreen,
-    showControls,
-    handleNextEpisode,
-    handlePrevEpisode,
-    revealControls,
-    toast,
-    playbackRate,
-    showShortcuts,
-    showEpisodeSidebar,
-    handleZoomIn,
-    handleZoomOut,
-    handleResetZoom,
-    combinedSkips,
-  ]);
-
-  const toggleFullscreen = async () => {
+  const toggleFullscreen = useCallback(async () => {
     const win = getCurrentWindow();
     try {
       const nativeFullscreen = await win.isFullscreen();
@@ -1922,8 +1611,6 @@ const DesktopPlayer: React.FC<any> = ({
       const actualFullscreen = await win.isFullscreen();
 
       if (!actualFullscreen) {
-        // Windows-safe borderless fallback: use the monitor's full bounds,
-        // not its taskbar-reduced work area.
         if (!monitor) throw new Error("Unable to determine the active monitor");
         if (await win.isMaximized()) await win.unmaximize();
         await win.setDecorations(false);
@@ -1932,7 +1619,6 @@ const DesktopPlayer: React.FC<any> = ({
         await win.setAlwaysOnTop(true);
         manualFullscreenRef.current = true;
       } else {
-        // Keeps Windows' taskbar below the verified fullscreen window.
         await win.setAlwaysOnTop(true);
       }
 
@@ -1957,9 +1643,9 @@ const DesktopPlayer: React.FC<any> = ({
       preFullscreenStateRef.current = null;
       setIsFullscreen(false);
     }
-  };
+  }, [isWindows]);
 
-  const togglePip = async () => {
+  const togglePip = useCallback(async () => {
     try {
       const win = getCurrentWindow();
       const currentPip = await win.isAlwaysOnTop();
@@ -2011,13 +1697,410 @@ const DesktopPlayer: React.FC<any> = ({
     } catch (e) {
       console.error(e);
     }
-  };
+  }, [isWindows]);
 
-  const toggleCrop = () => {
-    const nextCrop = !isCropped;
-    setIsCropped(nextCrop);
-    mpv.setProperty("panscan", nextCrop ? 1.0 : 0.0);
-  };
+  const toggleCrop = useCallback(() => {
+    setIsCropped((prev) => {
+      const nextCrop = !prev;
+      mpv.setProperty("panscan", nextCrop ? 1.0 : 0.0);
+      return nextCrop;
+    });
+  }, [mpv]);
+
+  const mpvRef = useRef(mpv);
+  mpvRef.current = mpv;
+  const isFullscreenRef = useRef(isFullscreen);
+  isFullscreenRef.current = isFullscreen;
+  const showControlsRef = useRef(showControls);
+  showControlsRef.current = showControls;
+  const showEpisodeSidebarRef = useRef(showEpisodeSidebar);
+  showEpisodeSidebarRef.current = showEpisodeSidebar;
+  const showShortcutsRef = useRef(showShortcuts);
+  showShortcutsRef.current = showShortcuts;
+  const playbackRateRef = useRef(playbackRate);
+  playbackRateRef.current = playbackRate;
+  const combinedSkipsRef = useRef(combinedSkips);
+  combinedSkipsRef.current = combinedSkips;
+  const selectedStreamRef = useRef(selectedStream);
+  selectedStreamRef.current = selectedStream;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  useEffect(() => {
+    window.focus();
+  }, []);
+
+  useEffect(() => {
+    // Keep spatial navigation running so directional remote/controller navigation works!
+    import("@noriginmedia/norigin-spatial-navigation-core")
+      .then(({ resume }) => resume())
+      .catch(() => { });
+
+    const handleWheel = (e: WheelEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.closest(
+          ".inline-menu, .inline-menu-container, .player-shortcuts-overlay, .player-shortcuts-dialog, .search-subtitles-modal, .search-subtitles-container, .player-episode-sidebar, .player-episode-sidebar-list, [data-prevent-wheel-volume]",
+        )
+      ) {
+        return;
+      }
+      revealControls();
+      const currentVol = mpvRef.current.volume;
+      const newVol =
+        e.deltaY < 0
+          ? Math.min(200, currentVol + 5)
+          : Math.max(0, currentVol - 5);
+      mpvRef.current.setVolumeLevel(newVol);
+      toast(`Volume: ${Math.round(newVol)}%`);
+    };
+
+    const onMouseMoveEvent = () => revealControls();
+    const onTouch = () => revealControls();
+
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.isContentEditable ||
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.closest("input, textarea, select, [contenteditable='true']")
+      ) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+
+      // Avoid swallowing devtools or system shortcuts
+      if (key === "f12") return;
+      if ((e.ctrlKey || e.metaKey || e.altKey) && key !== "s") {
+        return;
+      }
+
+      // Remote media keys
+      if (key === "mediaplaypause") {
+        e.preventDefault();
+        mpvRef.current.togglePause();
+        revealControls();
+        return;
+      }
+      if (key === "mediaplay") {
+        e.preventDefault();
+        if (mpvRef.current.isPaused) mpvRef.current.togglePause();
+        revealControls();
+        return;
+      }
+      if (key === "mediapause") {
+        e.preventDefault();
+        if (!mpvRef.current.isPaused) mpvRef.current.togglePause();
+        revealControls();
+        return;
+      }
+      if (key === "mediafastforward") {
+        e.preventDefault();
+        mpvRef.current.seek(10, "relative");
+        toast("+10s");
+        revealControls();
+        return;
+      }
+      if (key === "mediarewind") {
+        e.preventDefault();
+        mpvRef.current.seek(-10, "relative");
+        toast("-10s");
+        revealControls();
+        return;
+      }
+      if (key === "mediatracknext") {
+        e.preventDefault();
+        handleNextEpisode();
+        return;
+      }
+      if (key === "mediatrackprevious") {
+        e.preventDefault();
+        handlePrevEpisode();
+        return;
+      }
+      if (key === "mediastop") {
+        e.preventDefault();
+        navigate(-1);
+        return;
+      }
+
+      // Remote back key (Escape, Back, BrowserBack, Android keycode 4)
+      if (
+        key === "escape" ||
+        key === "back" ||
+        key === "browserback" ||
+        e.keyCode === 27 ||
+        e.keyCode === 10009
+      ) {
+        e.preventDefault();
+        if (showEpisodeSidebarRef.current) setShowEpisodeSidebar(false);
+        else if (showShortcutsRef.current) setShowShortcuts(false);
+        else if (showControlsRef.current) setShowControls(false);
+        else if (isFullscreenRef.current) toggleFullscreen();
+        else navigate(-1);
+        return;
+      }
+
+      switch (key) {
+        case " ":
+        case "k": {
+          e.preventDefault();
+          if (target?.tagName === "BUTTON") {
+            target.blur();
+          }
+          mpvRef.current.togglePause();
+          revealControls();
+          break;
+        }
+        case "arrowleft":
+        case "j": {
+          if (tvMode && showControlsRef.current && key === "arrowleft") break;
+          e.preventDefault();
+          mpvRef.current.seek(-10, "relative");
+          toast("-10s");
+          revealControls();
+          break;
+        }
+        case "arrowright":
+        case "l": {
+          if (tvMode && showControlsRef.current && key === "arrowright") break;
+          e.preventDefault();
+          mpvRef.current.seek(10, "relative");
+          toast("+10s");
+          revealControls();
+          break;
+        }
+        case "arrowup": {
+          if (tvMode && showControlsRef.current) break;
+          e.preventDefault();
+          const curVol = mpvRef.current.volume;
+          const newVol = Math.min(200, curVol + 5);
+          mpvRef.current.setVolumeLevel(newVol);
+          toast(`Volume: ${Math.round(newVol)}%`);
+          revealControls();
+          break;
+        }
+        case "arrowdown": {
+          if (tvMode && showControlsRef.current) break;
+          e.preventDefault();
+          const curVol = mpvRef.current.volume;
+          const newVol = Math.max(0, curVol - 5);
+          mpvRef.current.setVolumeLevel(newVol);
+          toast(`Volume: ${Math.round(newVol)}%`);
+          revealControls();
+          break;
+        }
+        case "enter": {
+          if (!showControlsRef.current) {
+            e.preventDefault();
+            mpvRef.current.togglePause();
+            revealControls();
+          }
+          break;
+        }
+        case "f":
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case "i":
+          e.preventDefault();
+          togglePip();
+          break;
+        case "m": {
+          e.preventDefault();
+          if (mpvRef.current.volume > 0) {
+            prevVolumeRef.current = mpvRef.current.volume;
+            mpvRef.current.setVolumeLevel(0);
+            toast("Muted");
+          } else {
+            const restoreVol =
+              prevVolumeRef.current > 0 ? prevVolumeRef.current : 100;
+            mpvRef.current.setVolumeLevel(restoreVol);
+            toast(`Volume: ${Math.round(restoreVol)}%`);
+          }
+          revealControls();
+          break;
+        }
+        case "n":
+          e.preventDefault();
+          handleNextEpisode();
+          break;
+        case "p":
+          e.preventDefault();
+          handlePrevEpisode();
+          break;
+        case "a": {
+          const aTracks = mpvRef.current.audioTracks || [];
+          if (!aTracks.length) break;
+          e.preventDefault();
+          appliedAudioForStreamRef.current =
+            selectedStreamRef.current?.link || null;
+          const selectedIndex = aTracks.findIndex((track) => track.selected);
+          const nextIndex = (selectedIndex + 1) % aTracks.length;
+          const nextTrack = aTracks[nextIndex];
+          mpvRef.current.selectTrack("aid", nextTrack.id);
+          saveAudioPreference(stateRef.current, nextTrack, nextIndex);
+          toast(`Audio: ${formatTrackLabel(nextTrack)}`);
+          revealControls();
+          break;
+        }
+        case "z":
+        case "[": {
+          e.preventDefault();
+          const step = e.shiftKey ? 250 : 50;
+          const newDelay = (mpvRef.current.audioDelay || 0) - step;
+          mpvRef.current.setAudioDelay?.(newDelay);
+          toast(`Audio Sync: ${newDelay > 0 ? `+${newDelay}` : newDelay}ms`);
+          revealControls();
+          break;
+        }
+        case "x":
+        case "]": {
+          e.preventDefault();
+          const step = e.shiftKey ? 250 : 50;
+          const newDelay = (mpvRef.current.audioDelay || 0) + step;
+          mpvRef.current.setAudioDelay?.(newDelay);
+          toast(`Audio Sync: ${newDelay > 0 ? `+${newDelay}` : newDelay}ms`);
+          revealControls();
+          break;
+        }
+        case "c":
+        case "t": {
+          e.preventDefault();
+          appliedSubtitleForStreamRef.current =
+            selectedStreamRef.current?.link || null;
+          const subTracks = mpvRef.current.subtitleTracks || [];
+          const selectedIndex = subTracks.findIndex((track) => track.selected);
+          if (!subTracks.length || selectedIndex === subTracks.length - 1) {
+            mpvRef.current.selectTrack("sid", "no");
+            saveSubtitlePreference(stateRef.current, "off");
+            toast("Subtitles: Off");
+          } else {
+            const nextIndex = selectedIndex + 1;
+            const nextTrack = subTracks[nextIndex];
+            mpvRef.current.selectTrack("sid", nextTrack.id);
+            saveSubtitlePreference(stateRef.current, nextTrack, nextIndex);
+            toast(`Subtitles: ${formatTrackLabel(nextTrack)}`);
+          }
+          revealControls();
+          break;
+        }
+        case "g": {
+          e.preventDefault();
+          const step = e.shiftKey ? 250 : 50;
+          const newDelay = (mpvRef.current.subtitleDelay || 0) - step;
+          mpvRef.current.setSubtitleDelay?.(newDelay);
+          toast(`Subtitle Sync: ${newDelay > 0 ? `+${newDelay}` : newDelay}ms`);
+          revealControls();
+          break;
+        }
+        case "h": {
+          e.preventDefault();
+          const step = e.shiftKey ? 250 : 50;
+          const newDelay = (mpvRef.current.subtitleDelay || 0) + step;
+          mpvRef.current.setSubtitleDelay?.(newDelay);
+          toast(`Subtitle Sync: ${newDelay > 0 ? `+${newDelay}` : newDelay}ms`);
+          revealControls();
+          break;
+        }
+        case "<":
+        case ">": {
+          e.preventDefault();
+          const step = key === "<" ? -0.25 : 0.25;
+          const nextRate = Math.min(
+            4,
+            Math.max(
+              0.25,
+              Math.round((playbackRateRef.current + step) * 100) / 100,
+            ),
+          );
+          setPlaybackRate(nextRate);
+          mpvRef.current.setPlaybackSpeed(nextRate);
+          toast(`Speed: ${nextRate.toFixed(2)}x`);
+          revealControls();
+          break;
+        }
+        case "s": {
+          e.preventDefault();
+          if (e.ctrlKey || e.metaKey) {
+            const chs = mpvRef.current.chapters || [];
+            const curTime = mpvRef.current.currentTime;
+            const nextChapter = chs.find(
+              (chapter) => chapter.time > curTime + 1,
+            );
+            if (nextChapter) {
+              mpvRef.current.seek(nextChapter.time);
+              toast(`Chapter: ${nextChapter.title || "Next"}`);
+            } else {
+              toast("No next chapter");
+            }
+          } else {
+            const curTime = mpvRef.current.currentTime;
+            const activeSkip = combinedSkipsRef.current?.find(
+              (skip) => curTime >= skip.from && curTime < skip.to,
+            );
+            if (activeSkip) {
+              mpvRef.current.seek(activeSkip.to);
+              const title = activeSkip.title
+                ? activeSkip.title.toLowerCase().startsWith("skip")
+                  ? activeSkip.title
+                  : `Skip ${activeSkip.title}`
+                : "Intro";
+              toast(`Skipped ${title}`);
+            } else {
+              toast("No intro to skip");
+            }
+          }
+          revealControls();
+          break;
+        }
+        case "+":
+        case "=":
+          e.preventDefault();
+          handleZoomIn();
+          break;
+        case "-":
+        case "_":
+          e.preventDefault();
+          handleZoomOut();
+          break;
+        case "0":
+          e.preventDefault();
+          handleResetZoom();
+          break;
+        case "?":
+          e.preventDefault();
+          setShowShortcuts((current) => !current);
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("wheel", handleWheel, { passive: true });
+    window.addEventListener("mousemove", onMouseMoveEvent);
+    window.addEventListener("touchstart", onTouch);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("mousemove", onMouseMoveEvent);
+      window.removeEventListener("touchstart", onTouch);
+    };
+  }, [
+    handleNextEpisode,
+    handlePrevEpisode,
+    revealControls,
+    toast,
+    handleZoomIn,
+    handleZoomOut,
+    handleResetZoom,
+    toggleFullscreen,
+    togglePip,
+    tvMode,
+    navigate,
+  ]);
 
   const showNextBtn = useMemo(() => {
     if (activeEpisodeIndex >= state.episodeList.length - 1) return false;

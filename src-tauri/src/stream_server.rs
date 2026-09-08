@@ -16,9 +16,9 @@ use std::{
     process::Stdio,
     sync::{Arc, Mutex},
 };
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
-use tokio::net::TcpListener;
 use tauri::Emitter;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, BufReader};
+use tokio::net::TcpListener;
 
 use crate::ffmpeg_resolver;
 use crate::media_probe;
@@ -28,12 +28,13 @@ pub struct RemuxStreamInfo {
     pub session_id: String,
     pub generation: u64,
     pub requested_start: f64,
-    pub source_reference_pts: f64,
-    pub output_reference_pts: f64,
+    pub source_reference_pts: Option<f64>,
+    pub output_reference_pts: Option<f64>,
 }
 
 pub type LocalFileRegistry = Arc<Mutex<HashMap<String, PathBuf>>>;
-pub type SessionRegistry = Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>>;
+pub type SessionRegistry =
+    Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>>;
 pub type RemuxInfoRegistry = Arc<tokio::sync::Mutex<HashMap<String, RemuxStreamInfo>>>;
 
 #[derive(Clone)]
@@ -122,6 +123,8 @@ pub struct CancelQuery {
 #[derive(Deserialize)]
 pub struct RemuxInfoQuery {
     pub session_id: String,
+    #[serde(default)]
+    pub generation: Option<u64>,
 }
 
 async fn handle_remux_info(
@@ -130,10 +133,14 @@ async fn handle_remux_info(
 ) -> Result<axum::Json<RemuxStreamInfo>, StatusCode> {
     let infos = state.remux_infos.lock().await;
     if let Some(info) = infos.get(&query.session_id) {
-        Ok(axum::Json(info.clone()))
-    } else {
-        Err(StatusCode::NOT_FOUND)
+        if query
+            .generation
+            .map_or(true, |generation| generation == info.generation)
+        {
+            return Ok(axum::Json(info.clone()));
+        }
     }
+    Err(StatusCode::NOT_FOUND)
 }
 
 pub async fn start_server(
@@ -362,7 +369,10 @@ async fn handle_direct_file(
         .header(header::ACCEPT_RANGES, "bytes")
         .header(header::CONTENT_LENGTH, content_length)
         .header(header::CONTENT_TYPE, content_type)
-        .header(header::HeaderName::from_static("access-control-allow-origin"), "*");
+        .header(
+            header::HeaderName::from_static("access-control-allow-origin"),
+            "*",
+        );
     if status == StatusCode::PARTIAL_CONTENT {
         response = response.header(
             header::CONTENT_RANGE,
@@ -373,7 +383,6 @@ async fn handle_direct_file(
         .body(Body::from_stream(body_stream))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
-
 
 fn encode_url(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect::<String>()
@@ -664,7 +673,11 @@ async fn handle_probe(
     if let Some(ref orig) = query.origin {
         headers.insert("Origin".to_string(), orig.clone());
     }
-    let headers_opt = if headers.is_empty() { None } else { Some(headers) };
+    let headers_opt = if headers.is_empty() {
+        None
+    } else {
+        Some(headers)
+    };
 
     match media_probe::probe_media(&source, headers_opt).await {
         Ok(info) => {
@@ -673,7 +686,10 @@ async fn handle_probe(
                 StatusCode::OK,
                 [
                     (header::CONTENT_TYPE, "application/json"),
-                    (header::HeaderName::from_static("access-control-allow-origin"), "*"),
+                    (
+                        header::HeaderName::from_static("access-control-allow-origin"),
+                        "*",
+                    ),
                 ],
                 json,
             )
@@ -685,7 +701,10 @@ async fn handle_probe(
                 StatusCode::BAD_REQUEST,
                 [
                     (header::CONTENT_TYPE, "text/plain"),
-                    (header::HeaderName::from_static("access-control-allow-origin"), "*"),
+                    (
+                        header::HeaderName::from_static("access-control-allow-origin"),
+                        "*",
+                    ),
                 ],
                 err,
             )
@@ -709,14 +728,23 @@ async fn handle_subs(
     if let Some(ref orig) = query.origin {
         headers.insert("Origin".to_string(), orig.clone());
     }
-    let headers_opt = if headers.is_empty() { None } else { Some(headers) };
+    let headers_opt = if headers.is_empty() {
+        None
+    } else {
+        Some(headers)
+    };
 
-    match media_probe::extract_subtitles_to_string(None, &source, query.sub_index, headers_opt).await {
+    match media_probe::extract_subtitles_to_string(None, &source, query.sub_index, headers_opt)
+        .await
+    {
         Ok(text) => (
             StatusCode::OK,
             [
                 (header::CONTENT_TYPE, "text/plain; charset=utf-8"),
-                (header::HeaderName::from_static("access-control-allow-origin"), "*"),
+                (
+                    header::HeaderName::from_static("access-control-allow-origin"),
+                    "*",
+                ),
             ],
             text,
         )
@@ -727,7 +755,10 @@ async fn handle_subs(
                 StatusCode::BAD_REQUEST,
                 [
                     (header::CONTENT_TYPE, "text/plain"),
-                    (header::HeaderName::from_static("access-control-allow-origin"), "*"),
+                    (
+                        header::HeaderName::from_static("access-control-allow-origin"),
+                        "*",
+                    ),
                 ],
                 err,
             )
@@ -736,87 +767,264 @@ async fn handle_subs(
     }
 }
 
+#[derive(Clone, Copy)]
+struct Mp4BoxRef {
+    kind: [u8; 4],
+    payload_start: usize,
+    end: usize,
+}
+
+fn read_u32_be(buf: &[u8], pos: usize) -> Option<u32> {
+    Some(u32::from_be_bytes(buf.get(pos..pos + 4)?.try_into().ok()?))
+}
+
+fn read_u64_be(buf: &[u8], pos: usize) -> Option<u64> {
+    Some(u64::from_be_bytes(buf.get(pos..pos + 8)?.try_into().ok()?))
+}
+
+fn mp4_children(buf: &[u8], start: usize, end: usize) -> Option<Vec<Mp4BoxRef>> {
+    if start > end || end > buf.len() {
+        return None;
+    }
+    let mut boxes = Vec::new();
+    let mut pos = start;
+    while pos < end {
+        if end - pos < 8 {
+            return None;
+        }
+        let size32 = read_u32_be(buf, pos)? as usize;
+        let kind: [u8; 4] = buf.get(pos + 4..pos + 8)?.try_into().ok()?;
+        let (size, header_size) = if size32 == 1 {
+            let size64 = read_u64_be(buf, pos + 8)?;
+            if size64 > usize::MAX as u64 {
+                return None;
+            }
+            (size64 as usize, 16)
+        } else if size32 == 0 {
+            (end - pos, 8)
+        } else {
+            (size32, 8)
+        };
+        if size < header_size || size > 16 * 1024 * 1024 || pos.checked_add(size)? > end {
+            return None;
+        }
+        boxes.push(Mp4BoxRef {
+            kind,
+            payload_start: pos + header_size,
+            end: pos + size,
+        });
+        pos += size;
+    }
+    Some(boxes)
+}
+
+fn mp4_top_level(buf: &[u8]) -> Option<Vec<Mp4BoxRef>> {
+    let mut boxes = Vec::new();
+    let mut pos = 0usize;
+    while buf.len().saturating_sub(pos) >= 8 {
+        let size32 = read_u32_be(buf, pos)? as usize;
+        let kind: [u8; 4] = buf.get(pos + 4..pos + 8)?.try_into().ok()?;
+        let (size, header_size) = if size32 == 1 {
+            if buf.len().saturating_sub(pos) < 16 {
+                break;
+            }
+            let size64 = read_u64_be(buf, pos + 8)?;
+            if size64 > usize::MAX as u64 {
+                return None;
+            }
+            (size64 as usize, 16)
+        } else if size32 == 0 {
+            break;
+        } else {
+            (size32, 8)
+        };
+        if kind == *b"mdat" {
+            // We only need the complete initialization and movie-fragment boxes.
+            // The media payload can be much larger than the startup buffer.
+            break;
+        }
+        if size < header_size || size > 16 * 1024 * 1024 {
+            return None;
+        }
+        let Some(end) = pos.checked_add(size) else {
+            return None;
+        };
+        if end > buf.len() {
+            break;
+        }
+        boxes.push(Mp4BoxRef {
+            kind,
+            payload_start: pos + header_size,
+            end,
+        });
+        pos = end;
+    }
+    Some(boxes)
+}
+
+fn child_box(buf: &[u8], parent: Mp4BoxRef, kind: &[u8; 4]) -> Option<Mp4BoxRef> {
+    mp4_children(buf, parent.payload_start, parent.end)?
+        .into_iter()
+        .find(|entry| &entry.kind == kind)
+}
+
+fn video_track_timing(buf: &[u8], moov: Mp4BoxRef) -> Option<(u32, f64)> {
+    for trak in mp4_children(buf, moov.payload_start, moov.end)?
+        .into_iter()
+        .filter(|entry| entry.kind == *b"trak")
+    {
+        let tkhd = child_box(buf, trak, b"tkhd")?;
+        let tkhd_version = *buf.get(tkhd.payload_start)?;
+        let track_id_pos = tkhd.payload_start + if tkhd_version == 1 { 20 } else { 12 };
+        let track_id = read_u32_be(buf, track_id_pos)?;
+
+        let mdia = child_box(buf, trak, b"mdia")?;
+        let hdlr = child_box(buf, mdia, b"hdlr")?;
+        if buf.get(hdlr.payload_start + 8..hdlr.payload_start + 12)? != b"vide" {
+            continue;
+        }
+        let mdhd = child_box(buf, mdia, b"mdhd")?;
+        let mdhd_version = *buf.get(mdhd.payload_start)?;
+        let timescale_pos = mdhd.payload_start + if mdhd_version == 1 { 20 } else { 12 };
+        let timescale = read_u32_be(buf, timescale_pos)?;
+        if timescale > 0 {
+            return Some((track_id, timescale as f64));
+        }
+    }
+    None
+}
+
+fn first_sample_composition_offset(buf: &[u8], trun: Mp4BoxRef) -> Option<i64> {
+    let version = *buf.get(trun.payload_start)?;
+    let flags = ((*buf.get(trun.payload_start + 1)? as u32) << 16)
+        | ((*buf.get(trun.payload_start + 2)? as u32) << 8)
+        | *buf.get(trun.payload_start + 3)? as u32;
+    let sample_count = read_u32_be(buf, trun.payload_start + 4)?;
+    if sample_count == 0 {
+        return None;
+    }
+    let mut pos = trun.payload_start + 8;
+    if flags & 0x000001 != 0 {
+        pos += 4;
+    }
+    if flags & 0x000004 != 0 {
+        pos += 4;
+    }
+    if flags & 0x000100 != 0 {
+        pos += 4;
+    }
+    if flags & 0x000200 != 0 {
+        pos += 4;
+    }
+    if flags & 0x000400 != 0 {
+        pos += 4;
+    }
+    if flags & 0x000800 == 0 {
+        return Some(0);
+    }
+    let raw = read_u32_be(buf, pos)?;
+    Some(if version == 0 {
+        raw as i64
+    } else {
+        (raw as i32) as i64
+    })
+}
+
 fn extract_mp4_output_reference_pts(buf: &[u8]) -> Option<f64> {
-    let mut timescale = 16000.0;
-    if let Some(mdhd_rel) = buf.windows(4).position(|w| w == b"mdhd") {
-        let ver_pos = mdhd_rel + 4;
-        if ver_pos + 12 <= buf.len() {
-            let ver = buf[ver_pos];
-            let ts_offset = if ver == 1 { ver_pos + 4 + 16 } else { ver_pos + 4 + 8 };
-            if ts_offset + 4 <= buf.len() {
-                if let Ok(bytes) = buf[ts_offset..ts_offset + 4].try_into() {
-                    let ts = u32::from_be_bytes(bytes);
-                    if ts > 0 {
-                        timescale = ts as f64;
-                    }
-                }
+    let top_level = mp4_top_level(buf)?;
+    let moov = *top_level.iter().find(|entry| entry.kind == *b"moov")?;
+    let (video_track_id, timescale) = video_track_timing(buf, moov)?;
+
+    for moof in top_level.into_iter().filter(|entry| entry.kind == *b"moof") {
+        for traf in mp4_children(buf, moof.payload_start, moof.end)?
+            .into_iter()
+            .filter(|entry| entry.kind == *b"traf")
+        {
+            let tfhd = child_box(buf, traf, b"tfhd")?;
+            if read_u32_be(buf, tfhd.payload_start + 4)? != video_track_id {
+                continue;
             }
+            let tfdt = child_box(buf, traf, b"tfdt")?;
+            let decode_time = if *buf.get(tfdt.payload_start)? == 1 {
+                read_u64_be(buf, tfdt.payload_start + 4)?
+            } else {
+                read_u32_be(buf, tfdt.payload_start + 4)? as u64
+            };
+            let trun = child_box(buf, traf, b"trun")?;
+            let composition_offset = first_sample_composition_offset(buf, trun)?;
+            return Some((decode_time as f64 + composition_offset as f64) / timescale);
         }
     }
+    None
+}
 
-    let moof_pos = buf.windows(4).position(|w| w == b"moof")?;
-    if moof_pos < 4 {
+fn parse_ffmpeg_source_video_pts(line: &str, video_stream_index: u32) -> Option<f64> {
+    if !line.contains("demuxer ->") || !line.contains("type:video") {
         return None;
     }
-    let moof_box_start = moof_pos - 4;
-    if moof_box_start + 4 > buf.len() {
+    let stream_marker = format!("ist_index:{}", video_stream_index);
+    if !line.contains(&stream_marker) {
         return None;
     }
-    let moof_size = u32::from_be_bytes(buf[moof_box_start..moof_box_start + 4].try_into().ok()?) as usize;
-    if moof_size < 8 {
-        return None;
-    }
-    let moof_end = (moof_box_start + moof_size).min(buf.len());
-    let moof_bytes = &buf[moof_box_start..moof_end];
+    let marker = "pkt_pts_time:";
+    let value = line.split(marker).nth(1)?.split_whitespace().next()?;
+    value.parse::<f64>().ok().filter(|pts| pts.is_finite())
+}
 
-    let traf_pos = moof_bytes.windows(4).position(|w| w == b"traf")?;
-    let traf_bytes = &moof_bytes[traf_pos..];
+#[cfg(test)]
+mod remux_timing_tests {
+    use super::*;
 
-    let mut decode_time: f64 = 0.0;
-    if let Some(tfdt_pos) = traf_bytes.windows(4).position(|w| w == b"tfdt") {
-        let v_pos = tfdt_pos + 4;
-        if v_pos < traf_bytes.len() {
-            let ver = traf_bytes[v_pos];
-            if ver == 1 && v_pos + 4 + 8 <= traf_bytes.len() {
-                if let Ok(bytes) = traf_bytes[v_pos + 4..v_pos + 12].try_into() {
-                    decode_time = u64::from_be_bytes(bytes) as f64;
-                }
-            } else if ver == 0 && v_pos + 4 + 4 <= traf_bytes.len() {
-                if let Ok(bytes) = traf_bytes[v_pos + 4..v_pos + 8].try_into() {
-                    decode_time = u32::from_be_bytes(bytes) as f64;
-                }
-            }
-        }
+    fn mp4_box(kind: &[u8; 4], payload: Vec<u8>) -> Vec<u8> {
+        let mut result = Vec::with_capacity(payload.len() + 8);
+        result.extend_from_slice(&((payload.len() + 8) as u32).to_be_bytes());
+        result.extend_from_slice(kind);
+        result.extend_from_slice(&payload);
+        result
     }
 
-    let mut comp_offset: f64 = 0.0;
-    if let Some(trun_pos) = traf_bytes.windows(4).position(|w| w == b"trun") {
-        let v_pos = trun_pos + 4;
-        if v_pos + 8 <= traf_bytes.len() {
-            let ver = traf_bytes[v_pos];
-            let flags = ((traf_bytes[v_pos + 1] as u32) << 16)
-                | ((traf_bytes[v_pos + 2] as u32) << 8)
-                | (traf_bytes[v_pos + 3] as u32);
-            let mut pos = v_pos + 8;
-            if flags & 0x01 != 0 { pos += 4; }
-            if flags & 0x04 != 0 { pos += 4; }
-            if flags & 0x100 != 0 { pos += 4; }
-            if flags & 0x200 != 0 { pos += 4; }
-            if flags & 0x400 != 0 { pos += 4; }
-            if flags & 0x800 != 0 && pos + 4 <= traf_bytes.len() {
-                if let Ok(bytes) = traf_bytes[pos..pos + 4].try_into() {
-                    let co = if ver == 0 {
-                        u32::from_be_bytes(bytes) as i64
-                    } else {
-                        i32::from_be_bytes(bytes) as i64
-                    };
-                    comp_offset = co as f64;
-                }
-            }
-        }
+    #[test]
+    fn parses_selected_ffmpeg_video_packet_timestamp() {
+        let line = "demuxer -> ist_index:2 type:video next_dts:0 pkt_pts:270000 pkt_pts_time:3.000 pkt_dts:270000";
+        assert_eq!(parse_ffmpeg_source_video_pts(line, 2), Some(3.0));
+        assert_eq!(parse_ffmpeg_source_video_pts(line, 0), None);
     }
 
-    Some((decode_time + comp_offset) / timescale)
+    #[test]
+    fn parses_video_track_fragment_pts_instead_of_audio_track() {
+        let mut tkhd_payload = vec![0; 16];
+        tkhd_payload[12..16].copy_from_slice(&2u32.to_be_bytes());
+        let tkhd = mp4_box(b"tkhd", tkhd_payload);
+
+        let mut mdhd_payload = vec![0; 16];
+        mdhd_payload[12..16].copy_from_slice(&1000u32.to_be_bytes());
+        let mdhd = mp4_box(b"mdhd", mdhd_payload);
+        let mut hdlr_payload = vec![0; 12];
+        hdlr_payload[8..12].copy_from_slice(b"vide");
+        let hdlr = mp4_box(b"hdlr", hdlr_payload);
+        let mdia = mp4_box(b"mdia", [mdhd, hdlr].concat());
+        let trak = mp4_box(b"trak", [tkhd, mdia].concat());
+        let moov = mp4_box(b"moov", trak);
+
+        let mut tfhd_payload = vec![0; 8];
+        tfhd_payload[4..8].copy_from_slice(&2u32.to_be_bytes());
+        let tfhd = mp4_box(b"tfhd", tfhd_payload);
+        let mut tfdt_payload = vec![0; 8];
+        tfdt_payload[4..8].copy_from_slice(&9000u32.to_be_bytes());
+        let tfdt = mp4_box(b"tfdt", tfdt_payload);
+        let mut trun_payload = vec![0; 12];
+        trun_payload[1..4].copy_from_slice(&[0, 0x08, 0]);
+        trun_payload[4..8].copy_from_slice(&1u32.to_be_bytes());
+        trun_payload[8..12].copy_from_slice(&1000u32.to_be_bytes());
+        let trun = mp4_box(b"trun", trun_payload);
+        let traf = mp4_box(b"traf", [tfhd, tfdt, trun].concat());
+        let moof = mp4_box(b"moof", traf);
+
+        let mut startup = [mp4_box(b"ftyp", vec![]), moov, moof].concat();
+        startup.extend_from_slice(&100u32.to_be_bytes());
+        startup.extend_from_slice(b"mdat");
+        assert_eq!(extract_mp4_output_reference_pts(&startup), Some(10.0));
+    }
 }
 
 async fn handle_remux(
@@ -827,7 +1035,10 @@ async fn handle_remux(
     let ffmpeg_path = match ffmpeg_resolver::get_ffmpeg_path() {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("[remux] FFmpeg not found ({}), streaming directly via proxy", e);
+            eprintln!(
+                "[remux] FFmpeg not found ({}), streaming directly via proxy",
+                e
+            );
             let mut req = state.client.get(&source);
             if let Some(ref r) = query.referer {
                 req = req.header("Referer", r);
@@ -854,7 +1065,9 @@ async fn handle_remux(
                 builder = builder.header(axum::http::header::ACCEPT_RANGES, ar);
             }
             let body = axum::body::Body::from_stream(resp.bytes_stream());
-            return builder.body(body).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
+            return builder
+                .body(body)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
 
@@ -867,18 +1080,22 @@ async fn handle_remux(
     #[cfg(target_os = "windows")]
     cmd.creation_flags(0x08000000);
 
-    if let Some(parent) = ffmpeg_path.parent() {
+    if let Some(parent) = ffmpeg_path.parent().filter(|p| !p.as_os_str().is_empty()) {
         cmd.current_dir(parent);
-        if let Ok(path_var) = std::env::var("PATH") {
-            cmd.env("PATH", format!("{};{}", parent.display(), path_var));
-        } else {
-            cmd.env("PATH", parent);
-        }
+        crate::ffmpeg_resolver::prepend_to_path_tokio(&mut cmd, parent);
     }
 
-    cmd.arg("-v").arg("error");
-
     let is_transcode = query.mode.as_deref() == Some("transcode");
+    if is_transcode {
+        cmd.arg("-v").arg("error");
+    } else {
+        // Capture the timestamp of the packet used by this exact FFmpeg process.
+        // A separate ffprobe seek can land on a different keyframe.
+        cmd.arg("-hide_banner")
+            .arg("-loglevel")
+            .arg("info")
+            .arg("-debug_ts");
+    }
     let seek_start = query.start.filter(|&s| s > 0.05);
     if let Some(start) = seek_start {
         if !is_transcode {
@@ -901,13 +1118,22 @@ async fn handle_remux(
 
     let mut headers_str = Vec::new();
     if let Some(ref r) = query.referer {
-        headers_str.push(format!("Referer: {}", r.replace('\r', "").replace('\n', "")));
+        headers_str.push(format!(
+            "Referer: {}",
+            r.replace('\r', "").replace('\n', "")
+        ));
     }
     if let Some(ref ua) = query.ua {
-        headers_str.push(format!("User-Agent: {}", ua.replace('\r', "").replace('\n', "")));
+        headers_str.push(format!(
+            "User-Agent: {}",
+            ua.replace('\r', "").replace('\n', "")
+        ));
     }
     if let Some(ref orig) = query.origin {
-        headers_str.push(format!("Origin: {}", orig.replace('\r', "").replace('\n', "")));
+        headers_str.push(format!(
+            "Origin: {}",
+            orig.replace('\r', "").replace('\n', "")
+        ));
     }
     if !headers_str.is_empty() {
         headers_str.push(String::new());
@@ -967,7 +1193,10 @@ async fn handle_remux(
 
         let mut audio_filters: Vec<String> = Vec::new();
         if audio_delay_val > 4.0 {
-            audio_filters.push(format!("adelay={}|{}:all=1", audio_delay_val as i64, audio_delay_val as i64));
+            audio_filters.push(format!(
+                "adelay={}|{}:all=1",
+                audio_delay_val as i64, audio_delay_val as i64
+            ));
         } else if audio_delay_val < -4.0 {
             let trim_sec = (-audio_delay_val) / 1000.0;
             audio_filters.push(format!("atrim=start={:.3},asetpts=PTS-STARTPTS", trim_sec));
@@ -986,46 +1215,47 @@ async fn handle_remux(
         .arg("frag_keyframe+empty_moov+default_base_moof")
         .arg("pipe:1");
 
-    cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+    cmd.stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
 
     let mut child = cmd.spawn().map_err(|e| {
         eprintln!("[remux] Failed to spawn FFmpeg: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let mut stdout = child.stdout.take().ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
     let stderr = child.stderr.take();
-
-    let mut source_reference_pts = 0.0;
-    if let Some(start) = seek_start {
-        let headers_map: Option<HashMap<String, String>> = if !headers_str.is_empty() {
-            let mut hm = HashMap::new();
-            if let Some(ref r) = query.referer { hm.insert("Referer".to_string(), r.clone()); }
-            if let Some(ref ua) = query.ua { hm.insert("User-Agent".to_string(), ua.clone()); }
-            if let Some(ref orig) = query.origin { hm.insert("Origin".to_string(), orig.clone()); }
-            Some(hm)
-        } else {
-            None
-        };
-
-        if let Some(k_pts) = media_probe::find_seek_keyframe(&source, start, headers_map).await {
-            source_reference_pts = k_pts;
-        } else {
-            eprintln!("[remux] Keyframe probe returned None for {:.3}s, using requested start as fallback", start);
-            source_reference_pts = start;
-        }
+    let video_stream_index = v_idx_opt.unwrap_or(0);
+    let (source_pts_sender, source_pts_receiver) = tokio::sync::oneshot::channel::<f64>();
+    if let Some(err_pipe) = stderr {
+        tokio::spawn(async move {
+            let mut lines = BufReader::new(err_pipe).lines();
+            let mut sender = Some(source_pts_sender);
+            while let Ok(Some(line)) = lines.next_line().await {
+                if let Some(pts) = parse_ffmpeg_source_video_pts(&line, video_stream_index) {
+                    if let Some(tx) = sender.take() {
+                        let _ = tx.send(pts);
+                    }
+                }
+            }
+        });
     }
 
     let mut initial_bytes = Vec::new();
     let mut chunk = [0u8; 8192];
-    let mut output_reference_pts = 0.0;
+    let mut output_reference_pts = None;
 
-    while initial_bytes.len() < 24576 {
-        match tokio::time::timeout(std::time::Duration::from_millis(500), stdout.read(&mut chunk)).await {
+    while initial_bytes.len() < 4 * 1024 * 1024 {
+        match tokio::time::timeout(std::time::Duration::from_secs(3), stdout.read(&mut chunk)).await
+        {
             Ok(Ok(n)) if n > 0 => {
                 initial_bytes.extend_from_slice(&chunk[..n]);
                 if let Some(pts) = extract_mp4_output_reference_pts(&initial_bytes) {
-                    output_reference_pts = pts;
+                    output_reference_pts = Some(pts);
                     break;
                 }
             }
@@ -1036,6 +1266,16 @@ async fn handle_remux(
     let session_id_opt = query.session_id.clone();
     let generation = query.generation.unwrap_or(0);
     let requested_start = query.start.unwrap_or(0.0);
+    let source_reference_pts = if is_transcode {
+        // Input seeking is accurate when video is decoded; the first output frame
+        // represents the requested source position.
+        Some(requested_start)
+    } else {
+        tokio::time::timeout(std::time::Duration::from_secs(2), source_pts_receiver)
+            .await
+            .ok()
+            .and_then(Result::ok)
+    };
     let remux_infos = state.remux_infos.clone();
     let app_opt = state.app.clone();
 
@@ -1054,19 +1294,15 @@ async fn handle_remux(
             let _ = app.emit("remux_stream_info", &info);
         }
         eprintln!(
-            "[remux] Stream started: gen={}, req={:.3}s, src_pts={:.3}s, out_pts={:.3}s, offset={:.3}s",
-            generation, requested_start, source_reference_pts, output_reference_pts,
-            source_reference_pts - output_reference_pts
+            "[remux] Stream started: gen={}, req={:.3}s, src_pts={:?}, out_pts={:?}, offset={:?}",
+            generation,
+            requested_start,
+            source_reference_pts,
+            output_reference_pts,
+            source_reference_pts
+                .zip(output_reference_pts)
+                .map(|(source, output)| source - output)
         );
-    }
-
-    if let Some(mut err_pipe) = stderr {
-        tokio::spawn(async move {
-            let mut chunk = [0u8; 4096];
-            while let Ok(n) = err_pipe.read(&mut chunk).await {
-                if n == 0 { break; }
-            }
-        });
     }
 
     let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
@@ -1115,7 +1351,10 @@ async fn handle_remux(
         .header(header::CONTENT_TYPE, "video/mp4")
         .header(header::CACHE_CONTROL, "no-cache, no-store")
         .header(header::ACCEPT_RANGES, "none")
-        .header(header::HeaderName::from_static("access-control-allow-origin"), "*")
+        .header(
+            header::HeaderName::from_static("access-control-allow-origin"),
+            "*",
+        )
         .body(Body::from_stream(body_stream))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 

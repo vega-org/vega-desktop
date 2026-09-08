@@ -46,8 +46,8 @@ interface RemuxStreamInfo {
   session_id: string;
   generation: number;
   requested_start: number;
-  source_reference_pts: number;
-  output_reference_pts: number;
+  source_reference_pts: number | null;
+  output_reference_pts: number | null;
 }
 
 const WEB_FRIENDLY_AUDIO_CODECS = new Set([
@@ -142,6 +142,53 @@ export class HtmlVideoEngine implements PlayerEngine {
   private outputReferencePTS: number = 0;
   private timelineOffset: number = 0;
   private targetMediaTime: number = 0;
+  private usesRemuxClock: boolean = false;
+  private timingGeneration: number = -1;
+  private freezeCanvas: HTMLCanvasElement | null = null;
+
+  private captureFreezeFrame(): void {
+    const v = this.video;
+    if (!v || v.readyState < 2 || !v.videoWidth || !v.videoHeight) return;
+
+    try {
+      if (!this.freezeCanvas) {
+        this.freezeCanvas = document.createElement("canvas");
+        this.freezeCanvas.className = "player-freeze-frame";
+        this.freezeCanvas.style.display = "none";
+      }
+
+      if (v.parentElement && !v.parentElement.contains(this.freezeCanvas)) {
+        v.parentElement.insertBefore(this.freezeCanvas, v.nextSibling);
+      }
+
+      const canvas = this.freezeCanvas;
+      canvas.width = v.videoWidth;
+      canvas.height = v.videoHeight;
+      if (v.classList.contains("cropped")) {
+        canvas.classList.add("cropped");
+      } else {
+        canvas.classList.remove("cropped");
+      }
+      canvas.style.transform = v.style.transform || "";
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+        canvas.style.display = "block";
+      }
+    } catch (e) {
+      console.warn("[HtmlVideoEngine] Failed to capture freeze frame:", e);
+    }
+  }
+
+  private releaseFreezeFrame(): void {
+    if (this.freezeCanvas && this.freezeCanvas.style.display !== "none") {
+      requestAnimationFrame(() => {
+        if (this.freezeCanvas) {
+          this.freezeCanvas.style.display = "none";
+        }
+      });
+    }
+  }
 
   constructor(videoElement: HTMLVideoElement) {
     this.video = videoElement;
@@ -210,31 +257,49 @@ export class HtmlVideoEngine implements PlayerEngine {
     }
   }
 
-  private applyStreamInfo(info: RemuxStreamInfo): void {
+  private applyStreamInfo(info: RemuxStreamInfo): boolean {
     const { session_id, generation, requested_start, source_reference_pts, output_reference_pts } = info;
-    if (session_id && session_id !== this.sessionId) return;
+    if (session_id && session_id !== this.sessionId) return false;
     if (generation !== undefined && generation !== this.streamGeneration) {
       console.log(
         `[HtmlVideoEngine] Discarding stale stream info: gen=${generation}, currentGen=${this.streamGeneration}`,
       );
-      return;
+      return false;
     }
-    if (Math.abs(requested_start - this.requestedStartTime) > 0.5) return;
+    if (Math.abs(requested_start - this.requestedStartTime) > 0.5) return false;
+    if (
+      source_reference_pts === null ||
+      output_reference_pts === null ||
+      !Number.isFinite(source_reference_pts) ||
+      !Number.isFinite(output_reference_pts)
+    ) {
+      return false;
+    }
 
     this.sourceReferencePTS = source_reference_pts;
     this.outputReferencePTS = output_reference_pts;
     this.timelineOffset = source_reference_pts - output_reference_pts;
     this.targetMediaTime = output_reference_pts + (requested_start - source_reference_pts);
     this.virtualTimeOffset = this.timelineOffset;
+    this.timingGeneration = generation;
     this.updateJassubTimeOffset();
 
     console.log(
       `[HtmlVideoEngine] Stream timing aligned (gen ${generation}): req=${requested_start.toFixed(3)}s, srcPTS=${source_reference_pts.toFixed(3)}s, outPTS=${output_reference_pts.toFixed(3)}s, offset=${this.timelineOffset.toFixed(3)}s, targetMediaTime=${this.targetMediaTime.toFixed(3)}s`,
     );
+    return true;
   }
 
   public get state(): PlayerEngineState {
     return this._state;
+  }
+
+  public get source(): string {
+    return this.currentSource;
+  }
+
+  public get headers(): Record<string, string> {
+    return this.currentHeaders;
   }
 
   public get selectedSubtitle(): number | "off" {
@@ -277,7 +342,7 @@ export class HtmlVideoEngine implements PlayerEngine {
 
   private updateJassubTimeOffset(): void {
     if (this.jassub) {
-      const baseOffset = this.playbackMode === "direct" ? 0 : this.timelineOffset;
+      const baseOffset = this.usesRemuxClock ? this.timelineOffset : 0;
       const delayOffset = -(this.subtitleDelay / 1000);
       this.jassub.setTimeOffset(baseOffset + delayOffset);
     }
@@ -291,7 +356,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("pause", () => {
-      this.updateState({ isPaused: true, isBuffering: false });
+      this.updateState({ isPaused: true, isBuffering: this.isSeeking });
       if (this.jassub) {
         this.jassub.renderFrame(v.currentTime);
       }
@@ -310,9 +375,7 @@ export class HtmlVideoEngine implements PlayerEngine {
         return;
       }
       const actualTime =
-        this.playbackMode === "direct"
-          ? v.currentTime
-          : this.timelineOffset + v.currentTime;
+        this.usesRemuxClock ? this.timelineOffset + v.currentTime : v.currentTime;
       this.updateState({
         currentTime: actualTime,
         duration: this.probedDuration || v.duration || 0,
@@ -336,6 +399,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("playing", () => {
+      this.releaseFreezeFrame();
       finishSeeking();
       this.updateState({ isBuffering: false, isPaused: false });
       if (this.jassub) {
@@ -345,8 +409,11 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("canplay", () => {
-      finishSeeking();
-      this.updateState({ isBuffering: false });
+      this.releaseFreezeFrame();
+      if (v.paused) {
+        finishSeeking();
+        this.updateState({ isBuffering: false });
+      }
       if (this.jassub) {
         this.jassub.setBuffering(false);
         this.jassub.resize();
@@ -354,13 +421,16 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("canplaythrough", () => {
-      this.updateState({ isBuffering: false });
+      if (v.paused) {
+        this.updateState({ isBuffering: false });
+      }
       if (this.jassub) {
         this.jassub.setBuffering(false);
       }
     });
 
     v.addEventListener("loadeddata", () => {
+      this.releaseFreezeFrame();
       this.updateState({ isBuffering: false });
       if (this.jassub) {
         this.jassub.resize();
@@ -460,6 +530,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("error", () => {
+      this.releaseFreezeFrame();
       const err = v.error;
       const msg = err ? `Video error code ${err.code}: ${err.message}` : "Playback error";
       console.warn("[HtmlVideoEngine] Video element error:", msg);
@@ -730,6 +801,11 @@ export class HtmlVideoEngine implements PlayerEngine {
       }
     } catch (err: any) {
       console.warn("[HtmlVideoEngine] Playback setup error:", err);
+      if (this.usesRemuxClock) {
+        const message = err?.message || "Failed to prepare remux stream";
+        this.updateState({ error: message, isBuffering: false, isPaused: true });
+        throw err;
+      }
       this.video.src = source;
       this.video.load();
       if (options?.autoPlay !== false) {
@@ -853,17 +929,53 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
   }
 
+  private async waitForVerifiedStreamTiming(
+    port: number,
+    sessionId: string,
+    generation: number,
+  ): Promise<void> {
+    const deadline = Date.now() + 8000;
+    while (!this.isDestroyed && this.streamGeneration === generation && Date.now() < deadline) {
+      if (this.timingGeneration === generation) return;
+      try {
+        const response = await fetch(
+          `http://127.0.0.1:${port}/remux/info?session_id=${encodeURIComponent(sessionId)}&generation=${generation}`,
+          { cache: "no-store" },
+        );
+        if (response.ok) {
+          const info = (await response.json()) as RemuxStreamInfo;
+          if (this.applyStreamInfo(info)) return;
+        }
+      } catch {
+        // The stream request may not have reached the server yet.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 75));
+    }
+    if (this.streamGeneration !== generation || this.isDestroyed) {
+      throw new Error("Stream restart was superseded");
+    }
+    throw new Error("FFmpeg did not provide verified seek timing");
+  }
+
   private async startStream(startTime: number): Promise<void> {
     this.streamGeneration++;
     const gen = this.streamGeneration;
+    const oldSessionId = this.sessionId;
+    this.sessionId = `stream-${Date.now()}-${gen}-${Math.floor(Math.random() * 10000)}`;
+    const streamSessionId = this.sessionId;
     this.requestedStartTime = startTime;
-    this.sourceReferencePTS = startTime;
-    this.outputReferencePTS = 0;
+    this.sourceReferencePTS = Number.NaN;
+    this.outputReferencePTS = Number.NaN;
     this.timelineOffset = startTime;
     this.targetMediaTime = 0;
-    this.virtualTimeOffset = startTime;
+    this.timingGeneration = -1;
     this.updateJassubTimeOffset();
+
     const port = await this.getProxyPort();
+    if (oldSessionId) {
+      fetch(`http://127.0.0.1:${port}/remux/cancel?session_id=${encodeURIComponent(oldSessionId)}`).catch(() => {});
+    }
+
     const isLocal =
       !this.currentSource.startsWith("http://") &&
       !this.currentSource.startsWith("https://") &&
@@ -874,6 +986,8 @@ export class HtmlVideoEngine implements PlayerEngine {
 
     if (this.playbackMode === "direct" && this.audioDelay === 0) {
       if (isLocal) {
+        this.usesRemuxClock = false;
+        this.captureFreezeFrame();
         this.video.src = `http://127.0.0.1:${port}/file?path=${encodeURIComponent(this.currentSource)}`;
         if (startTime > 0) {
           this.video.currentTime = startTime;
@@ -881,6 +995,8 @@ export class HtmlVideoEngine implements PlayerEngine {
         this.video.load();
         return;
       } else if (!hasHeaders) {
+        this.usesRemuxClock = false;
+        this.captureFreezeFrame();
         this.video.src = this.currentSource;
         if (startTime > 0) {
           this.video.currentTime = startTime;
@@ -891,10 +1007,12 @@ export class HtmlVideoEngine implements PlayerEngine {
       // If direct mode has custom headers, route through remux proxy which injects headers!
     }
 
+    this.usesRemuxClock = true;
+
     const params = new URLSearchParams();
     params.set("url", this.currentSource);
     params.set("mode", this.playbackMode === "direct" ? "remux" : this.playbackMode);
-    params.set("session_id", this.sessionId);
+    params.set("session_id", streamSessionId);
     params.set("generation", String(this.streamGeneration));
 
     if (startTime > 0) {
@@ -930,43 +1048,29 @@ export class HtmlVideoEngine implements PlayerEngine {
       params.set("origin", this.currentHeaders.Origin);
     }
 
+    this.captureFreezeFrame();
     const streamUrl = `http://127.0.0.1:${port}/remux?${params.toString()}`;
     this.video.src = streamUrl;
+    this.video.preload = "auto";
     this.video.load();
-
-    if (startTime > 0.05 && this.playbackMode !== "direct") {
-      let attempts = 0;
-      const maxAttempts = 30;
-      const checkAndAdvance = () => {
-        if (this.isDestroyed || this.streamGeneration !== gen) return;
-        attempts++;
-        const v = this.video;
-        const target = this.targetMediaTime;
-        if (target > 0.05 && v.seekable && v.seekable.length > 0 && target <= v.seekable.end(0)) {
-          console.log(`[HtmlVideoEngine] Advancing preroll to targetMediaTime=${target.toFixed(3)}s`);
-          v.currentTime = target;
-          this.isSeeking = false;
-          return;
-        }
-        if (attempts >= maxAttempts) {
-          this.isSeeking = false;
-          return;
-        }
-        setTimeout(checkAndAdvance, 100);
-      };
-      this.video.addEventListener("loadeddata", () => {
-        if (this.streamGeneration !== gen) return;
-        checkAndAdvance();
-      }, { once: true });
-    }
+    await this.waitForVerifiedStreamTiming(port, streamSessionId, gen);
   }
 
   public async play(): Promise<void> {
-    return this.video.play();
+    this.updateState({ isPaused: false });
+    try {
+      await this.video.play();
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        console.warn("[HtmlVideoEngine] video.play() rejected:", err);
+        this.updateState({ isPaused: true, isBuffering: false });
+      }
+    }
   }
 
   public pause(): void {
     this.video.pause();
+    this.updateState({ isPaused: true, isBuffering: false });
   }
 
   public async seek(time: number): Promise<void> {
@@ -979,21 +1083,34 @@ export class HtmlVideoEngine implements PlayerEngine {
     this.seekSafetyTimer = setTimeout(() => {
       this.isSeeking = false;
       this.seekSafetyTimer = null;
-    }, 1500);
+      this.updateState({ isBuffering: false });
+    }, this.usesRemuxClock ? 8000 : 1500);
 
-    if (this.hlsInstance || this.playbackMode === "direct") {
+    if (this.hlsInstance || (this.playbackMode === "direct" && !this.usesRemuxClock)) {
       this.video.currentTime = clamped;
       this.updateState({ currentTime: clamped, isBuffering: true });
       return;
     }
 
+    const wasPlaying = !this.video.paused && !this.state.isPaused;
     this.updateState({ currentTime: clamped, isBuffering: true });
 
-    const wasPlaying = !this.video.paused || !this.state.isPaused;
-    await this.startStream(clamped);
+    try {
+      await this.startStream(clamped);
+    } catch (e) {
+      console.error("[HtmlVideoEngine] Seek startStream error:", e);
+    }
+
+    if (this.seekSafetyTimer) {
+      clearTimeout(this.seekSafetyTimer);
+      this.seekSafetyTimer = null;
+    }
+    this.isSeeking = false;
 
     if (wasPlaying) {
-      await this.video.play().catch(() => { });
+      await this.play().catch(() => { });
+    } else {
+      this.updateState({ isBuffering: false, isPaused: true, currentTime: clamped });
     }
   }
 
@@ -1376,6 +1493,11 @@ export class HtmlVideoEngine implements PlayerEngine {
     if (this.jassub) {
       this.jassub.destroy();
       this.jassub = null;
+    }
+
+    if (this.freezeCanvas) {
+      this.freezeCanvas.remove();
+      this.freezeCanvas = null;
     }
 
     this.video.pause();

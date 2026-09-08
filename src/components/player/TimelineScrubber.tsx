@@ -115,8 +115,10 @@ export const TimelineScrubber: React.FC<TimelineScrubberProps> = ({
             }}
           >
             <div className="timeline-preview-frame">
-              {timelinePreview.image && (
+              {timelinePreview.image ? (
                 <img src={timelinePreview.image} alt="" draggable={false} />
+              ) : (
+                <div className="timeline-preview-skeleton" />
               )}
             </div>
             <span>{formatTime(timelinePreview.time)}</span>

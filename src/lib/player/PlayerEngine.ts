@@ -48,6 +48,8 @@ export interface PlayerEngineOptions {
 
 export interface PlayerEngine {
   readonly state: PlayerEngineState;
+  readonly source?: string;
+  readonly headers?: Record<string, string>;
   subscribe(listener: (state: PlayerEngineState) => void): () => void;
   load(source: string, options?: PlayerEngineOptions): Promise<void>;
   play(): Promise<void>;

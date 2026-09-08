@@ -175,11 +175,6 @@ async fn generate_video_thumbnail(
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     tauri::async_runtime::spawn_blocking(move || {
         use base64::Engine;
-        use tauri_plugin_libmpv::MpvExt;
-
-        let _generation_guard = THUMBNAIL_GENERATION_LOCK
-            .lock()
-            .map_err(|_| "Thumbnail generator is unavailable".to_string())?;
 
         let safe_timestamp = if timestamp.is_finite() {
             timestamp.max(0.0)
@@ -221,107 +216,206 @@ async fn generate_video_thumbnail(
             return encode_file(&cache_file);
         }
 
-        let output_dir = cache_dir.join(format!("work-{cache_key}"));
-        if output_dir.exists() {
-            let _ = std::fs::remove_dir_all(&output_dir);
+        let _generation_guard = THUMBNAIL_GENERATION_LOCK
+            .lock()
+            .map_err(|_| "Thumbnail generator is unavailable".to_string())?;
+
+        if cache_file
+            .metadata()
+            .map(|meta| meta.len() > 0)
+            .unwrap_or(false)
+        {
+            return encode_file(&cache_file);
         }
-        std::fs::create_dir_all(&output_dir).map_err(|error| error.to_string())?;
 
-        let instance_label = format!("thumbnail-{cache_key}");
-        let mut initial_options = serde_json::Map::new();
-        initial_options.insert("wid".into(), serde_json::json!(0));
-        initial_options.insert("idle".into(), serde_json::json!("yes"));
-        initial_options.insert("audio".into(), serde_json::json!("no"));
-        initial_options.insert("sub".into(), serde_json::json!("no"));
-        initial_options.insert("osd-level".into(), serde_json::json!("0"));
-        initial_options.insert("really-quiet".into(), serde_json::json!("yes"));
-        initial_options.insert("vo".into(), serde_json::json!("image"));
-        initial_options.insert("vo-image-format".into(), serde_json::json!("jpg"));
-        initial_options.insert("vo-image-jpeg-quality".into(), serde_json::json!("72"));
-        initial_options.insert("vf".into(), serde_json::json!("scale=320:-2"));
-        initial_options.insert(
-            "vo-image-outdir".into(),
-            serde_json::json!(output_dir.to_string_lossy().to_string()),
-        );
-        initial_options.insert("frames".into(), serde_json::json!("1"));
-        initial_options.insert(
-            "start".into(),
-            serde_json::json!(format!("{safe_timestamp:.3}")),
-        );
+        let clean_source = ffmpeg_resolver::clean_source(&source);
 
-        if let Some(values) = headers.as_ref() {
-            let mut header_fields = Vec::new();
-            for (name, value) in values {
-                match name.to_ascii_lowercase().as_str() {
-                    "user-agent" => {
-                        initial_options.insert("user-agent".into(), serde_json::json!(value));
-                    }
-                    "referer" | "referrer" => {
-                        initial_options.insert("referrer".into(), serde_json::json!(value));
-                    }
-                    _ => {}
+        let ffmpeg_path = ffmpeg_resolver::get_ffmpeg_path()?;
+        let temp_file = cache_dir.join(format!("tmp-{cache_key}-{}.jpg", std::process::id()));
+        if temp_file.exists() {
+            let _ = std::fs::remove_file(&temp_file);
+        }
+
+        let is_network = clean_source.starts_with("http://") || clean_source.starts_with("https://");
+        let mut cmd = std::process::Command::new(&ffmpeg_path);
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000);
+        }
+
+        if let Some(parent) = ffmpeg_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            cmd.current_dir(parent);
+            ffmpeg_resolver::prepend_to_path_env(&mut cmd, parent);
+        }
+
+        cmd.arg("-v").arg("error");
+        cmd.arg("-nostdin");
+
+        if is_network {
+            cmd.arg("-reconnect")
+                .arg("1")
+                .arg("-reconnect_at_eof")
+                .arg("1")
+                .arg("-reconnect_streamed")
+                .arg("1")
+                .arg("-reconnect_delay_max")
+                .arg("5");
+            cmd.arg("-rw_timeout").arg("5000000");
+        }
+
+        cmd.arg("-analyzeduration").arg("3000000");
+        cmd.arg("-probesize").arg("3000000");
+
+        if let Some(ref h) = headers {
+            let mut lines = Vec::new();
+            for (k, v) in h {
+                if !k.is_empty() && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+                    let sanitized = v.replace('\r', "").replace('\n', "");
+                    lines.push(format!("{}: {}", k, sanitized));
                 }
-                header_fields.push(format!("{name}: {value}"));
             }
-            if !header_fields.is_empty() {
-                initial_options.insert(
-                    "http-header-fields".into(),
-                    serde_json::json!(header_fields.join(",")),
-                );
+            if !lines.is_empty() {
+                lines.push(String::new());
+                cmd.arg("-headers").arg(lines.join("\r\n"));
             }
         }
 
-        let config: tauri_plugin_libmpv::MpvConfig = serde_json::from_value(serde_json::json!({
-            "initialOptions": initial_options,
-            "observedProperties": {}
-        }))
-        .map_err(|error| error.to_string())?;
+        cmd.arg("-ss").arg(format!("{safe_timestamp:.3}"));
+        cmd.arg("-i").arg(&clean_source);
+        cmd.arg("-frames:v").arg("1");
+        cmd.arg("-an");
+        cmd.arg("-sn");
+        cmd.arg("-vf").arg("scale=320:-2");
+        cmd.arg("-q:v").arg("3");
+        cmd.arg("-f").arg("image2");
+        cmd.arg("-update").arg("1");
+        cmd.arg("-y").arg(&temp_file);
 
-        app.mpv()
-            .init(config, &instance_label)
-            .map_err(|error| format!("Failed to start thumbnail decoder: {error}"))?;
-        let load_result = app.mpv().command(
-            "loadfile",
-            &vec![serde_json::json!(source), serde_json::json!("replace")],
-            &instance_label,
-        );
-        if let Err(error) = load_result {
-            let _ = app.mpv().destroy(&instance_label);
-            let _ = std::fs::remove_dir_all(&output_dir);
-            return Err(format!("Failed to decode thumbnail: {error}"));
+        let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn ffmpeg: {e}"))?;
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(6);
+        let mut finished = false;
+        while start.elapsed() < timeout {
+            match child.try_wait() {
+                Ok(Some(s)) => {
+                    finished = s.success();
+                    break;
+                }
+                Ok(None) => {
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                }
+                Err(e) => {
+                    let _ = child.kill();
+                    return Err(format!("Error waiting for ffmpeg: {e}"));
+                }
+            }
         }
 
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        let mut generated_file = None;
-        while std::time::Instant::now() < deadline {
-            if let Ok(entries) = std::fs::read_dir(&output_dir) {
-                generated_file = entries
-                    .filter_map(Result::ok)
-                    .map(|entry| entry.path())
-                    .find(|path| {
-                        path.extension()
-                            .and_then(|value| value.to_str())
-                            .map(|value| value.eq_ignore_ascii_case("jpg"))
-                            .unwrap_or(false)
-                            && path.metadata().map(|meta| meta.len() > 0).unwrap_or(false)
-                    });
-            }
-            if generated_file.is_some() {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(40));
-        }
-        let _ = app.mpv().destroy(&instance_label);
+        if !finished {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = std::fs::remove_file(&temp_file);
 
-        let generated_file = generated_file.ok_or_else(|| {
-            let _ = std::fs::remove_dir_all(&output_dir);
-            "MPV did not produce a thumbnail in time".to_string()
-        })?;
-        std::thread::sleep(std::time::Duration::from_millis(25));
-        std::fs::rename(&generated_file, &cache_file)
-            .or_else(|_| std::fs::copy(&generated_file, &cache_file).map(|_| ()))
-            .map_err(|error| error.to_string())?;
-        let _ = std::fs::remove_dir_all(&output_dir);
+            // Fallback: retry with output seeking in case container doesn't support fast input seek
+            let mut fallback_cmd = std::process::Command::new(&ffmpeg_path);
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+                fallback_cmd.creation_flags(0x08000000);
+            }
+            if let Some(parent) = ffmpeg_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+                fallback_cmd.current_dir(parent);
+                ffmpeg_resolver::prepend_to_path_env(&mut fallback_cmd, parent);
+            }
+            fallback_cmd.arg("-v").arg("error").arg("-nostdin");
+            if is_network {
+                fallback_cmd.arg("-reconnect").arg("1").arg("-reconnect_delay_max").arg("5");
+                fallback_cmd.arg("-rw_timeout").arg("5000000");
+            }
+            fallback_cmd.arg("-analyzeduration").arg("3000000");
+            fallback_cmd.arg("-probesize").arg("3000000");
+            if let Some(ref h) = headers {
+                let mut lines = Vec::new();
+                for (k, v) in h {
+                    if !k.is_empty() && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+                        let sanitized = v.replace('\r', "").replace('\n', "");
+                        lines.push(format!("{}: {}", k, sanitized));
+                    }
+                }
+                if !lines.is_empty() {
+                    lines.push(String::new());
+                    fallback_cmd.arg("-headers").arg(lines.join("\r\n"));
+                }
+            }
+            fallback_cmd.arg("-i").arg(&clean_source);
+            fallback_cmd.arg("-ss").arg(format!("{safe_timestamp:.3}"));
+            fallback_cmd.arg("-frames:v").arg("1");
+            fallback_cmd.arg("-an").arg("-sn");
+            fallback_cmd.arg("-vf").arg("scale=320:-2");
+            fallback_cmd.arg("-q:v").arg("3");
+            fallback_cmd.arg("-f").arg("image2");
+            fallback_cmd.arg("-update").arg("1");
+            fallback_cmd.arg("-y").arg(&temp_file);
+
+            if let Ok(mut fb_child) = fallback_cmd.spawn() {
+                let fb_start = std::time::Instant::now();
+                let fb_timeout = std::time::Duration::from_secs(6);
+                while fb_start.elapsed() < fb_timeout {
+                    match fb_child.try_wait() {
+                        Ok(Some(s)) => {
+                            finished = s.success();
+                            break;
+                        }
+                        Ok(None) => std::thread::sleep(std::time::Duration::from_millis(25)),
+                        Err(_) => {
+                            let _ = fb_child.kill();
+                            break;
+                        }
+                    }
+                }
+                if !finished {
+                    let _ = fb_child.kill();
+                    let _ = fb_child.wait();
+                }
+            }
+        }
+
+        if (!temp_file.exists() || temp_file.metadata().map(|m| m.len() == 0).unwrap_or(true)) && safe_timestamp > 2.0 {
+            let mut start_cmd = std::process::Command::new(&ffmpeg_path);
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+                start_cmd.creation_flags(0x08000000);
+            }
+            if let Some(parent) = ffmpeg_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+                start_cmd.current_dir(parent);
+                ffmpeg_resolver::prepend_to_path_env(&mut start_cmd, parent);
+            }
+            start_cmd.arg("-v").arg("error").arg("-nostdin");
+            start_cmd.arg("-ss").arg("1.000");
+            start_cmd.arg("-i").arg(&clean_source);
+            start_cmd.arg("-frames:v").arg("1");
+            start_cmd.arg("-an").arg("-sn");
+            start_cmd.arg("-vf").arg("scale=320:-2");
+            start_cmd.arg("-q:v").arg("3");
+            start_cmd.arg("-f").arg("image2");
+            start_cmd.arg("-update").arg("1");
+            start_cmd.arg("-y").arg(&temp_file);
+            if let Ok(mut c) = start_cmd.spawn() {
+                let _ = c.wait();
+            }
+        }
+
+        if !temp_file.exists() || temp_file.metadata().map(|m| m.len() == 0).unwrap_or(true) {
+            let _ = std::fs::remove_file(&temp_file);
+            return Err("FFmpeg did not produce a valid thumbnail".to_string());
+        }
+
+        let _ = std::fs::rename(&temp_file, &cache_file)
+            .or_else(|_| std::fs::copy(&temp_file, &cache_file).map(|_| ()));
+        let _ = std::fs::remove_file(&temp_file);
 
         // Keep the persistent preview cache bounded.
         if let Ok(entries) = std::fs::read_dir(&cache_dir) {

@@ -56,6 +56,11 @@ export function usePlayerEngine(
     localBaseDir?: string;
   } | null>(null);
 
+  const thumbnailSourceRef = useRef<{
+    source: string;
+    headers?: Record<string, string>;
+  } | null>(null);
+
   const resolveVideoElement = useCallback((): HTMLVideoElement | null => {
     if (videoNode) return videoNode;
     if (videoRef && typeof videoRef === "object" && "current" in videoRef) {
@@ -109,6 +114,10 @@ export function usePlayerEngine(
       if (pendingLoadRef.current) {
         const pending = pendingLoadRef.current;
         pendingLoadRef.current = null;
+        thumbnailSourceRef.current = {
+          source: pending.source,
+          headers: pending.headers,
+        };
         lastReportedErrorRef.current = null;
         console.log("[usePlayerEngine] Executing queued load for:", pending.source);
         engine
@@ -161,6 +170,7 @@ export function usePlayerEngine(
       streamType?: string,
       localBaseDir?: string,
     ) => {
+      thumbnailSourceRef.current = { source, headers };
       let engine = engineRef.current;
       if (!engine) {
         const el = resolveVideoElement();
@@ -197,21 +207,23 @@ export function usePlayerEngine(
 
   const togglePause = useCallback(async () => {
     if (!engineRef.current) return;
-    if (engineState.isPaused) {
+    const currentState = engineRef.current.state;
+    if (currentState.isPaused) {
       await engineRef.current.play();
     } else {
       engineRef.current.pause();
     }
-  }, [engineState.isPaused]);
+  }, []);
 
   const seek = useCallback(
     async (time: number, mode?: "absolute" | "relative") => {
       if (!engineRef.current) return;
+      const currentState = engineRef.current.state;
       const target =
-        mode === "relative" ? Math.max(0, engineState.currentTime + time) : time;
+        mode === "relative" ? Math.max(0, currentState.currentTime + time) : time;
       await engineRef.current.seek(target);
     },
-    [engineState.currentTime],
+    [],
   );
 
   const setVolumeLevel = useCallback(async (volume: number) => {
@@ -256,15 +268,25 @@ export function usePlayerEngine(
 
   const requestThumbnail = useCallback(
     async (time: number, sourceUrl?: string, headers?: Record<string, string>) => {
-      if (!sourceUrl) return null;
+      const activeSource =
+        sourceUrl ||
+        thumbnailSourceRef.current?.source ||
+        engineRef.current?.source;
+      const activeHeaders =
+        headers ||
+        thumbnailSourceRef.current?.headers ||
+        engineRef.current?.headers;
+
+      if (!activeSource || !Number.isFinite(time)) return null;
       try {
         const result = await invoke<string>("generate_video_thumbnail", {
-          source: sourceUrl,
-          timestamp: time,
-          headers,
+          source: activeSource,
+          timestamp: Math.max(0, time),
+          headers: activeHeaders || null,
         });
         return result;
-      } catch {
+      } catch (e) {
+        console.debug("Thumbnail preview unavailable:", e);
         return null;
       }
     },

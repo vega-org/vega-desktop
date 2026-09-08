@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   LuCircleAlert as AlertCircle,
   LuClock3 as Clock,
@@ -18,6 +18,7 @@ import {
   type DownloadItem,
   useDownloadStore,
 } from "../lib/zustand/downloadStore";
+import { getDownloadedVideoThumbnail } from "../lib/downloadThumbnailCache";
 import { syncFromSharedFolder } from "../lib/sync/syncService";
 import "./DownloadsPage.css";
 
@@ -415,6 +416,19 @@ const DownloadedLibraryCard: React.FC<{
     },
   });
 
+  const [extractedThumb, setExtractedThumb] = useState<string | null>(null);
+  const firstVideoPath = group.items[0]?.filePath;
+
+  useEffect(() => {
+    if (!group.poster && firstVideoPath) {
+      void getDownloadedVideoThumbnail(firstVideoPath).then((thumb) => {
+        if (thumb) setExtractedThumb(thumb);
+      });
+    }
+  }, [group.poster, firstVideoPath]);
+
+  const displayPoster = group.poster || extractedThumb;
+
   return (
     <article
       className={`download-library-card ${cardFocused ? "is-focused" : ""} ${deleteFocused ? "is-child-focused" : ""}`}
@@ -422,7 +436,7 @@ const DownloadedLibraryCard: React.FC<{
       <div
         ref={cardRef as any}
         className={`download-library-poster ${cardFocused ? "tv-focus" : ""} ${deleteFocused ? "child-focused" : ""}`}
-        style={{ backgroundImage: group.poster ? `url(${group.poster})` : undefined }}
+        style={{ backgroundImage: displayPoster ? `url(${displayPoster})` : undefined }}
         onClick={onOpen}
         onKeyDown={(e) => {
           if (
@@ -440,7 +454,7 @@ const DownloadedLibraryCard: React.FC<{
         aria-label={`Play or open ${group.showName}`}
         tabIndex={tvMode ? -1 : 0}
       >
-        {!group.poster && <Download size={30} />}
+        {!displayPoster && <Download size={30} />}
         <span className="download-library-play" aria-hidden="true">
           <Play size={22} fill="currentColor" />
         </span>
