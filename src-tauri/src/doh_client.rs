@@ -6,7 +6,9 @@ use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, net::SocketAddr, str::FromStr, sync::Arc};
 use tokio::sync::RwLock;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use wreq::{dns::Resolve, redirect::Policy, Client, Method};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use wreq_util::Emulation;
 
 #[derive(Clone)]
@@ -60,6 +62,7 @@ impl CustomDnsResolver {
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl Resolve for CustomDnsResolver {
     fn resolve(&self, name: wreq::dns::Name) -> wreq::dns::Resolving {
         let resolver = self.resolver.clone();
@@ -113,10 +116,12 @@ impl Resolve for CustomDnsResolver {
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static! {
     static ref CLIENT_CACHE: RwLock<HashMap<String, Client>> = RwLock::new(HashMap::new());
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn get_client(provider: &str, custom_url: Option<String>) -> Result<Client, String> {
     let key = format!("{}_{}", provider, custom_url.clone().unwrap_or_default());
 
@@ -188,6 +193,7 @@ pub struct FetchResponse {
     data: Vec<u8>,
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
     let has_cookie = args
@@ -241,6 +247,107 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
     let response_url = response.url().to_string();
     println!(
         "[doh_fetch] response: {} {} for {}",
+        status, status_text, args.url
+    );
+
+    let mut headers = Vec::new();
+    for (k, v) in response.headers() {
+        if let Ok(val) = v.to_str() {
+            headers.push((k.as_str().to_string(), val.to_string()));
+        }
+    }
+
+    let data = response.bytes().await.map_err(|e| e.to_string())?.to_vec();
+
+    Ok(FetchResponse {
+        status,
+        status_text,
+        url: response_url,
+        headers,
+        data,
+    })
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
+    let has_cookie = args
+        .headers
+        .keys()
+        .any(|k| k.eq_ignore_ascii_case("cookie"));
+    println!(
+        "[doh_fetch] (mobile) {} {} | has_cookie: {}",
+        args.method, args.url, has_cookie
+    );
+
+    let parsed_url = url::Url::parse(&args.url).map_err(|e| e.to_string())?;
+    let host_str = parsed_url.host_str().unwrap_or("").to_string();
+
+    let mut builder = reqwest::Client::builder()
+        .cookie_store(true);
+
+    if let Some(max_redirects) = args.max_redirects {
+        if max_redirects == 0 {
+            builder = builder.redirect(reqwest::redirect::Policy::none());
+        } else {
+            builder = builder.redirect(reqwest::redirect::Policy::limited(max_redirects));
+        }
+    }
+
+    if !args.doh_provider.eq_ignore_ascii_case("system")
+        && !args.doh_provider.eq_ignore_ascii_case("none")
+        && !host_str.is_empty()
+        && host_str.parse::<std::net::IpAddr>().is_err()
+        && !host_str.eq_ignore_ascii_case("localhost")
+    {
+        let resolver = CustomDnsResolver::new(&args.doh_provider, args.doh_custom_url.clone());
+        if let Ok(response) = resolver.resolver.lookup_ip(&host_str).await {
+            let port = parsed_url.port_or_known_default().unwrap_or(443);
+            let addrs: Vec<SocketAddr> = response
+                .into_iter()
+                .map(|ip| SocketAddr::new(ip, port))
+                .collect();
+            if !addrs.is_empty() {
+                builder = builder.resolve_to_addrs(&host_str, &addrs);
+            }
+        }
+    }
+
+    let client = builder
+        .build()
+        .map_err(|e| format!("Failed to build reqwest client: {:#?}", e))?;
+
+    let method = reqwest::Method::from_bytes(args.method.as_bytes()).unwrap_or(reqwest::Method::GET);
+    let mut request = client.request(method, &args.url);
+
+    for (k, v) in &args.headers {
+        if k.eq_ignore_ascii_case("accept-encoding") {
+            continue;
+        }
+        request = request.header(k, v);
+    }
+
+    if let Some(body) = args.body {
+        request = match body {
+            FetchBody::Text(text) => request.body(text),
+            FetchBody::Bytes(bytes) => request.body(bytes),
+        };
+    }
+
+    let response = request.send().await.map_err(|e| {
+        eprintln!("[doh_fetch] (mobile) request error for {}: {:#?}", args.url, e);
+        format!("{:#?}", e)
+    })?;
+
+    let status = response.status().as_u16();
+    let status_text = response
+        .status()
+        .canonical_reason()
+        .unwrap_or("")
+        .to_string();
+    let response_url = response.url().to_string();
+    println!(
+        "[doh_fetch] (mobile) response: {} {} for {}",
         status, status_text, args.url
     );
 

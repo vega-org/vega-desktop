@@ -43,6 +43,12 @@ body.player-controls-hidden .window-titlebar-overlay {
   transition: color 120ms ease, background-color 120ms ease;
 }
 
+.window-control:focus,
+.window-control:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .window-control:hover {
   color: var(--on-surface);
   background: color-mix(in srgb, var(--on-surface) 10%, transparent);

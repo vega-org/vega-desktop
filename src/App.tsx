@@ -20,7 +20,11 @@ import { WatchlistPage } from "./pages/WatchlistPage";
 import { CatalogPage } from "./pages/CatalogPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { updateProvidersService } from "./lib/services/UpdateProviders";
-import { init as initNavigation } from "@noriginmedia/norigin-spatial-navigation-core";
+import {
+  init as initNavigation,
+  setFocus,
+  doesFocusableExist,
+} from "@noriginmedia/norigin-spatial-navigation-core";
 import { invoke } from "@tauri-apps/api/core";
 import {
   initializeSyncService,
@@ -30,15 +34,17 @@ import {
 
 import { applyThemeTokens } from "./lib/theme";
 import { ToastContainer } from "./components/ui/ToastContainer";
+import { useGamepadNavigation } from "./lib/hooks/useGamepadNavigation";
+import { ModalFocusProvider } from "./lib/context/ModalFocusContext";
 
 let isNavInitialized = false;
 
 export default function App() {
   initDownloadListeners();
   useAppUpdater();
+  useGamepadNavigation();
 
   const { primary } = useThemeStore();
-  const tvMode = settingsStorage.isTvModeEnabled();
 
   useEffect(() => {
     initializeSyncService().catch((error) =>
@@ -70,15 +76,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (tvMode && !isNavInitialized) {
+    if (!isNavInitialized) {
       initNavigation({
         debug: false,
         visualDebug: false,
         distanceCalculationMethod: "corners",
       });
       isNavInitialized = true;
+      (window as any).__setFocus = setFocus;
+      (window as any).__doesFocusableExist = doesFocusableExist;
     }
-  }, [tvMode]);
+  }, []);
 
   useEffect(() => {
     const handleDevtoolsShortcut = (event: KeyboardEvent) => {
@@ -110,34 +118,40 @@ export default function App() {
     applyThemeTokens(primary);
   }, [primary]);
 
+  const isAndroid =
+    typeof navigator !== "undefined" &&
+    navigator.userAgent.toLowerCase().includes("android");
+
   return (
-    <QueryClientProvider client={client}>
-      <WafDialog />
-      <ToastContainer />
-      <BrowserRouter>
-        <WindowControls />
-        <Routes>
-          {/* Player is outside Layout since it needs fullscreen without sidebar */}
-          <Route path="player" element={<PlayerPage />} />
-          <Route path="/" element={<Layout />}>
-            <Route index element={<HomePage />} />
-            <Route path="content/:url" element={<MetaPage />} />
-            <Route path="/catalog" element={<CatalogPage />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="/watchlist" element={<WatchlistPage />} />
-            <Route path="/watchlist/content/:url" element={<MetaPage />} />
-            <Route path="/downloads" element={<DownloadsPage />} />
-            <Route
-              path="/downloads/series/:showName"
-              element={<DownloadsSeriesPage />}
-            />
-            <Route path="extensions" element={<ExtensionsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ModalFocusProvider>
+      <QueryClientProvider client={client}>
+        <WafDialog />
+        <ToastContainer />
+        <BrowserRouter>
+          {!isAndroid && <WindowControls />}
+          <Routes>
+            {/* Player is outside Layout since it needs fullscreen without sidebar */}
+            <Route path="player" element={<PlayerPage />} />
+            <Route path="/" element={<Layout />}>
+              <Route index element={<HomePage />} />
+              <Route path="content/:url" element={<MetaPage />} />
+              <Route path="/catalog" element={<CatalogPage />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="/watchlist" element={<WatchlistPage />} />
+              <Route path="/watchlist/content/:url" element={<MetaPage />} />
+              <Route path="/downloads" element={<DownloadsPage />} />
+              <Route
+                path="/downloads/series/:showName"
+                element={<DownloadsSeriesPage />}
+              />
+              <Route path="extensions" element={<ExtensionsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ModalFocusProvider>
   );
 }

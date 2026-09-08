@@ -1,0 +1,34 @@
+# Tauri CLI watcher ignore file (.taurignore)
+# Prevents build artifacts and intermediate files from triggering infinite dev rebuild loops.
+
+# Gradle and CMake build directories
+**/build/**
+**/.gradle/**
+**/.cxx/**
+**/.tauri/**
+**/intermediates/**
+**/reports/**
+**/tmp/**
+**/logs/**
+**/*.timing.txt
+**/*.log
+
+# Cargo build targets
+**/target/**
+
+# Generated Android project files
+gen/**
+gen/android/**
+gen/android/build/**
+gen/android/.gradle/**
+gen/android/.cxx/**
+gen/android/app/build/**
+gen/android/app/src/main/jniLibs/**
+gen/android/app/src/main/assets/**
+
+# Plugin internal build artifacts
+plugins/**/build/**
+plugins/**/.gradle/**
+plugins/**/.cxx/**
+plugins/**/.tauri/**
+plugins/**/target/**

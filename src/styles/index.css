@@ -196,3 +196,25 @@ a {
   transform: none;
   box-shadow: none;
 }
+
+/* Focusable input wrapper reset */
+.focusable-input-wrapper {
+  position: relative;
+}
+
+.focusable-input-wrapper.tv-focus {
+  transform: none !important;
+}
+
+.focusable-input-wrapper input {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+.focusable-input-wrapper input:focus,
+.focusable-input-wrapper input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}

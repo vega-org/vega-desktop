@@ -63,6 +63,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
   const [initializationError, setInitializationError] = useState<string | null>(
     null,
   );
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -461,6 +462,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
       setChapters([]);
       thumbnailSourceRef.current = null;
       pendingSubsRef.current = subtitles || [];
+      setPlaybackError(null);
       try {
         let ua =
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -711,6 +713,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
         }
         if (String(err).includes("instance not found")) return;
         console.error("Failed to load file:", err);
+        setPlaybackError(err?.message || "Failed to load file");
         setIsBuffering(false);
       }
     },
@@ -867,6 +870,29 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     }
   }, [isInitialized]);
 
+  const [audioDelay, setAudioDelayState] = useState(0);
+  const [subtitleDelay, setSubtitleDelayState] = useState(0);
+
+  const setAudioDelay = useCallback(
+    async (delayMs: number) => {
+      setAudioDelayState(delayMs);
+      if (isInitialized) {
+        await setProperty("audio-delay", delayMs / 1000).catch(() => {});
+      }
+    },
+    [isInitialized],
+  );
+
+  const setSubtitleDelay = useCallback(
+    async (delayMs: number) => {
+      setSubtitleDelayState(delayMs);
+      if (isInitialized) {
+        await setProperty("sub-delay", delayMs / 1000).catch(() => {});
+      }
+    },
+    [isInitialized],
+  );
+
   useEffect(() => {
     return () => {
       unlistenPropsRef.current?.();
@@ -881,6 +907,8 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
   return {
     isInitialized,
     initializationError,
+    playbackError,
+    setPlaybackError,
     isPaused,
     currentTime,
     duration,
@@ -894,6 +922,10 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
     videoTracks,
     audioTracks,
     subtitleTracks,
+    audioDelay,
+    subtitleDelay,
+    setAudioDelay,
+    setSubtitleDelay,
     initPlayer,
     destroyPlayer,
     loadFile,

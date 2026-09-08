@@ -625,20 +625,36 @@
   background: var(--surface-container-highest);
 }
 
-.extension-dialog-input:focus-within,
-.extension-dialog-input.tv-focus {
+.extension-dialog-input:focus-within {
   border-color: var(--outline);
   color: var(--on-surface);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 28%, transparent);
 }
 
+.extension-dialog-input.tv-focus {
+  border-radius: 17px !important;
+  border-color: var(--primary);
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 15px var(--primary-container);
+  color: var(--on-surface);
+  transform: none !important;
+}
+
 .extension-dialog-input input {
   width: 100%;
   border: 0;
-  outline: 0;
+  outline: none;
   color: var(--on-surface);
   background: transparent;
   font: inherit;
+}
+
+.extension-dialog-input input:focus,
+.extension-dialog-input input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
 .extension-dialog-input input::placeholder {

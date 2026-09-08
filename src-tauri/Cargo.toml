@@ -25,13 +25,11 @@ serde_json = "1"
 tauri-plugin-http = { version = "2", default-features = false, features = ["unsafe-headers", "rustls-tls"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
-reqwest = { version = "0.12", features = ["stream", "rustls-tls", "json", "gzip", "brotli"], default-features = false }
-wreq = { version = "5", features = ["gzip", "brotli", "deflate", "zstd", "cookies"] }
-wreq-util = "2"
+reqwest = { version = "0.12", features = ["stream", "rustls-tls", "json", "gzip", "brotli", "cookies"], default-features = false }
 hickory-resolver = { version = "0.24", features = ["dns-over-https-rustls", "webpki-roots"] }
 lazy_static = "1.5"
 futures-util = "0.3"
-tokio = { version = "1", features = ["sync", "fs", "io-util", "time"] }
+tokio = { version = "1", features = ["sync", "fs", "io-util", "time", "process"] }
 tauri-plugin-store = "2"
 tauri-plugin-upload = "2.4.0"
 url = "2"
@@ -59,7 +57,11 @@ strip = true
 tauri-plugin-window-state = "2"
 tauri-plugin-libmpv = "0.3.2"
 tauri-plugin-updater = "2"
+wreq = { version = "5", features = ["gzip", "brotli", "deflate", "zstd", "cookies"] }
+wreq-util = "2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_UI_WindowsAndMessaging"] }
 libloading = "0.8"
+
+

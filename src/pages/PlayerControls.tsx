@@ -1,5 +1,9 @@
 import React, { useCallback, useRef, useState, useEffect } from "react";
 import {
+  useFocusable,
+  FocusContext,
+} from "@noriginmedia/norigin-spatial-navigation-react";
+import {
   LuArrowLeft as ArrowLeft,
   LuPlay as Play,
   LuPause as Pause,
@@ -11,19 +15,12 @@ import {
   LuGauge as Gauge,
   LuPictureInPicture as PictureInPicture,
   LuRectangleHorizontal as RectangleHorizontal,
-  LuCheck as Check,
   LuServer as ServerIcon,
   LuTv as Tv,
   LuAudioLines,
   LuList as ChaptersIcon,
-  LuKeyboard as Keyboard,
   LuX as X,
   LuEllipsisVertical as MoreVertical,
-  LuExternalLink as ExternalLink,
-  LuCopy as Copy,
-  LuZoomIn as ZoomIn,
-  LuPlus as Plus,
-  LuMinus as Minus,
 } from "react-icons/lu";
 import {
   MdVideoSettings,
@@ -39,6 +36,17 @@ import type { MpvChapter, MpvTrack } from "../lib/hooks/useMpvPlayer";
 import type { SkipInterval } from "../lib/providers/types";
 import { SearchSubtitlesModal } from "../components/SearchSubtitlesModal";
 import { settingsStorage } from "../lib/storage";
+import { FocusableButton } from "../components/layout/FocusableButton";
+import { ControlsFocusProvider } from "../lib/context/ControlsFocusContext";
+import { TimelineScrubber } from "../components/player/TimelineScrubber";
+import { AudioTrackMenu } from "../components/player/AudioTrackMenu";
+import { SubtitleTrackMenu } from "../components/player/SubtitleTrackMenu";
+import { ServerSelectMenu } from "../components/player/ServerSelectMenu";
+import { QualitySelectMenu } from "../components/player/QualitySelectMenu";
+import { SpeedSelectMenu } from "../components/player/SpeedSelectMenu";
+import { ChaptersMenu } from "../components/player/ChaptersMenu";
+import { MoreOptionsMenu } from "../components/player/MoreOptionsMenu";
+import { useDialogFocusBoundary } from "../lib/hooks/useDialogFocusBoundary";
 
 interface PlayerControlsProps {
   visible: boolean;
@@ -65,6 +73,10 @@ interface PlayerControlsProps {
   audioTracks: MpvTrack[];
   subtitleTracks: MpvTrack[];
   videoTracks?: MpvTrack[];
+  audioDelay?: number;
+  onAudioDelayChange?: (delayMs: number) => void;
+  subtitleDelay?: number;
+  onSubtitleDelayChange?: (delayMs: number) => void;
   chapters?: MpvChapter[];
   videoHeight?: number;
   playbackRate: number;
@@ -74,7 +86,7 @@ interface PlayerControlsProps {
   onSelectAudioTrack: (id: number | "no" | "auto") => void;
   onSelectSubtitleTrack: (id: number | "no" | "auto") => void;
   onSelectVideoTrack: (id: number | "no" | "auto") => void;
-  onAddSubtitleFile?: (path: string) => void;
+  onAddSubtitleFile?: (path: string, title?: string) => void;
   onPlaybackRateChange: (rate: number) => void;
   onTogglePip: () => void;
   isPip: boolean;
@@ -96,7 +108,7 @@ interface PlayerControlsProps {
   isTV?: boolean;
 }
 
-function getQualityInfo(h: number, fallbackStr: string) {
+export function getQualityInfo(h: number, fallbackStr: string) {
   if (h) {
     if (h >= 3000) return { text: "8K", Icon: Md8K };
     if (h >= 1500) return { text: "4K", Icon: Md4K };
@@ -124,7 +136,7 @@ function getQualityInfo(h: number, fallbackStr: string) {
   return { text: fallbackStr || "Auto", Icon: MdVideoSettings };
 }
 
-function formatTime(seconds: number): string {
+export function formatTime(seconds: number): string {
   if (!seconds || !isFinite(seconds)) return "0:00";
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -134,9 +146,7 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function stop(e: React.MouseEvent) {
-  e.stopPropagation();
-}
+const stop = (e: React.MouseEvent) => e.stopPropagation();
 
 export const PlayerControls: React.FC<PlayerControlsProps> = ({
   visible,
@@ -145,6 +155,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   currentTime,
   duration,
   cacheDuration,
+  skips,
   primaryTitle,
   secondaryTitle,
   nextEpisodeTitle,
@@ -159,6 +170,10 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   audioTracks,
   subtitleTracks,
   videoTracks = [],
+  audioDelay = 0,
+  onAudioDelayChange,
+  subtitleDelay = 0,
+  onSubtitleDelayChange,
   chapters = [],
   videoHeight = 0,
   playbackRate,
@@ -182,13 +197,34 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   onPlayNative,
   onOpenVlc,
   onCopyLink,
-  showShortcuts = false,
+  showShortcuts,
   onToggleShortcuts,
   onRequestThumbnail,
   thumbnailKey,
   onScrubbingChange,
-  skips = [],
 }) => {
+  const isAndroid =
+    typeof navigator !== "undefined" &&
+    navigator.userAgent.toLowerCase().includes("android");
+  const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
+
+  const { ref: containerRef, focusKey, focusSelf } = useFocusable({
+    trackChildren: true,
+    saveLastFocusedChild: true,
+    preferredChildFocusKey: "PLAYER_PLAY_PAUSE",
+    focusable: visible && tvMode,
+  });
+
+  const {
+    ref: shortcutsRef,
+    DialogFocusProvider: ShortcutsDialogFocusProvider,
+  } = useDialogFocusBoundary({
+    isOpen: Boolean(showShortcuts),
+    focusKey: "PLAYER_SHORTCUTS_DIALOG",
+    preferredChildFocusKey: "SHORTCUTS_CLOSE",
+    restoreFocusKey: "PLAYER_MORE",
+  });
+
   const activeSkip = skips?.find(
     (s) => currentTime >= s.from && currentTime < s.to,
   );
@@ -205,6 +241,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     bucket: number;
     image: string | null;
   } | null>(null);
+
   const [openMenu, setOpenMenu] = useState<
     | "audio"
     | "subtitle"
@@ -216,41 +253,21 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     | null
   >(null);
   const [showOnlineSearch, setShowOnlineSearch] = useState(false);
-  const [isEditingZoom, setIsEditingZoom] = useState(false);
-  const [customZoomInput, setCustomZoomInput] = useState(String(zoomLevel));
-  const zoomInputRef = useRef<HTMLInputElement>(null);
+  const [pendingSeekTime, setPendingSeekTime] = useState<number | null>(null);
+  const pendingSeekTimerRef = useRef<number | null>(null);
   const showSeekButtons = !settingsStorage.hideSeekButtons();
 
+  // Focus play button when controls become visible in TV mode
   useEffect(() => {
-    if (!isEditingZoom) {
-      setCustomZoomInput(String(zoomLevel));
-    }
-  }, [zoomLevel, isEditingZoom]);
-
-  useEffect(() => {
-    if (isEditingZoom && zoomInputRef.current) {
-      zoomInputRef.current.focus();
-      zoomInputRef.current.select();
-    }
-  }, [isEditingZoom]);
-
-  useEffect(() => {
-    if (openMenu !== "more") {
-      setIsEditingZoom(false);
-    }
-  }, [openMenu]);
-
-  const handleSaveCustomZoom = useCallback(() => {
-    const parsed = parseInt(customZoomInput, 10);
-    if (!isNaN(parsed) && parsed > 0) {
-      const clamped = Math.min(300, Math.max(50, parsed));
-      onSetZoom?.(clamped);
-      setCustomZoomInput(String(clamped));
+    if (visible && tvMode) {
+      const timer = setTimeout(() => {
+        focusSelf();
+      }, 50);
+      return () => clearTimeout(timer);
     } else {
-      setCustomZoomInput(String(zoomLevel));
+      setOpenMenu(null);
     }
-    setIsEditingZoom(false);
-  }, [customZoomInput, zoomLevel, onSetZoom]);
+  }, [visible, tvMode, focusSelf]);
 
   useEffect(() => {
     thumbnailCacheRef.current.clear();
@@ -303,7 +320,8 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
         ],
       });
       if (selected && typeof selected === "string") {
-        onAddSubtitleFile?.(selected);
+        const filename = selected.split(/[/\\]/).pop() || "Local Subtitle";
+        onAddSubtitleFile?.(selected, filename);
         setOpenMenu(null);
       }
     } catch (err) {
@@ -314,7 +332,9 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   const renderedTime =
     draggingTimelineRef.current && timelinePreview
       ? timelinePreview.time
-      : currentTime;
+      : pendingSeekTime !== null
+        ? pendingSeekTime
+        : currentTime;
   const progressPercent = duration > 0 ? (renderedTime / duration) * 100 : 0;
   const cachePercent =
     duration > 0
@@ -322,10 +342,30 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
       : 0;
   let activeChapterIndex = -1;
   for (let index = 0; index < chapters.length; index++) {
-    if (chapters[index].time <= currentTime + 0.25) activeChapterIndex = index;
+    if (chapters[index].time <= renderedTime + 0.25) activeChapterIndex = index;
     else break;
   }
   const activeChapter = chapters[activeChapterIndex];
+
+  useEffect(() => {
+    if (pendingSeekTime !== null) {
+      if (!isBuffering || Math.abs(currentTime - pendingSeekTime) <= 1.2) {
+        setPendingSeekTime(null);
+        if (pendingSeekTimerRef.current) {
+          clearTimeout(pendingSeekTimerRef.current);
+          pendingSeekTimerRef.current = null;
+        }
+      }
+    }
+  }, [currentTime, pendingSeekTime, isBuffering]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingSeekTimerRef.current) {
+        clearTimeout(pendingSeekTimerRef.current);
+      }
+    };
+  }, []);
 
   const updateTimelinePreview = useCallback(
     (e: MouseEvent | React.MouseEvent) => {
@@ -352,42 +392,52 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
               : null,
       }));
 
-      if (
-        onRequestThumbnail &&
-        cached === undefined &&
-        pendingPreviewBucketRef.current !== bucket
-      ) {
-        if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
-        previewTimerRef.current = window.setTimeout(() => {
-          const generation = previewRequestRef.current;
-          const runRequest = async (targetBucket: number): Promise<void> => {
-            if (pendingPreviewBucketRef.current !== null) {
-              queuedPreviewBucketRef.current = targetBucket;
-              return;
-            }
-            pendingPreviewBucketRef.current = targetBucket;
-            const image = await onRequestThumbnail(targetBucket);
-            if (generation !== previewRequestRef.current) return;
-            pendingPreviewBucketRef.current = null;
-            thumbnailCacheRef.current.set(targetBucket, image);
-            setTimelinePreview((current) =>
-              current?.bucket === targetBucket
-                ? { ...current, image }
-                : current,
-            );
-
-            const queuedBucket = queuedPreviewBucketRef.current;
-            queuedPreviewBucketRef.current = null;
-            if (
-              queuedBucket !== null &&
-              !thumbnailCacheRef.current.has(queuedBucket)
-            ) {
-              await runRequest(queuedBucket);
-            }
-          };
-          void runRequest(bucket);
-        }, 140);
+      if (cached === undefined && onRequestThumbnail) {
+        if (pendingPreviewBucketRef.current === null) {
+          pendingPreviewBucketRef.current = bucket;
+          const requestId = ++previewRequestRef.current;
+          onRequestThumbnail(bucket)
+            .then((img) => {
+              thumbnailCacheRef.current.set(bucket, img);
+              if (previewRequestRef.current === requestId) {
+                setTimelinePreview((current) =>
+                  current?.bucket === bucket
+                    ? { ...current, image: img }
+                    : current,
+                );
+              }
+            })
+            .finally(() => {
+              pendingPreviewBucketRef.current = null;
+              const nextBucket = queuedPreviewBucketRef.current;
+              queuedPreviewBucketRef.current = null;
+              if (
+                nextBucket !== null &&
+                thumbnailCacheRef.current.get(nextBucket) === undefined
+              ) {
+                pendingPreviewBucketRef.current = nextBucket;
+                const nextRequestId = ++previewRequestRef.current;
+                onRequestThumbnail(nextBucket)
+                  .then((img) => {
+                    thumbnailCacheRef.current.set(nextBucket, img);
+                    if (previewRequestRef.current === nextRequestId) {
+                      setTimelinePreview((current) =>
+                        current?.bucket === nextBucket
+                          ? { ...current, image: img }
+                          : current,
+                      );
+                    }
+                  })
+                  .finally(() => {
+                    pendingPreviewBucketRef.current = null;
+                  });
+              }
+            });
+        } else {
+          queuedPreviewBucketRef.current = bucket;
+        }
       }
+
       return time;
     },
     [duration, onRequestThumbnail],
@@ -395,24 +445,59 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
 
   const handleTrackMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      e.stopPropagation();
       draggingTimelineRef.current = true;
       onScrubbingChange?.(true);
-      updateTimelinePreview(e);
-      const onMove = (ev: MouseEvent) => updateTimelinePreview(ev);
+      const startTime = updateTimelinePreview(e);
+      if (startTime !== null) {
+        setPendingSeekTime(startTime);
+      }
+
+      const onMove = (ev: MouseEvent) => {
+        const moveTime = updateTimelinePreview(ev);
+        if (moveTime !== null) {
+          setPendingSeekTime(moveTime);
+        }
+      };
       const onUp = (ev: MouseEvent) => {
         const seekTime = updateTimelinePreview(ev);
-        if (seekTime !== null) onSeek(seekTime);
         draggingTimelineRef.current = false;
         onScrubbingChange?.(false);
         setTimelinePreview(null);
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
+
+        if (seekTime !== null) {
+          setPendingSeekTime(seekTime);
+          onSeek(seekTime);
+          if (pendingSeekTimerRef.current) {
+            clearTimeout(pendingSeekTimerRef.current);
+          }
+          pendingSeekTimerRef.current = window.setTimeout(() => {
+            setPendingSeekTime(null);
+          }, 2000);
+        } else {
+          setPendingSeekTime(null);
+        }
       };
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
     },
     [onScrubbingChange, onSeek, updateTimelinePreview],
+  );
+
+  const handleCenterSeek = useCallback(
+    (targetTime: number) => {
+      const clamped = Math.max(0, Math.min(duration || targetTime, targetTime));
+      setPendingSeekTime(clamped);
+      onSeek(clamped);
+      if (pendingSeekTimerRef.current) {
+        clearTimeout(pendingSeekTimerRef.current);
+      }
+      pendingSeekTimerRef.current = window.setTimeout(() => {
+        setPendingSeekTime(null);
+      }, 2000);
+    },
+    [duration, onSeek],
   );
 
   if (isPip) {
@@ -426,841 +511,550 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     };
 
     return (
-      <>
-        <div
-          style={{ position: "absolute", inset: 0, zIndex: 10, cursor: "grab" }}
-          onMouseDown={handleDrag}
-          onDoubleClick={onTogglePip}
-        />
-        <div
-          className={`player-pip-overlay ${visible ? "visible" : ""}`}
-          onMouseDown={handleDrag}
-          onDoubleClick={onTogglePip}
-        >
-          <div className="player-pip-controls">
-            {!isBuffering ? (
-              <button
-                className="center-btn play-pause"
-                onClick={onTogglePause}
-                onMouseDown={stop}
-              >
-                {isPaused ? (
-                  <Play size={32} fill="#fff" />
-                ) : (
-                  <Pause size={32} />
-                )}
-              </button>
-            ) : (
-              <div
-                className="center-btn play-pause"
-                style={{ cursor: "default" }}
-                onMouseDown={stop}
-              >
-                <div
-                  className="loading-spinner"
-                  style={{ width: 28, height: 28, borderWidth: 2 }}
-                />
-              </div>
-            )}
-          </div>
-          <button
-            className="pip-exit-btn"
-            onClick={onTogglePip}
-            onMouseDown={stop}
+      <ControlsFocusProvider visible={visible}>
+        <FocusContext.Provider value={focusKey}>
+          <div
+            ref={containerRef}
+            style={{ position: "absolute", inset: 0, zIndex: 10, cursor: "grab" }}
+            onMouseDown={handleDrag}
+            onDoubleClick={onTogglePip}
+          />
+          <div
+            className={`player-pip-overlay ${visible ? "visible" : ""}`}
+            onMouseDown={handleDrag}
+            onDoubleClick={onTogglePip}
           >
-            <Minimize size={16} />
-          </button>
-        </div>
-      </>
+            <div className="player-pip-controls">
+              {!isBuffering || isPaused ? (
+                <FocusableButton
+                  className="center-btn play-pause"
+                  focusable={true}
+                  focusKey="PLAYER_PIP_PLAY"
+                  onClick={onTogglePause}
+                  onMouseDown={stop}
+                >
+                  {isPaused ? (
+                    <Play size={32} fill="#fff" />
+                  ) : (
+                    <Pause size={32} />
+                  )}
+                </FocusableButton>
+              ) : (
+                <div
+                  className="center-btn play-pause"
+                  style={{ cursor: "default" }}
+                  onMouseDown={stop}
+                >
+                  <div
+                    className="loading-spinner"
+                    style={{ width: 28, height: 28, borderWidth: 2 }}
+                  />
+                </div>
+              )}
+            </div>
+            <FocusableButton
+              className="pip-exit-btn"
+              focusable={true}
+              focusKey="PLAYER_PIP_EXIT"
+              onClick={onTogglePip}
+              onMouseDown={stop}
+            >
+              <Minimize size={16} />
+            </FocusableButton>
+          </div>
+        </FocusContext.Provider>
+      </ControlsFocusProvider>
     );
   }
 
   return (
-    <div
-      className={`player-controls-wrapper ${visible ? "visible" : ""}`}
-      onClick={onClickBackground}
-      onDoubleClick={onToggleFullscreen}
-    >
-      <div className="controls-gradient-top" />
-      <div className="controls-gradient-bottom" />
-
-      {/* Top bar */}
-      <div className="player-top-bar">
-        <button className="player-back-btn" onClick={onBack}>
-          <ArrowLeft size={22} />
-        </button>
-        <div className="player-title-group">
-          <span className="player-primary-title">{primaryTitle}</span>
-          {secondaryTitle && (
-            <span className="player-secondary-title">{secondaryTitle}</span>
-          )}
-        </div>
-      </div>
-
-      {/* Center playback controls */}
-      <div
-        className="player-center-controls"
-        onClick={stop}
-        onDoubleClick={stop}
-      >
-        {showSeekButtons ? (
-          <button
-            className="center-btn"
-            onClick={() => onSeek(Math.max(0, currentTime - 10))}
-            title="Rewind 10 seconds"
-            aria-label="Rewind 10 seconds"
-          >
-            <MdReplay10 size={28} />
-          </button>
-        ) : (
-          <div style={{ width: 44 }} />
-        )}
-
-        {!isBuffering ? (
-          <button className="center-btn play-pause" onClick={onTogglePause}>
-            {isPaused ? <Play size={32} fill="#fff" /> : <Pause size={32} />}
-          </button>
-        ) : (
-          <div className="center-btn play-pause" style={{ cursor: "default" }}>
-            <div
-              className="loading-spinner"
-              style={{ width: 28, height: 28, borderWidth: 2 }}
-            />
-          </div>
-        )}
-
-        {showSeekButtons ? (
-          <button
-            className="center-btn"
-            onClick={() => onSeek(Math.min(duration, currentTime + 10))}
-            title="Forward 10 seconds"
-            aria-label="Forward 10 seconds"
-          >
-            <MdForward10 size={28} />
-          </button>
-        ) : (
-          <div style={{ width: 44 }} />
-        )}
-      </div>
-
-      {/* Bottom bar */}
-      <div className="player-bottom-bar">
-        <div className="player-timeline" onClick={stop} onDoubleClick={stop}>
-          <span className="timeline-time">{formatTime(currentTime)}</span>
-          <div
-            ref={trackRef}
-            className="timeline-track"
-            onMouseDown={handleTrackMouseDown}
-            onMouseEnter={(event) => {
-              onScrubbingChange?.(true);
-              updateTimelinePreview(event);
-            }}
-            onMouseMove={(event) => {
-              if (!draggingTimelineRef.current) onScrubbingChange?.(true);
-              updateTimelinePreview(event);
-            }}
-            onMouseLeave={() => {
-              if (!draggingTimelineRef.current) {
-                setTimelinePreview(null);
-                onScrubbingChange?.(false);
-              }
-            }}
-          >
-            {timelinePreview && (
-              <div
-                className={`timeline-preview ${timelinePreview.image ? "ready" : ""}`}
-                style={{
-                  left: `${timelinePreview.percent}%`,
-                  transform:
-                    timelinePreview.percent < 10
-                      ? "translateX(0)"
-                      : timelinePreview.percent > 90
-                        ? "translateX(-100%)"
-                        : "translateX(-50%)",
-                }}
-              >
-                <div className="timeline-preview-frame">
-                  {timelinePreview.image && (
-                    <img src={timelinePreview.image} alt="" draggable={false} />
-                  )}
-                </div>
-                <span>{formatTime(timelinePreview.time)}</span>
-              </div>
-            )}
-            <div
-              className="timeline-cache"
-              style={{
-                width: `${cachePercent}%`,
-                position: "absolute",
-                top: 0,
-                left: 0,
-                height: "100%",
-                backgroundColor: "rgba(255, 255, 255, 0.3)",
-                borderRadius: "2px",
-                pointerEvents: "none",
-              }}
-            />
-            <div
-              className="timeline-progress"
-              style={{ width: `${progressPercent}%` }}
-            >
-              <div className="timeline-thumb" />
-            </div>
-            {duration > 0 &&
-              chapters.slice(1).map((chapter, index) => (
-                <span
-                  key={`${chapter.time}-${index}`}
-                  className="timeline-chapter-gap"
-                  style={{
-                    left: `${Math.min(100, Math.max(0, (chapter.time / duration) * 100))}%`,
-                  }}
-                  title={`${chapter.title} · ${formatTime(chapter.time)}`}
-                  aria-hidden="true"
-                />
-              ))}
-            {duration > 0 &&
-              skips.map((skip, index) => {
-                const gaps = [];
-                if (skip.from > 0 && skip.from < duration) {
-                  gaps.push(
-                    <span
-                      key={`skip-from-${index}-${skip.from}`}
-                      className="timeline-skip-gap"
-                      style={{
-                        left: `${Math.min(100, Math.max(0, (skip.from / duration) * 100))}%`,
-                      }}
-                      title={`${skip.title || "Skip"} Start · ${formatTime(skip.from)}`}
-                      aria-hidden="true"
-                    />,
-                  );
-                }
-                if (skip.to > 0 && skip.to < duration) {
-                  gaps.push(
-                    <span
-                      key={`skip-to-${index}-${skip.to}`}
-                      className="timeline-skip-gap"
-                      style={{
-                        left: `${Math.min(100, Math.max(0, (skip.to / duration) * 100))}%`,
-                      }}
-                      title={`${skip.title || "Skip"} End · ${formatTime(skip.to)}`}
-                      aria-hidden="true"
-                    />,
-                  );
-                }
-                return gaps;
-              })}
-          </div>
-          <span className="timeline-time right">{formatTime(duration)}</span>
-        </div>
-
-        <div className="player-actions-row">
-          <div
-            className="player-actions-left"
-            onClick={stop}
-            onDoubleClick={stop}
-          >
-            {chapters.length > 0 && (
-              <div className="inline-menu-container">
-                <button
-                  className={`action-btn text-btn chapter-action ${openMenu === "chapters" ? "active" : ""}`}
-                  onClick={(event) => toggleMenu(event, "chapters")}
-                  title={activeChapter?.title || `${chapters.length} chapters`}
-                >
-                  <ChaptersIcon size={20} />
-                  <span className="chapter-action-label">
-                    {activeChapter?.title || "Chapters"}
-                  </span>
-                </button>
-                {openMenu === "chapters" && (
-                  <div
-                    className="inline-menu left chapters-menu"
-                    onClick={stop}
-                  >
-                    {chapters.map((chapter, index) => (
-                      <button
-                        key={`${chapter.time}-${index}`}
-                        className={`inline-menu-item chapter-menu-item ${index === activeChapterIndex ? "selected" : ""}`}
-                        onClick={() => {
-                          onSeek(chapter.time);
-                          setOpenMenu(null);
-                        }}
-                      >
-                        <span className="chapter-menu-title">
-                          {chapter.title}
-                        </span>
-                        <span className="chapter-menu-time">
-                          {formatTime(chapter.time)}
-                        </span>
-                        {index === activeChapterIndex && <Check size={14} />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="inline-menu-container">
-              <button
-                className={`action-btn text-btn ${openMenu === "audio" ? "active" : ""}`}
-                onClick={(e) => toggleMenu(e, "audio")}
-              >
-                <LuAudioLines size={20} />
-                <span>
-                  {(() => {
-                    const sel = audioTracks.find((t) => t.selected);
-                    if (sel?.lang) return sel.lang.toUpperCase().slice(0, 2);
-                    if (sel) return `A${sel.id}`;
-                    return "AUD";
-                  })()}
-                </span>
-              </button>
-              {openMenu === "audio" && (
-                <div className="inline-menu left wide" onClick={stop}>
-                  {audioTracks.length === 0 && (
-                    <div className="inline-menu-item">No audio tracks</div>
-                  )}
-                  {audioTracks.map((t) => (
-                    <button
-                      key={t.id}
-                      className={`inline-menu-item ${t.selected ? "selected" : ""}`}
-                      onClick={() => {
-                        onSelectAudioTrack(t.id);
-                        setOpenMenu(null);
-                      }}
-                    >
-                      <div className="track-details">
-                        <span className="track-name">
-                          {t.lang ? t.lang.toUpperCase() : `Track ${t.id}`}
-                        </span>
-                        {t.title && (
-                          <span className="track-lang">{t.title}</span>
-                        )}
-                      </div>
-                      {t.selected && <Check size={14} />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="inline-menu-container">
-              <button
-                className={`action-btn text-btn ${openMenu === "subtitle" ? "active" : ""}`}
-                onClick={(e) => toggleMenu(e, "subtitle")}
-              >
-                <Subtitles size={20} />
-                <span>
-                  {subtitleTracks
-                    .find((t) => t.selected)
-                    ?.lang?.toUpperCase()
-                    .slice(0, 2) || ""}
-                </span>
-              </button>
-              {openMenu === "subtitle" && (
-                <div className="inline-menu left wide" onClick={stop}>
-                  <button
-                    className={`inline-menu-item ${!subtitleTracks.some((t) => t.selected) ? "selected" : ""}`}
-                    onClick={() => {
-                      onSelectSubtitleTrack("no");
-                      setOpenMenu(null);
-                    }}
-                  >
-                    <span>Off</span>
-                    {!subtitleTracks.some((t) => t.selected) && (
-                      <Check size={14} />
-                    )}
-                  </button>
-                  {subtitleTracks.map((t) => (
-                    <button
-                      key={t.id}
-                      className={`inline-menu-item ${t.selected ? "selected" : ""}`}
-                      onClick={() => {
-                        onSelectSubtitleTrack(t.id);
-                        setOpenMenu(null);
-                      }}
-                    >
-                      <div className="track-details">
-                        <span className="track-name">
-                          {t.lang ? t.lang.toUpperCase() : `Track ${t.id}`}
-                        </span>
-                        {t.title && (
-                          <span className="track-lang">{t.title}</span>
-                        )}
-                      </div>
-                      {t.selected && <Check size={14} />}
-                    </button>
-                  ))}
-                  <div
-                    style={{
-                      height: 1,
-                      background: "rgba(255,255,255,0.1)",
-                      margin: "4px 0",
-                    }}
-                  />
-                  <button
-                    className="inline-menu-item"
-                    onClick={() => setShowOnlineSearch(true)}
-                  >
-                    <span>Search online...</span>
-                  </button>
-                  <button
-                    className="inline-menu-item"
-                    onClick={handleLoadLocalSubtitle}
-                  >
-                    <span>Load local subtitle...</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="inline-menu-container">
-              <button
-                className={`action-btn text-btn ${openMenu === "speed" ? "active" : ""}`}
-                onClick={(e) => toggleMenu(e, "speed")}
-              >
-                <Gauge size={20} />
-                <span>{playbackRate.toFixed(1)}x</span>
-              </button>
-              {openMenu === "speed" && (
-                <div className="inline-menu left" onClick={stop}>
-                  {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((rate) => (
-                    <button
-                      key={rate}
-                      className={`inline-menu-item ${Math.abs(playbackRate - rate) < 0.01 ? "selected" : ""}`}
-                      onClick={() => {
-                        onPlaybackRateChange(rate);
-                        setOpenMenu(null);
-                      }}
-                    >
-                      <span>{rate}x</span>
-                      {Math.abs(playbackRate - rate) < 0.01 && (
-                        <Check size={14} />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div
-            className="player-actions-right"
-            onClick={stop}
-            onDoubleClick={stop}
-          >
-            {onPlayNative && (
-              <button className="action-btn text-btn" onClick={onPlayNative}>
-                <Tv size={20} />
-                <span>Native</span>
-              </button>
-            )}
-            {showNextEpisode && nextEpisodeTitle && (
-              <button className="next-episode-pill" onClick={onNextEpisode}>
-                <span>Next: {nextEpisodeTitle}</span>
-                <NextIcon size={16} />
-              </button>
-            )}
-
-            <button
-              className={`action-btn text-btn ${isPip ? "active" : ""}`}
-              onClick={onTogglePip}
-            >
-              <PictureInPicture size={20} />
-              <span>PIP</span>
-            </button>
-
-            <div className="inline-menu-container">
-              <button
-                className={`action-btn text-btn ${openMenu === "server" ? "active" : ""}`}
-                onClick={(e) => toggleMenu(e, "server")}
-              >
-                <ServerIcon size={20} />
-                <span>
-                  {selectedStream?.server ||
-                    selectedStream?.quality ||
-                    "Server"}
-                </span>
-              </button>
-              {openMenu === "server" && (
-                <div className="inline-menu right wide" onClick={stop}>
-                  {(!streamData || streamData.length === 0) && (
-                    <div className="inline-menu-item">
-                      No alternative servers
-                    </div>
-                  )}
-                  {streamData?.map((s: any, idx: number) => {
-                    const rawTags: string[] = Array.isArray(s.tags)
-                      ? s.tags
-                      : typeof s.tag === "string"
-                      ? [s.tag]
-                      : [];
-                    const tags = rawTags
-                      .map((t) => (typeof t === "string" ? t.trim() : ""))
-                      .filter(
-                        (t) =>
-                          Boolean(t) &&
-                          t.toLowerCase() !==
-                            s.quality?.toString().trim().toLowerCase(),
-                      );
-
-                    return (
-                      <button
-                        key={idx}
-                        className={`inline-menu-item ${selectedStream?.link === s.link ? "selected" : ""}`}
-                        onClick={() => {
-                          onSelectStream && onSelectStream(s);
-                          setOpenMenu(null);
-                        }}
-                      >
-                        <div className="track-details">
-                          <span className="track-name">
-                            {s.server || `Server ${idx + 1}`}
-                          </span>
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: "4px",
-                              alignItems: "center",
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            {s.quality && (
-                              <span className="track-lang">{s.quality}</span>
-                            )}
-                            {tags.map((t, tIdx) => (
-                              <span
-                                key={tIdx}
-                                className="track-lang"
-                                style={{ opacity: 0.85 }}
-                              >
-                                {t.toUpperCase()}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        {selectedStream?.link === s.link && <Check size={14} />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="inline-menu-container">
-              <button
-                className={`action-btn text-btn ${openMenu === "quality" ? "active" : ""}`}
-                onClick={(e) => toggleMenu(e, "quality")}
-              >
-                {(() => {
-                  const sel = videoTracks.find((t) => t.selected);
-                  const h = sel
-                    ? sel.demuxH || (sel.selected ? videoHeight : 0)
-                    : 0;
-                  const fallback = sel
-                    ? selectedStream?.quality
-                      ? selectedStream.quality
-                      : sel.title || sel.codec?.split(" ")[0] || "Auto"
-                    : "Auto";
-                  const info = getQualityInfo(h, fallback);
-                  const QualityIcon = !sel ? MdVideoSettings : info.Icon;
-                  return (
-                    <>
-                      <QualityIcon size={20} />
-                      <span>{info.text}</span>
-                    </>
-                  );
-                })()}
-              </button>
-              {openMenu === "quality" && (
-                <div className="inline-menu right wide" onClick={stop}>
-                  <button
-                    className={`inline-menu-item ${!videoTracks.some((t) => t.selected) ? "selected" : ""}`}
-                    onClick={() => {
-                      onSelectVideoTrack("auto");
-                      setOpenMenu(null);
-                    }}
-                  >
-                    <span>Auto</span>
-                    {!videoTracks.some((t) => t.selected) && (
-                      <Check size={14} />
-                    )}
-                  </button>
-                  {videoTracks.map((t) => {
-                    const h = t.demuxH || (t.selected ? videoHeight : 0);
-                    const fallback =
-                      t.selected && selectedStream?.quality
-                        ? selectedStream.quality
-                        : t.title || t.codec || `Track ${t.id}`;
-                    const info = getQualityInfo(h, fallback);
-                    const primary = info.text;
-                    const secondary =
-                      h || (t.selected && selectedStream?.quality)
-                        ? t.title || t.codec
-                        : null;
-                    return (
-                      <button
-                        key={t.id}
-                        className={`inline-menu-item ${t.selected ? "selected" : ""}`}
-                        onClick={() => {
-                          onSelectVideoTrack(t.id);
-                          setOpenMenu(null);
-                        }}
-                      >
-                        <div className="track-details">
-                          <span className="track-name">{primary}</span>
-                          {secondary && (
-                            <span className="track-lang">{secondary}</span>
-                          )}
-                        </div>
-                        {t.selected && <Check size={14} />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <button
-              className={`action-btn text-btn ${isCropped ? "active" : ""}`}
-              onClick={onToggleCrop}
-            >
-              <RectangleHorizontal size={20} />
-              <span
-                style={{
-                  display: "inline-block",
-                  minWidth: "32px",
-                  textAlign: "left",
-                }}
-              >
-                {isCropped ? "Crop" : "Fit"}
-              </span>
-            </button>
-
-            <button
-              className="action-btn text-btn"
-              onClick={onToggleFullscreen}
-            >
-              {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
-            </button>
-
-            <div className="inline-menu-container">
-              <button
-                className={`action-btn text-btn ${openMenu === "more" ? "active" : ""}`}
-                onClick={(event) => toggleMenu(event, "more")}
-                title="More actions"
-                aria-label="More player actions"
-              >
-                <MoreVertical size={21} />
-              </button>
-              {openMenu === "more" && (
-                <div className="inline-menu right wide" onClick={stop}>
-                  <div className="inline-menu-zoom-row">
-                    <div className="inline-menu-zoom-label">
-                      <ZoomIn size={18} />
-                      <span>Zoom</span>
-                    </div>
-                    <div className="inline-menu-zoom-actions">
-                      <button
-                        type="button"
-                        className="zoom-stepper-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onZoomOut?.();
-                        }}
-                        disabled={zoomLevel <= 50}
-                        title="Zoom out (-10%)"
-                        aria-label="Zoom out"
-                      >
-                        <Minus size={13} />
-                      </button>
-                      {isEditingZoom ? (
-                        <div
-                          className="zoom-input-wrapper"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <input
-                            ref={zoomInputRef}
-                            type="number"
-                            min={50}
-                            max={300}
-                            step={1}
-                            className="zoom-level-input"
-                            value={customZoomInput}
-                            onChange={(e) => setCustomZoomInput(e.target.value)}
-                            onKeyDown={(e) => {
-                              e.stopPropagation();
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                handleSaveCustomZoom();
-                              } else if (e.key === "Escape") {
-                                e.preventDefault();
-                                setCustomZoomInput(String(zoomLevel));
-                                setIsEditingZoom(false);
-                              }
-                            }}
-                            onBlur={handleSaveCustomZoom}
-                          />
-                          <span className="zoom-input-percent">%</span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className={`zoom-level-badge ${zoomLevel !== 100 ? "custom" : ""}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCustomZoomInput(String(zoomLevel));
-                            setIsEditingZoom(true);
-                          }}
-                          onDoubleClick={(e) => {
-                            e.stopPropagation();
-                            onResetZoom?.();
-                          }}
-                          title="Click to enter custom zoom %, double-click to reset"
-                        >
-                          {zoomLevel}%
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="zoom-stepper-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onZoomIn?.();
-                        }}
-                        disabled={zoomLevel >= 300}
-                        title="Zoom in (+10%)"
-                        aria-label="Zoom in"
-                      >
-                        <Plus size={13} />
-                      </button>
-                    </div>
-                  </div>
-                  {onToggleShortcuts && (
-                    <button
-                      className="inline-menu-item"
-                      onClick={() => {
-                        setOpenMenu(null);
-                        onToggleShortcuts();
-                      }}
-                    >
-                      <Keyboard size={18} />
-                      <span>Keyboard shortcuts</span>
-                    </button>
-                  )}
-                  {onOpenVlc && (
-                    <button
-                      className="inline-menu-item"
-                      onClick={() => {
-                        setOpenMenu(null);
-                        onOpenVlc();
-                      }}
-                    >
-                      <ExternalLink size={18} />
-                      <span>Open in VLC</span>
-                    </button>
-                  )}
-                  {onCopyLink && (
-                    <button
-                      className="inline-menu-item"
-                      onClick={() => {
-                        setOpenMenu(null);
-                        onCopyLink();
-                      }}
-                    >
-                      <Copy size={18} />
-                      <span>Copy stream link</span>
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {activeSkip && (
-          <button
-            className="player-skip-btn"
-            onClick={(e) => {
-              stop(e);
-              onSeek(activeSkip.to);
-            }}
-            title={`Skip to ${formatTime(activeSkip.to)}`}
-          >
-            <span>
-              {activeSkip.title
-                ? activeSkip.title.toLowerCase().startsWith("skip")
-                  ? activeSkip.title
-                  : `Skip ${activeSkip.title}`
-                : "Skip Intro"}
-            </span>
-            <ChevronsRight size={18} />
-          </button>
-        )}
-      </div>
-
-      {showShortcuts && (
+    <ControlsFocusProvider visible={visible}>
+      <FocusContext.Provider value={focusKey}>
         <div
-          className="player-shortcuts-overlay"
-          onClick={onToggleShortcuts}
+          ref={containerRef}
+        className={`player-controls-wrapper ${visible ? "visible" : ""}`}
+        onClick={onClickBackground}
+        onDoubleClick={onToggleFullscreen}
+      >
+        <div className="controls-gradient-top" />
+        <div className="controls-gradient-bottom" />
+
+        {/* Top bar */}
+        <div className="player-top-bar">
+          <FocusableButton
+            className="player-back-btn"
+            focusable={true}
+            focusKey="PLAYER_BACK"
+            onClick={onBack}
+            aria-label="Back"
+          >
+            <ArrowLeft size={22} />
+          </FocusableButton>
+          <div className="player-title-group">
+            <span className="player-primary-title">{primaryTitle}</span>
+            {secondaryTitle && (
+              <span className="player-secondary-title">{secondaryTitle}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Center playback controls */}
+        <div
+          className="player-center-controls"
+          onClick={stop}
           onDoubleClick={stop}
         >
-          <section
-            className="player-shortcuts-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Keyboard shortcuts"
-            onClick={stop}
-          >
-            <header>
-              <div>
-                <span>Player controls</span>
-                <h2>Keyboard shortcuts</h2>
-              </div>
-              <button
-                className="player-shortcuts-close"
-                onClick={onToggleShortcuts}
-                aria-label="Close keyboard shortcuts"
-              >
-                <X size={22} />
-              </button>
-            </header>
-            <div className="player-shortcuts-grid">
-              {[
-                ["Space / K", "Play or pause"],
-                ["← / →", "Seek 10 seconds"],
-                ["↑ / ↓", "Change volume"],
-                ["A", "Next audio track"],
-                ["T", "Next subtitle track"],
-                ["Shift + , / .", "Decrease or increase speed"],
-                ["+ / -", "Zoom in or out"],
-                ["0", "Reset zoom (100%)"],
-                ["S", "Skip intro / interval"],
-                ["Ctrl + S", "Skip to next chapter"],
-                ["M", "Mute or unmute"],
-                ["F", "Toggle fullscreen"],
-                ["N", "Next episode"],
-                ["?", "Show or hide shortcuts"],
-                ["Esc", "Close or go back"],
-              ].map(([shortcut, action]) => (
-                <div className="player-shortcut-row" key={shortcut}>
-                  <kbd>{shortcut}</kbd>
-                  <span>{action}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
-      )}
+          {showSeekButtons ? (
+            <FocusableButton
+              className="center-btn"
+              focusable={true}
+              focusKey="PLAYER_REWIND"
+              onClick={() =>
+                handleCenterSeek(
+                  Math.max(0, (pendingSeekTime ?? currentTime) - 10),
+                )
+              }
+              title="Rewind 10 seconds"
+              aria-label="Rewind 10 seconds"
+            >
+              <MdReplay10 size={28} />
+            </FocusableButton>
+          ) : (
+            <div style={{ width: 44 }} />
+          )}
 
-      {showOnlineSearch && (
-        <SearchSubtitlesModal
-          initialSearchQuery={primaryTitle}
-          onClose={() => setShowOnlineSearch(false)}
-          onSelectSubtitle={(url) => {
-            onAddSubtitleFile?.(url);
-            setOpenMenu(null);
-          }}
-        />
-      )}
-    </div>
+          {!isBuffering || isPaused ? (
+            <FocusableButton
+              className="center-btn play-pause"
+              focusable={true}
+              focusKey="PLAYER_PLAY_PAUSE"
+              onClick={onTogglePause}
+              aria-label={isPaused ? "Play" : "Pause"}
+            >
+              {isPaused ? <Play size={32} fill="#fff" /> : <Pause size={32} />}
+            </FocusableButton>
+          ) : (
+            <div className="center-btn play-pause" style={{ cursor: "default" }}>
+              <div
+                className="loading-spinner"
+                style={{ width: 28, height: 28, borderWidth: 2 }}
+              />
+            </div>
+          )}
+
+          {showSeekButtons ? (
+            <FocusableButton
+              className="center-btn"
+              focusable={true}
+              focusKey="PLAYER_FORWARD"
+              onClick={() =>
+                handleCenterSeek(
+                  Math.min(
+                    duration || currentTime + 10,
+                    (pendingSeekTime ?? currentTime) + 10,
+                  ),
+                )
+              }
+              title="Forward 10 seconds"
+              aria-label="Forward 10 seconds"
+            >
+              <MdForward10 size={28} />
+            </FocusableButton>
+          ) : (
+            <div style={{ width: 44 }} />
+          )}
+        </div>
+
+        {/* Bottom bar */}
+        <div className="player-bottom-bar">
+          <TimelineScrubber
+            focusable={visible && tvMode}
+            duration={duration}
+            currentTime={currentTime}
+            pendingSeekTime={pendingSeekTime}
+            renderedTime={renderedTime}
+            progressPercent={progressPercent}
+            cachePercent={cachePercent}
+            formatTime={formatTime}
+            onSeek={onSeek}
+            onScrubbingChange={onScrubbingChange}
+            chapters={chapters}
+            skips={skips}
+            timelinePreview={timelinePreview}
+            setTimelinePreview={setTimelinePreview}
+            updateTimelinePreview={updateTimelinePreview}
+            draggingTimelineRef={draggingTimelineRef}
+            trackRef={trackRef}
+            handleTrackMouseDown={handleTrackMouseDown}
+          />
+
+          <div className="player-actions-row">
+            <div
+              className="player-actions-left"
+              onClick={stop}
+              onDoubleClick={stop}
+            >
+              {chapters.length > 0 && (
+                <div className="inline-menu-container">
+                  <FocusableButton
+                    focusable={true}
+                    focusKey="PLAYER_CHAPTERS"
+                    className={`action-btn text-btn chapter-action ${openMenu === "chapters" ? "active" : ""}`}
+                    onClick={(event) => toggleMenu(event, "chapters")}
+                    title={activeChapter?.title || `${chapters.length} chapters`}
+                  >
+                    <ChaptersIcon size={20} />
+                    <span className="chapter-action-label">
+                      {activeChapter?.title || "Chapters"}
+                    </span>
+                  </FocusableButton>
+                  {openMenu === "chapters" && (
+                    <ChaptersMenu
+                      chapters={chapters}
+                      activeChapterIndex={activeChapterIndex}
+                      formatTime={formatTime}
+                      onSeek={onSeek}
+                      onClose={() => setOpenMenu(null)}
+                    />
+                  )}
+                </div>
+              )}
+
+              <div className="inline-menu-container">
+                <FocusableButton
+                  focusable={true}
+                  focusKey="PLAYER_AUDIO"
+                  className={`action-btn text-btn ${openMenu === "audio" ? "active" : ""}`}
+                  onClick={(e) => toggleMenu(e, "audio")}
+                >
+                  <LuAudioLines size={20} />
+                  <span>
+                    {(() => {
+                      const sel = audioTracks.find((t) => t.selected);
+                      if (sel?.lang && sel.lang !== "und") return sel.lang.toUpperCase().slice(0, 2);
+                      if (sel?.title && !sel.title.toLowerCase().includes("default")) {
+                        return sel.title.slice(0, 3).toUpperCase();
+                      }
+                      return "AUD";
+                    })()}
+                  </span>
+                </FocusableButton>
+                {openMenu === "audio" && (
+                  <AudioTrackMenu
+                    audioTracks={audioTracks}
+                    audioDelay={audioDelay}
+                    onAudioDelayChange={onAudioDelayChange}
+                    onSelectAudioTrack={onSelectAudioTrack}
+                    onClose={() => setOpenMenu(null)}
+                  />
+                )}
+              </div>
+
+              <div className="inline-menu-container">
+                <FocusableButton
+                  focusable={true}
+                  focusKey="PLAYER_SUBTITLES"
+                  className={`action-btn text-btn ${openMenu === "subtitle" ? "active" : ""}`}
+                  onClick={(e) => toggleMenu(e, "subtitle")}
+                >
+                  <Subtitles size={20} />
+                  <span>
+                    {(() => {
+                      const sel = subtitleTracks.find((t) => t.selected);
+                      if (!sel) return "";
+                      if (sel.lang && sel.lang !== "und") return sel.lang.toUpperCase().slice(0, 2);
+                      if (sel.title) return sel.title.slice(0, 3).toUpperCase();
+                      return "SUB";
+                    })()}
+                  </span>
+                </FocusableButton>
+                {openMenu === "subtitle" && (
+                  <SubtitleTrackMenu
+                    subtitleTracks={subtitleTracks}
+                    subtitleDelay={subtitleDelay}
+                    onSubtitleDelayChange={onSubtitleDelayChange}
+                    onSelectSubtitleTrack={onSelectSubtitleTrack}
+                    onShowOnlineSearch={() => setShowOnlineSearch(true)}
+                    onLoadLocalSubtitle={handleLoadLocalSubtitle}
+                    onClose={() => setOpenMenu(null)}
+                  />
+                )}
+              </div>
+
+              <div className="inline-menu-container">
+                <FocusableButton
+                  focusable={true}
+                  focusKey="PLAYER_SPEED"
+                  className={`action-btn text-btn ${openMenu === "speed" ? "active" : ""}`}
+                  onClick={(e) => toggleMenu(e, "speed")}
+                >
+                  <Gauge size={20} />
+                  <span>{playbackRate.toFixed(1)}x</span>
+                </FocusableButton>
+                {openMenu === "speed" && (
+                  <SpeedSelectMenu
+                    playbackRate={playbackRate}
+                    onPlaybackRateChange={onPlaybackRateChange}
+                    onClose={() => setOpenMenu(null)}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div
+              className="player-actions-right"
+              onClick={stop}
+              onDoubleClick={stop}
+            >
+              {onPlayNative && (
+                <FocusableButton
+                  focusable={true}
+                  focusKey="PLAYER_NATIVE"
+                  className="action-btn text-btn"
+                  onClick={onPlayNative}
+                >
+                  <Tv size={20} />
+                  <span>Native</span>
+                </FocusableButton>
+              )}
+              {showNextEpisode && nextEpisodeTitle && (
+                <FocusableButton
+                  focusable={true}
+                  focusKey="PLAYER_NEXT_EP"
+                  className="next-episode-pill"
+                  onClick={onNextEpisode}
+                >
+                  <span>Next: {nextEpisodeTitle}</span>
+                  <NextIcon size={16} />
+                </FocusableButton>
+              )}
+
+              <FocusableButton
+                focusable={true}
+                focusKey="PLAYER_PIP"
+                className={`action-btn text-btn ${isPip ? "active" : ""}`}
+                onClick={onTogglePip}
+              >
+                <PictureInPicture size={20} />
+                <span>PIP</span>
+              </FocusableButton>
+
+              <div className="inline-menu-container">
+                <FocusableButton
+                  focusable={true}
+                  focusKey="PLAYER_SERVER"
+                  className={`action-btn text-btn ${openMenu === "server" ? "active" : ""}`}
+                  onClick={(e) => toggleMenu(e, "server")}
+                >
+                  <ServerIcon size={20} />
+                  <span>
+                    {selectedStream?.server ||
+                      selectedStream?.quality ||
+                      "Server"}
+                  </span>
+                </FocusableButton>
+                {openMenu === "server" && (
+                  <ServerSelectMenu
+                    streamData={streamData}
+                    selectedStream={selectedStream}
+                    onSelectStream={onSelectStream}
+                    onClose={() => setOpenMenu(null)}
+                  />
+                )}
+              </div>
+
+              <div className="inline-menu-container">
+                <FocusableButton
+                  focusable={true}
+                  focusKey="PLAYER_QUALITY"
+                  className={`action-btn text-btn ${openMenu === "quality" ? "active" : ""}`}
+                  onClick={(e) => toggleMenu(e, "quality")}
+                >
+                  {(() => {
+                    const sel = videoTracks.find((t) => t.selected);
+                    const h = sel
+                      ? sel.demuxH || (sel.selected ? videoHeight : 0)
+                      : 0;
+                    const fallback = sel
+                      ? selectedStream?.quality
+                        ? selectedStream.quality
+                        : sel.title || sel.codec?.split(" ")[0] || "Auto"
+                      : "Auto";
+                    const info = getQualityInfo(h, fallback);
+                    const QualityIcon = !sel ? MdVideoSettings : info.Icon;
+                    return (
+                      <>
+                        <QualityIcon size={20} />
+                        <span>{info.text}</span>
+                      </>
+                    );
+                  })()}
+                </FocusableButton>
+                {openMenu === "quality" && (
+                  <QualitySelectMenu
+                    videoTracks={videoTracks}
+                    videoHeight={videoHeight}
+                    selectedStream={selectedStream}
+                    getQualityInfo={getQualityInfo}
+                    onSelectVideoTrack={onSelectVideoTrack}
+                    onClose={() => setOpenMenu(null)}
+                  />
+                )}
+              </div>
+
+              <FocusableButton
+                focusable={true}
+                focusKey="PLAYER_CROP"
+                className={`action-btn text-btn ${isCropped ? "active" : ""}`}
+                onClick={onToggleCrop}
+              >
+                <RectangleHorizontal size={20} />
+                <span
+                  style={{
+                    display: "inline-block",
+                    minWidth: "32px",
+                    textAlign: "left",
+                  }}
+                >
+                  {isCropped ? "Crop" : "Fit"}
+                </span>
+              </FocusableButton>
+
+              <FocusableButton
+                focusable={true}
+                focusKey="PLAYER_FULLSCREEN"
+                className="action-btn text-btn"
+                onClick={onToggleFullscreen}
+              >
+                {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+              </FocusableButton>
+
+              <div className="inline-menu-container">
+                <FocusableButton
+                  focusable={true}
+                  focusKey="PLAYER_MORE"
+                  className={`action-btn text-btn ${openMenu === "more" ? "active" : ""}`}
+                  onClick={(event) => toggleMenu(event, "more")}
+                  title="More actions"
+                  aria-label="More player actions"
+                >
+                  <MoreVertical size={21} />
+                </FocusableButton>
+                {openMenu === "more" && (
+                  <MoreOptionsMenu
+                    zoomLevel={zoomLevel}
+                    onZoomIn={onZoomIn}
+                    onZoomOut={onZoomOut}
+                    onResetZoom={onResetZoom}
+                    onSetZoom={onSetZoom}
+                    onToggleShortcuts={onToggleShortcuts}
+                    onOpenVlc={onOpenVlc}
+                    onCopyLink={onCopyLink}
+                    onClose={() => setOpenMenu(null)}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {activeSkip && (
+            <FocusableButton
+              focusable={true}
+              focusKey="PLAYER_SKIP_INTRO"
+              className="player-skip-btn"
+              onClick={(e) => {
+                stop(e);
+                onSeek(activeSkip.to);
+              }}
+              title={`Skip to ${formatTime(activeSkip.to)}`}
+            >
+              <span>
+                {activeSkip.title
+                  ? activeSkip.title.toLowerCase().startsWith("skip")
+                    ? activeSkip.title
+                    : `Skip ${activeSkip.title}`
+                  : "Skip Intro"}
+              </span>
+              <ChevronsRight size={18} />
+            </FocusableButton>
+          )}
+        </div>
+
+        {showShortcuts && (
+          <ShortcutsDialogFocusProvider>
+            <div
+              className="player-shortcuts-overlay"
+              onClick={onToggleShortcuts}
+              onDoubleClick={stop}
+            >
+              <section
+                ref={shortcutsRef as any}
+                className="player-shortcuts-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Keyboard shortcuts"
+                onClick={stop}
+              >
+              <header>
+                <div>
+                  <span>Player controls</span>
+                  <h2>Keyboard & Remote shortcuts</h2>
+                </div>
+                <FocusableButton
+                  focusable={true}
+                  focusKey="SHORTCUTS_CLOSE"
+                  className="player-shortcuts-close"
+                  onClick={onToggleShortcuts}
+                  aria-label="Close keyboard shortcuts"
+                >
+                  <X size={22} />
+                </FocusableButton>
+              </header>
+              <div className="player-shortcuts-grid">
+                {[
+                  ["D-Pad / Arrows", "Navigate controls and scrub timeline"],
+                  ["OK / Enter / A Button", "Select focused control or play/pause"],
+                  ["Back / B Button / Esc", "Close menus / Hide controls / Exit"],
+                  ["X Button / Space / K", "Play or pause"],
+                  ["Y Button", "Toggle episode drawer"],
+                  ["LB / RB (or LT / RT)", "Rewind 10s / Fast Forward 10s"],
+                  ["↑ / ↓", "Change volume (when timeline not focused)"],
+                  ["A", "Next audio track"],
+                  ["Z / X (or [ / ])", "Adjust audio sync (+/- 50ms)"],
+                  ["T", "Next subtitle track"],
+                  ["G / H", "Adjust subtitle sync (+/- 50ms)"],
+                  ["Shift + , / .", "Decrease or increase speed"],
+                  ["+ / -", "Zoom in or out"],
+                  ["0", "Reset zoom (100%)"],
+                  ["S", "Skip intro / interval"],
+                  ["M", "Mute or unmute"],
+                  ["F", "Toggle fullscreen"],
+                  ["N", "Next episode"],
+                  ["?", "Show or hide shortcuts"],
+                ].map(([shortcut, action]) => (
+                  <div className="player-shortcut-row" key={shortcut}>
+                    <kbd>{shortcut}</kbd>
+                    <span>{action}</span>
+                  </div>
+                ))}
+              </div>
+              </section>
+            </div>
+          </ShortcutsDialogFocusProvider>
+        )}
+
+        {showOnlineSearch && (
+          <SearchSubtitlesModal
+            initialSearchQuery={primaryTitle}
+            onClose={() => setShowOnlineSearch(false)}
+            onSelectSubtitle={(url, title) => {
+              onAddSubtitleFile?.(url, title);
+              setOpenMenu(null);
+            }}
+          />
+        )}
+      </div>
+    </FocusContext.Provider>
+  </ControlsFocusProvider>
   );
 };

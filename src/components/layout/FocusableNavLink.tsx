@@ -1,7 +1,9 @@
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useFocusable } from "@noriginmedia/norigin-spatial-navigation-react";
+import { setFocus } from "@noriginmedia/norigin-spatial-navigation-core";
 import { settingsStorage } from "../../lib/storage";
+import { useModalFocus, useIsInModal } from "../../lib/context/ModalFocusContext";
 import { cn } from "../../lib/utils";
 
 export interface FocusableNavLinkProps extends Omit<
@@ -29,7 +31,13 @@ export const FocusableNavLink: React.FC<FocusableNavLinkProps> = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const tvMode = settingsStorage.isTvModeEnabled();
+  const isAndroid =
+    typeof navigator !== "undefined" &&
+    navigator.userAgent.toLowerCase().includes("android");
+  const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
+  const { isModalOpen } = useModalFocus();
+  const isInModal = useIsInModal();
+  const blockedByModal = isModalOpen && !isInModal;
 
   // Calculate active state exactly like NavLink does
   const isActive = active ?? (
@@ -38,12 +46,18 @@ export const FocusableNavLink: React.FC<FocusableNavLinkProps> = ({
   );
 
   const { ref, focused } = useFocusable({
-    focusable: tvMode,
+    focusable: tvMode && !blockedByModal,
     focusKey: propFocusKey,
     onArrowPress: (direction) => {
       // Prevent focus from disappearing off-screen to the left
       if (direction === "left") {
         return false;
+      }
+      if (direction === "right") {
+        if (location.pathname.startsWith("/extensions")) {
+          setFocus("EXTENSIONS_SOURCE_PICKER");
+          return false;
+        }
       }
       return true;
     },
@@ -57,26 +71,28 @@ export const FocusableNavLink: React.FC<FocusableNavLinkProps> = ({
     },
   });
 
-  const baseClass =
-    typeof className === "function" ? className({ isActive }) : className;
-  const finalClass = cn(baseClass, focused && "tv-focus");
+  const computedClassName = typeof className === "function" 
+    ? className({ isActive }) 
+    : className;
+
+  const content = typeof children === "function"
+    ? children({ isActive })
+    : children;
 
   return (
     <button
-      type="button"
       {...rest}
-      ref={ref}
+      ref={ref as any}
+      type="button"
       title={title}
-      aria-label={title}
-      aria-current={isActive ? "page" : undefined}
-      className={finalClass}
+      className={cn(computedClassName, focused && "tv-focus")}
       onClick={() => {
         if (typeof to === "string") {
           navigate(to);
         }
       }}
     >
-      {typeof children === "function" ? children({ isActive }) : children}
+      {content}
     </button>
   );
 };

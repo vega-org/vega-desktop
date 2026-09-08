@@ -15,7 +15,10 @@ export const Layout: React.FC = () => {
   const isContentPage =
     location.pathname.startsWith("/content/") ||
     location.pathname.startsWith("/watchlist/content/");
-  const tvMode = settingsStorage.isTvModeEnabled();
+  const isAndroid =
+    typeof navigator !== "undefined" &&
+    navigator.userAgent.toLowerCase().includes("android");
+  const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
 
   const { ref, focusKey, focusSelf } = useFocusable({
     focusable: tvMode,
@@ -25,12 +28,12 @@ export const Layout: React.FC = () => {
   });
 
   useEffect(() => {
-    if (tvMode) {
+    if (tvMode && isHomePage) {
       setTimeout(() => {
         focusSelf();
       }, 50);
     }
-  }, [tvMode, focusSelf, location.pathname]);
+  }, [tvMode, focusSelf, isHomePage]);
 
   const needsTopPadding = !isHomePage && !isContentPage;
 

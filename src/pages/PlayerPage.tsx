@@ -6,7 +6,8 @@ import React, {
   useMemo,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useMpvPlayer, type MpvTrack } from "../lib/hooks/useMpvPlayer";
+import type { MpvTrack } from "../lib/hooks/useMpvPlayer";
+import { usePlayerEngine } from "../lib/hooks/usePlayerEngine";
 import { useStream } from "../lib/hooks/useStream";
 import { usePlayerProgress } from "../lib/hooks/usePlayerSettings";
 import { useMediaSession } from "../lib/hooks/useMediaSession";
@@ -29,6 +30,7 @@ import { AnimatedHourglass } from "../components/AnimatedHourglass";
 import { syncFromSharedFolder } from "../lib/sync/syncService";
 import { settingsStorage } from "../lib/storage/SettingsStorage";
 import { useArtworkPalette } from "../lib/hooks/useArtworkPalette";
+import { ControlsFocusProvider } from "../lib/context/ControlsFocusContext";
 
 import {
   LuArrowLeft as ArrowLeft,
@@ -190,42 +192,49 @@ function findBestMatchingSubtitleTrack(
 
   if (saved.subLang) {
     const sl = saved.subLang.trim().toLowerCase();
-    const match = tracks.find((t) => {
+    const isLangMatch = (t: MpvTrack) => {
       const l = t.lang?.trim().toLowerCase();
       if (!l) return false;
       if (l === sl) return true;
-      if (l.length >= 2 && sl.length >= 2 && l.slice(0, 2) === sl.slice(0, 2)) {
-        return true;
-      }
-      return false;
-    });
+      return l.length >= 2 && sl.length >= 2 && l.slice(0, 2) === sl.slice(0, 2);
+    };
+    const textMatch = tracks.find((t) => !(t as any).isBitmapSub && isLangMatch(t));
+    if (textMatch) return textMatch;
+    const match = tracks.find(isLangMatch);
     if (match) return match;
   }
 
   if (saved.subLabel) {
-    const match = tracks.find(
-      (t) =>
-        formatTrackLabel(t).toLowerCase() === saved.subLabel!.toLowerCase(),
-    );
+    const isLabelMatch = (t: MpvTrack) =>
+      formatTrackLabel(t).toLowerCase() === saved.subLabel!.toLowerCase();
+    const textMatch = tracks.find((t) => !(t as any).isBitmapSub && isLabelMatch(t));
+    if (textMatch) return textMatch;
+    const match = tracks.find(isLabelMatch);
     if (match) return match;
   }
 
   if (saved.subTitle) {
     const st = saved.subTitle.trim().toLowerCase();
-    const match = tracks.find((t) => {
+    const isTitleMatch = (t: MpvTrack) => {
       const title = t.title?.trim().toLowerCase();
       if (!title) return false;
       return title === st || title.includes(st) || st.includes(title);
-    });
+    };
+    const textMatch = tracks.find((t) => !(t as any).isBitmapSub && isTitleMatch(t));
+    if (textMatch) return textMatch;
+    const match = tracks.find(isTitleMatch);
     if (match) return match;
   }
 
   if (saved.subLang) {
     const sl = saved.subLang.trim().toLowerCase();
-    const match = tracks.find((t) => {
+    const isLangInTitle = (t: MpvTrack) => {
       const title = t.title?.trim().toLowerCase();
       return Boolean(title && title.includes(sl));
-    });
+    };
+    const textMatch = tracks.find((t) => !(t as any).isBitmapSub && isLangInTitle(t));
+    if (textMatch) return textMatch;
+    const match = tracks.find(isLangInTitle);
     if (match) return match;
   }
 
@@ -681,15 +690,15 @@ const TvPlayer: React.FC<any> = ({
                       const rawTags: string[] = Array.isArray(stream.tags)
                         ? stream.tags
                         : typeof stream.tag === "string"
-                        ? [stream.tag]
-                        : [];
+                          ? [stream.tag]
+                          : [];
                       const tags = rawTags
                         .map((t) => (typeof t === "string" ? t.trim() : ""))
                         .filter(
                           (t) =>
                             Boolean(t) &&
                             t.toLowerCase() !==
-                              stream.quality?.toString().trim().toLowerCase(),
+                            stream.quality?.toString().trim().toLowerCase(),
                         );
 
                       return tags.map((t, tIdx) => (
@@ -716,7 +725,8 @@ const SidebarEpisodeItem = React.memo<{
   isActive: boolean;
   onSelect: () => void;
   itemRef?: React.Ref<HTMLButtonElement>;
-}>(({ episode, index, isActive, onSelect, itemRef }) => {
+  focusable?: boolean;
+}>(({ episode, index, isActive, onSelect, itemRef, focusable = true }) => {
   const epNum = index + 1;
   const title = episode?.title || `Episode ${epNum}`;
   const description = episode?.description?.trim();
@@ -728,9 +738,12 @@ const SidebarEpisodeItem = React.memo<{
   useEffect(() => setImgFailed(false), [source]);
 
   return (
-    <button
+    <FocusableButton
+      // @ts-ignore
       ref={itemRef}
       type="button"
+      focusable={focusable}
+      focusKey={`EPISODE_ITEM_${index}`}
       className={`player-episode-sidebar-item ${isActive ? "active" : ""}`}
       onClick={(e) => {
         e.stopPropagation();
@@ -764,7 +777,7 @@ const SidebarEpisodeItem = React.memo<{
           </small>
         )}
       </div>
-    </button>
+    </FocusableButton>
   );
 });
 
@@ -809,6 +822,7 @@ const DesktopPlayer: React.FC<any> = ({
   const prevStreamLinkRef = useRef<string | null>(null);
   const appliedAudioForStreamRef = useRef<string | null>(null);
   const appliedSubtitleForStreamRef = useRef<string | null>(null);
+  const failedStreamsRef = useRef<Set<string>>(new Set());
   const prePipStateRef = useRef<{ size: any; pos: any } | null>(null);
   const preFullscreenStateRef = useRef<{
     size: any;
@@ -818,6 +832,31 @@ const DesktopPlayer: React.FC<any> = ({
   } | null>(null);
   const manualFullscreenRef = useRef(false);
   const isWindows = navigator.userAgent.toLowerCase().includes("windows");
+  const isAndroid = navigator.userAgent.toLowerCase().includes("android");
+  const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
+
+  const { ref: sidebarFocusRef, focusKey: sidebarFocusKey } = useFocusable({
+    isFocusBoundary: true,
+    trackChildren: true,
+    focusKey: "PLAYER_EPISODES_SIDEBAR",
+    focusable: showEpisodeSidebar && tvMode,
+  });
+
+  useEffect(() => {
+    if (showEpisodeSidebar && tvMode) {
+      const timer = setTimeout(() => {
+        import("@noriginmedia/norigin-spatial-navigation-core")
+          .then(({ setFocus, doesFocusableExist }) => {
+            const key = `EPISODE_ITEM_${activeEpisodeIndex}`;
+            if (doesFocusableExist(key)) {
+              setFocus(key);
+            }
+          })
+          .catch(() => { });
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [showEpisodeSidebar, activeEpisodeIndex, tvMode]);
 
   const downloads = useDownloadStore((state) => state.downloads);
 
@@ -832,7 +871,7 @@ const DesktopPlayer: React.FC<any> = ({
             return parsed;
           }
         }
-      } catch {}
+      } catch { }
     }
     return [];
   };
@@ -844,7 +883,7 @@ const DesktopPlayer: React.FC<any> = ({
       if (!key) continue;
       try {
         cacheStorage.setString(`skips_${key}`, serialized);
-      } catch {}
+      } catch { }
     }
   };
 
@@ -973,7 +1012,7 @@ const DesktopPlayer: React.FC<any> = ({
     return () => document.body.classList.remove("player-controls-hidden");
   }, [showControls]);
 
-  const toast = useCallback((msg: string) => {
+  const toast = useCallback((msg: string, duration = 2200) => {
     setToastMessage(msg);
     if (toastTimerRef.current) {
       clearTimeout(toastTimerRef.current);
@@ -981,7 +1020,7 @@ const DesktopPlayer: React.FC<any> = ({
     toastTimerRef.current = window.setTimeout(() => {
       setToastMessage(null);
       toastTimerRef.current = null;
-    }, 1600);
+    }, duration);
   }, []);
 
   const openInVlc = useCallback(async () => {
@@ -1036,7 +1075,109 @@ const DesktopPlayer: React.FC<any> = ({
     }
   }, [activeEpisodeIndex, toast, setActiveEpisodeIndex]);
 
-  const mpv = useMpvPlayer({
+  useEffect(() => {
+    failedStreamsRef.current.clear();
+  }, [
+    activeEpisodeIndex,
+    state.primaryTitle,
+    activeEpisode?.id,
+    activeEpisode?.link,
+  ]);
+
+  const getServerName = useCallback((stream: any, index?: number) => {
+    if (!stream) return "Server";
+    if (stream.server) return stream.server;
+    if (stream.quality) return `Server (${stream.quality})`;
+    if (typeof index === "number" && index >= 0) return `Server ${index + 1}`;
+    return "Server";
+  }, []);
+
+  const handleStreamSelect = useCallback(
+    (stream: any, isManual = false) => {
+      if (isManual && stream?.link) {
+        failedStreamsRef.current.delete(stream.link);
+      }
+      prevStreamLinkRef.current = null;
+      appliedAudioForStreamRef.current = null;
+      appliedSubtitleForStreamRef.current = null;
+      setSelectedStream(stream);
+    },
+    [setSelectedStream],
+  );
+
+  const handlePlaybackError = useCallback(
+    (errorMsg: string) => {
+      console.warn("[PlayerPage] Playback error encountered:", errorMsg);
+      setShowControls(true);
+
+      const currentLink = selectedStream?.link;
+      if (currentLink) {
+        if (failedStreamsRef.current.has(currentLink)) {
+          return;
+        }
+        failedStreamsRef.current.add(currentLink);
+      }
+
+      const currentStreams = Array.isArray(streamData) ? streamData : [];
+      const currentIndex = currentStreams.findIndex(
+        (s: any) => s?.link === currentLink,
+      );
+      const currentName = getServerName(
+        selectedStream,
+        currentIndex >= 0 ? currentIndex : undefined,
+      );
+
+      let nextStream: any = null;
+      let nextIndex = -1;
+
+      for (let i = currentIndex + 1; i < currentStreams.length; i++) {
+        if (
+          currentStreams[i]?.link &&
+          !failedStreamsRef.current.has(currentStreams[i].link)
+        ) {
+          nextStream = currentStreams[i];
+          nextIndex = i;
+          break;
+        }
+      }
+
+      if (!nextStream) {
+        for (let i = 0; i < currentIndex; i++) {
+          if (
+            currentStreams[i]?.link &&
+            !failedStreamsRef.current.has(currentStreams[i].link)
+          ) {
+            nextStream = currentStreams[i];
+            nextIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (nextStream) {
+        const nextName = getServerName(nextStream, nextIndex);
+        toast(`Failed to play ${currentName}. Switching to ${nextName}...`, 2800);
+        handleStreamSelect(nextStream, false);
+      } else {
+        if (currentStreams.length > 1) {
+          toast(
+            "Playback failed on all available servers. Please select another server or source.",
+            3500,
+          );
+        } else {
+          toast(
+            `Playback failed on ${currentName}. Please select another server or source.`,
+            3500,
+          );
+        }
+      }
+    },
+    [selectedStream, streamData, getServerName, toast, handleStreamSelect],
+  );
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const mpv = usePlayerEngine(videoRef, {
+    onError: handlePlaybackError,
     onFileLoaded: () => {
       const historyKey =
         activeEpisode?.sourceLink || activeEpisode?.id || activeEpisode?.link;
@@ -1055,12 +1196,7 @@ const DesktopPlayer: React.FC<any> = ({
         try {
           const { position } = JSON.parse(cached);
           if (position > 5) mpv.seek(position);
-        } catch {}
-      }
-
-      const savedZoom = settingsStorage.getPlayerZoom();
-      if (savedZoom !== 100) {
-        mpv.setProperty("video-zoom", Math.log2(savedZoom / 100));
+        } catch { }
       }
     },
   });
@@ -1119,17 +1255,17 @@ const DesktopPlayer: React.FC<any> = ({
       const win = getCurrentWindow();
       const previousState = preFullscreenStateRef.current;
       void (async () => {
-        await win.setFullscreen(false).catch(() => {});
+        await win.setFullscreen(false).catch(() => { });
         if (previousState) {
-          await win.setAlwaysOnTop(previousState.alwaysOnTop).catch(() => {});
+          await win.setAlwaysOnTop(previousState.alwaysOnTop).catch(() => { });
           if (previousState.maximized) {
-            await win.maximize().catch(() => {});
+            await win.maximize().catch(() => { });
             await invoke("ensure_window_in_work_area", {
               maximized: true,
-            }).catch(() => {});
+            }).catch(() => { });
           } else if (manualFullscreenRef.current) {
-            await win.setPosition(previousState.pos).catch(() => {});
-            await win.setSize(previousState.size).catch(() => {});
+            await win.setPosition(previousState.pos).catch(() => { });
+            await win.setSize(previousState.size).catch(() => { });
           }
         }
         manualFullscreenRef.current = false;
@@ -1178,16 +1314,17 @@ const DesktopPlayer: React.FC<any> = ({
     }
 
     // 2. Subtitle track matching
-    if (
-      appliedSubtitleForStreamRef.current !== streamLink &&
-      mpv.subtitleTracks.length > 0
-    ) {
-      const saved = getSavedTrackPreference(state);
+    const saved = getSavedTrackPreference(state);
+    const hasSelectedSub = mpv.subtitleTracks.some((t) => t.selected);
+    const shouldMatchSub =
+      (appliedSubtitleForStreamRef.current !== streamLink || !hasSelectedSub) &&
+      mpv.subtitleTracks.length > 0;
+
+    if (shouldMatchSub) {
       if (saved) {
         if (saved.subOff) {
           appliedSubtitleForStreamRef.current = streamLink;
-          const anySelected = mpv.subtitleTracks.some((t) => t.selected);
-          if (anySelected) {
+          if (hasSelectedSub) {
             mpv.selectTrack("sid", "no");
           }
         } else {
@@ -1212,6 +1349,29 @@ const DesktopPlayer: React.FC<any> = ({
           if (!downloadedTrack.selected) {
             mpv.selectTrack("sid", downloadedTrack.id);
           }
+        } else {
+          const defaultTrack =
+            mpv.subtitleTracks.find(
+              (t) => (t as any).is_default && !(t as any).isBitmapSub,
+            ) ||
+            mpv.subtitleTracks.find((t) => {
+              if ((t as any).isBitmapSub) return false;
+              const lang = (t.lang || "").toLowerCase();
+              const title = (t.title || "").toLowerCase();
+              return (
+                lang.startsWith("en") ||
+                title.includes("english") ||
+                title.includes("eng")
+              );
+            }) ||
+            mpv.subtitleTracks.find((t) => !(t as any).isBitmapSub);
+
+          if (defaultTrack) {
+            appliedSubtitleForStreamRef.current = streamLink;
+            if (!defaultTrack.selected) {
+              mpv.selectTrack("sid", defaultTrack.id);
+            }
+          }
         }
       }
     }
@@ -1221,6 +1381,30 @@ const DesktopPlayer: React.FC<any> = ({
     selectedStream?.link,
     mpv.isInitialized,
     state,
+  ]);
+
+  // Sync external subtitles dynamically as they resolve
+  useEffect(() => {
+    if (!mpv.isInitialized) return;
+    const allSubs = [
+      ...(selectedStream?.subtitles || []),
+      ...(externalSubs || []),
+    ];
+    const seen = new Set<string>();
+    const subs = allSubs.filter((sub) => {
+      const url = sub.url || sub.uri;
+      if (!url || seen.has(url)) return false;
+      seen.add(url);
+      return true;
+    });
+    if (subs.length > 0) {
+      mpv.setExternalSubtitles?.(subs);
+    }
+  }, [
+    mpv.isInitialized,
+    selectedStream?.subtitles,
+    externalSubs,
+    mpv.setExternalSubtitles,
   ]);
 
   useEffect(() => {
@@ -1240,20 +1424,29 @@ const DesktopPlayer: React.FC<any> = ({
         seen.add(url);
         return true;
       });
-      await mpv.loadFile(
-        selectedStream.link,
-        selectedStream.headers,
-        subs,
-        selectedStream.type,
-        selectedStream.localBaseDir,
-      );
+      try {
+        await mpv.loadFile(
+          selectedStream.link,
+          selectedStream.headers,
+          subs,
+          selectedStream.type,
+          selectedStream.localBaseDir,
+        );
+      } catch (err: any) {
+        console.error("loadFile failed:", err);
+        handlePlaybackError(err?.message || "Failed to load stream");
+      }
     })();
   }, [
     mpv.isInitialized,
     selectedStream?.link,
-    activeEpisode?.link,
-    toast,
+    selectedStream?.headers,
+    selectedStream?.subtitles,
+    selectedStream?.type,
+    selectedStream?.localBaseDir,
     externalSubs,
+    mpv.loadFile,
+    handlePlaybackError,
   ]);
 
   useEffect(() => {
@@ -1290,14 +1483,20 @@ const DesktopPlayer: React.FC<any> = ({
   ]);
 
   const hideControls = useCallback(() => {
-    if (!showShortcuts && !showEpisodeSidebar && !isScrubbingRef.current) {
+    if (
+      !showShortcuts &&
+      !showEpisodeSidebar &&
+      !isScrubbingRef.current &&
+      !mpv.playbackError
+    ) {
       setShowControls(false);
     }
-  }, [showShortcuts, showEpisodeSidebar]);
+  }, [showShortcuts, showEpisodeSidebar, mpv.playbackError]);
   const scheduleHide = useCallback(() => {
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    if (mpv.playbackError) return;
     controlsTimerRef.current = window.setTimeout(hideControls, 3500);
-  }, [hideControls]);
+  }, [hideControls, mpv.playbackError]);
 
   useEffect(() => {
     if (showEpisodeSidebar) {
@@ -1315,6 +1514,24 @@ const DesktopPlayer: React.FC<any> = ({
     setShowControls(true);
     scheduleHide();
   }, [scheduleHide]);
+
+  useEffect(() => {
+    const handleToggleEpisodes = () => {
+      if (hasMultipleEpisodes) {
+        setShowEpisodeSidebar((prev) => !prev);
+        revealControls();
+      }
+    };
+    const handleRemoteActivity = () => {
+      revealControls();
+    };
+    window.addEventListener("vega:toggle-episodes", handleToggleEpisodes);
+    window.addEventListener("vega:remote-activity", handleRemoteActivity);
+    return () => {
+      window.removeEventListener("vega:toggle-episodes", handleToggleEpisodes);
+      window.removeEventListener("vega:remote-activity", handleRemoteActivity);
+    };
+  }, [hasMultipleEpisodes, revealControls]);
 
   useEffect(() => {
     if (showControls) scheduleHide();
@@ -1355,12 +1572,10 @@ const DesktopPlayer: React.FC<any> = ({
   }, [applyZoom]);
 
   useEffect(() => {
+    // Keep spatial navigation running so directional remote/controller navigation works!
     import("@noriginmedia/norigin-spatial-navigation-core")
-      .then(({ pause, resume }) => {
-        pause();
-        return () => resume();
-      })
-      .catch(() => {});
+      .then(({ resume }) => resume())
+      .catch(() => { });
 
     const handleWheel = (e: WheelEvent) => {
       const target = e.target as HTMLElement | null;
@@ -1393,47 +1608,116 @@ const DesktopPlayer: React.FC<any> = ({
       ) {
         return;
       }
+      revealControls();
       const key = e.key.toLowerCase();
+
+      // Remote media keys
+      if (key === "mediaplaypause") {
+        e.preventDefault();
+        mpv.togglePause();
+        return;
+      }
+      if (key === "mediaplay") {
+        e.preventDefault();
+        if (mpv.isPaused) mpv.togglePause();
+        return;
+      }
+      if (key === "mediapause") {
+        e.preventDefault();
+        if (!mpv.isPaused) mpv.togglePause();
+        return;
+      }
+      if (key === "mediafastforward") {
+        e.preventDefault();
+        mpv.seek(10, "relative");
+        toast("+10s");
+        return;
+      }
+      if (key === "mediarewind") {
+        e.preventDefault();
+        mpv.seek(-10, "relative");
+        toast("-10s");
+        return;
+      }
+      if (key === "mediatracknext") {
+        e.preventDefault();
+        handleNextEpisode();
+        return;
+      }
+      if (key === "mediatrackprevious") {
+        e.preventDefault();
+        handlePrevEpisode();
+        return;
+      }
+      if (key === "mediastop") {
+        e.preventDefault();
+        navigate(-1);
+        return;
+      }
+
+      // Remote back key (Escape, Back, BrowserBack, Android keycode 4)
+      if (
+        key === "escape" ||
+        key === "back" ||
+        key === "browserback" ||
+        e.keyCode === 27 ||
+        e.keyCode === 10009
+      ) {
+        e.preventDefault();
+        if (showEpisodeSidebar) setShowEpisodeSidebar(false);
+        else if (showShortcuts) setShowShortcuts(false);
+        else if (showControls) setShowControls(false);
+        else if (isFullscreen) toggleFullscreen();
+        else navigate(-1);
+        return;
+      }
+
+      // When controls are hidden, any arrow / Enter wakes up controls!
+      if (!showControls) {
+        if (key === "arrowleft") {
+          e.preventDefault();
+          mpv.seek(-10, "relative");
+          return;
+        }
+        if (key === "arrowright") {
+          e.preventDefault();
+          mpv.seek(10, "relative");
+          return;
+        }
+        if (key === "arrowup" || key === "arrowdown" || key === "enter" || key === " ") {
+          e.preventDefault();
+          if (key === " " || key === "enter") {
+            mpv.togglePause();
+          }
+          return;
+        }
+      }
+
       switch (key) {
         case " ":
         case "k":
-        case "enter":
-          e.preventDefault();
-          mpv.togglePause();
-          break;
-        case "arrowleft":
-          e.preventDefault();
-          mpv.seek(-10, "relative");
-          break;
-        case "arrowright":
-          e.preventDefault();
-          mpv.seek(10, "relative");
-          break;
-        case "arrowup":
-          e.preventDefault();
-          mpv.setVolumeLevel(Math.min(200, mpv.volume + 5));
-          toast(`Volume: ${Math.min(200, Math.round(mpv.volume + 5))}%`);
-          break;
-        case "arrowdown":
-          e.preventDefault();
-          mpv.setVolumeLevel(Math.max(0, mpv.volume - 5));
-          toast(`Volume: ${Math.max(0, Math.round(mpv.volume - 5))}%`);
+          // Only toggle pause on Space / K if not actively focused on a button
+          if (!target || target === document.body || target.classList.contains("player-controls-wrapper")) {
+            e.preventDefault();
+            mpv.togglePause();
+          }
           break;
         case "f":
+          e.preventDefault();
           toggleFullscreen();
           break;
-        case "escape":
-          if (showEpisodeSidebar) setShowEpisodeSidebar(false);
-          else if (showShortcuts) setShowShortcuts(false);
-          else if (isFullscreen) toggleFullscreen();
-          else navigate(-1);
-          break;
         case "m":
+          e.preventDefault();
           mpv.setVolumeLevel(mpv.volume > 0 ? 0 : 100);
           toast(mpv.volume > 0 ? "Muted" : "Unmuted");
           break;
         case "n":
+          e.preventDefault();
           handleNextEpisode();
+          break;
+        case "p":
+          e.preventDefault();
+          handlePrevEpisode();
           break;
         case "a": {
           if (!mpv.audioTracks.length) break;
@@ -1447,6 +1731,24 @@ const DesktopPlayer: React.FC<any> = ({
           mpv.selectTrack("aid", nextTrack.id);
           saveAudioPreference(state, nextTrack, nextIndex);
           toast(`Audio: ${formatTrackLabel(nextTrack)}`);
+          break;
+        }
+        case "z":
+        case "[": {
+          e.preventDefault();
+          const step = e.shiftKey ? 250 : 50;
+          const newDelay = (mpv.audioDelay || 0) - step;
+          mpv.setAudioDelay?.(newDelay);
+          toast(`Audio Sync: ${newDelay > 0 ? `+${newDelay}` : newDelay}ms`);
+          break;
+        }
+        case "x":
+        case "]": {
+          e.preventDefault();
+          const step = e.shiftKey ? 250 : 50;
+          const newDelay = (mpv.audioDelay || 0) + step;
+          mpv.setAudioDelay?.(newDelay);
+          toast(`Audio Sync: ${newDelay > 0 ? `+${newDelay}` : newDelay}ms`);
           break;
         }
         case "t": {
@@ -1469,6 +1771,22 @@ const DesktopPlayer: React.FC<any> = ({
             saveSubtitlePreference(state, nextTrack, nextIndex);
             toast(`Subtitles: ${formatTrackLabel(nextTrack)}`);
           }
+          break;
+        }
+        case "g": {
+          e.preventDefault();
+          const step = e.shiftKey ? 250 : 50;
+          const newDelay = (mpv.subtitleDelay || 0) - step;
+          mpv.setSubtitleDelay?.(newDelay);
+          toast(`Subtitle Sync: ${newDelay > 0 ? `+${newDelay}` : newDelay}ms`);
+          break;
+        }
+        case "h": {
+          e.preventDefault();
+          const step = e.shiftKey ? 250 : 50;
+          const newDelay = (mpv.subtitleDelay || 0) + step;
+          mpv.setSubtitleDelay?.(newDelay);
+          toast(`Subtitle Sync: ${newDelay > 0 ? `+${newDelay}` : newDelay}ms`);
           break;
         }
         case "<":
@@ -1543,18 +1861,18 @@ const DesktopPlayer: React.FC<any> = ({
       window.removeEventListener("wheel", handleWheel);
       window.removeEventListener("mousemove", onMouseMoveEvent);
       window.removeEventListener("touchstart", onTouch);
-      import("@noriginmedia/norigin-spatial-navigation-core")
-        .then(({ resume }) => resume())
-        .catch(() => {});
     };
   }, [
     mpv,
     isFullscreen,
+    showControls,
     handleNextEpisode,
+    handlePrevEpisode,
     revealControls,
     toast,
     playbackRate,
     showShortcuts,
+    showEpisodeSidebar,
     handleZoomIn,
     handleZoomOut,
     handleResetZoom,
@@ -1622,18 +1940,18 @@ const DesktopPlayer: React.FC<any> = ({
     } catch (e) {
       console.error(e);
       const previousState = preFullscreenStateRef.current;
-      await win.setFullscreen(false).catch(() => {});
+      await win.setFullscreen(false).catch(() => { });
       await win
         .setAlwaysOnTop(previousState?.alwaysOnTop ?? false)
-        .catch(() => {});
+        .catch(() => { });
       if (previousState?.maximized) {
-        await win.maximize().catch(() => {});
+        await win.maximize().catch(() => { });
         await invoke("ensure_window_in_work_area", { maximized: true }).catch(
-          () => {},
+          () => { },
         );
       } else if (previousState) {
-        await win.setPosition(previousState.pos).catch(() => {});
-        await win.setSize(previousState.size).catch(() => {});
+        await win.setPosition(previousState.pos).catch(() => { });
+        await win.setSize(previousState.size).catch(() => { });
       }
       manualFullscreenRef.current = false;
       preFullscreenStateRef.current = null;
@@ -1665,16 +1983,16 @@ const DesktopPlayer: React.FC<any> = ({
               Math.max(
                 monitor.position.x,
                 monitor.position.x +
-                  monitor.size.width -
-                  pipSize.width -
-                  margin,
+                monitor.size.width -
+                pipSize.width -
+                margin,
               ),
               Math.max(
                 monitor.position.y,
                 monitor.position.y +
-                  monitor.size.height -
-                  pipSize.height -
-                  margin,
+                monitor.size.height -
+                pipSize.height -
+                margin,
               ),
             ),
           );
@@ -1701,16 +2019,6 @@ const DesktopPlayer: React.FC<any> = ({
     mpv.setProperty("panscan", nextCrop ? 1.0 : 0.0);
   };
 
-  const handleStreamSelect = useCallback(
-    (stream: any) => {
-      prevStreamLinkRef.current = null;
-      appliedAudioForStreamRef.current = null;
-      appliedSubtitleForStreamRef.current = null;
-      setSelectedStream(stream);
-    },
-    [setSelectedStream],
-  );
-
   const showNextBtn = useMemo(() => {
     if (activeEpisodeIndex >= state.episodeList.length - 1) return false;
     if (mpv.duration <= 0) return false;
@@ -1727,220 +2035,263 @@ const DesktopPlayer: React.FC<any> = ({
       ? `Episode ${activeEpisodeIndex + 2}`
       : undefined);
 
-  if (streamLoading) {
-    const bgUrl = state.poster?.background || state.poster?.poster;
-    return (
-      <div className="player-page controls-visible">
-        {bgUrl && (
-          <>
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                backgroundImage: `url(${bgUrl})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-                zIndex: -2,
-              }}
-            />
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                backgroundColor: "rgba(0,0,0,0.95)",
-                zIndex: -1,
-              }}
-            />
-          </>
-        )}
-        <FocusableButton
-          className="player-loading-back"
-          focusKey="PLAYER_LOADING_BACK"
-          onClick={() => navigate(-1)}
-          aria-label="Go back"
-        >
-          <ArrowLeft size={23} />
-        </FocusableButton>
-        <div
-          className="player-loading"
-          style={{ background: bgUrl ? "transparent" : "#000" }}
-        >
-          <AnimatedHourglass sandColor={hourglassSandColor} />
-          <span className="loading-text">Fetching stream...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (streamError) {
-    const bgUrl = state.poster?.background || state.poster?.poster;
-    return (
-      <div className="player-page controls-visible">
-        {bgUrl && (
-          <>
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                backgroundImage: `url(${bgUrl})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-                zIndex: -2,
-              }}
-            />
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                backgroundColor: "rgba(0,0,0,0.95)",
-                zIndex: -1,
-              }}
-            />
-          </>
-        )}
-        <div
-          className="player-error"
-          style={{ background: bgUrl ? "transparent" : "#000" }}
-        >
-          <p>{streamError.message || "Failed to load stream"}</p>
-          <button onClick={() => navigate(-1)}>Go Back</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (mpv.initializationError) {
-    return (
-      <PlayerInitError
-        error={mpv.initializationError}
-        onBack={() => navigate(-1)}
-        onOpenVlc={selectedStream?.link ? openInVlc : undefined}
-      />
-    );
-  }
+  const bgUrl = state.poster?.background || state.poster?.poster;
 
   return (
     <div
       className={`player-page ${showControls ? "controls-visible" : ""}`}
       onMouseMove={handleMouseMove}
-      style={{ backgroundColor: mpv.currentTime > 0 ? "transparent" : "#000" }}
+      style={{ backgroundColor: "#000" }}
       {...(isPip ? { "data-tauri-drag-region": true } : {})}
     >
-      <PlayerControls
-        visible={showControls}
-        isPaused={mpv.isPaused}
-        isBuffering={mpv.isBuffering}
-        currentTime={mpv.currentTime}
-        duration={mpv.duration}
-        cacheDuration={mpv.cacheDuration}
-        primaryTitle={state.primaryTitle}
-        secondaryTitle={activeEpisode?.title || state.secondaryTitle}
-        nextEpisodeTitle={nextEpisodeTitle}
-        showNextEpisode={showNextBtn}
-        onBack={() => navigate(-1)}
-        onTogglePause={() => {
-          mpv.togglePause();
-          revealControls();
-        }}
-        onSeek={(t) => {
-          mpv.seek(t);
-          revealControls();
-        }}
-        onRequestThumbnail={mpv.requestThumbnail}
-        thumbnailKey={`${selectedStream?.link || ""}:${activeEpisodeIndex}`}
-        onScrubbingChange={(scrubbing) => {
-          isScrubbingRef.current = scrubbing;
-          if (controlsTimerRef.current) {
-            clearTimeout(controlsTimerRef.current);
-            controlsTimerRef.current = null;
-          }
-          setShowControls(true);
-          if (!scrubbing) scheduleHide();
-        }}
-        onNextEpisode={handleNextEpisode}
-        onPrevEpisode={handlePrevEpisode}
-        hasNextEpisode={activeEpisodeIndex < state.episodeList.length - 1}
-        hasPrevEpisode={activeEpisodeIndex > 0}
-        onToggleFullscreen={toggleFullscreen}
-        isFullscreen={isFullscreen}
-        onTogglePip={togglePip}
-        isPip={isPip}
-        onToggleCrop={toggleCrop}
-        isCropped={isCropped}
-        zoomLevel={zoomLevel}
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
-        onResetZoom={handleResetZoom}
-        onSetZoom={applyZoom}
-        onClickBackground={handleBackgroundClick}
-        audioTracks={mpv.audioTracks}
-        subtitleTracks={mpv.subtitleTracks}
-        videoTracks={mpv.videoTracks}
-        chapters={mpv.chapters}
-        videoHeight={mpv.videoHeight}
-        playbackRate={playbackRate}
-        streamData={streamData}
-        selectedStream={selectedStream}
-        onSelectStream={handleStreamSelect}
-        onSelectAudioTrack={(id) => {
-          appliedAudioForStreamRef.current = selectedStream?.link || null;
-          mpv.selectTrack("aid", id);
-          const index = mpv.audioTracks.findIndex((item) => item.id === id);
-          const track = mpv.audioTracks[index];
-          if (track) {
-            saveAudioPreference(state, track, index >= 0 ? index : undefined);
-          }
-          toast(`Audio: ${track ? formatTrackLabel(track) : String(id)}`);
-        }}
-        onSelectSubtitleTrack={(id) => {
-          appliedSubtitleForStreamRef.current = selectedStream?.link || null;
-          mpv.selectTrack("sid", id);
-          if (id === "no") {
-            saveSubtitlePreference(state, "off");
-            toast("Subtitles: Off");
-          } else {
-            const index = mpv.subtitleTracks.findIndex(
-              (item) => item.id === id,
-            );
-            const track = mpv.subtitleTracks[index];
-            if (track) {
-              saveSubtitlePreference(
-                state,
-                track,
-                index >= 0 ? index : undefined,
-              );
-            }
-            toast(`Subtitles: ${track ? formatTrackLabel(track) : String(id)}`);
-          }
-        }}
-        onSelectVideoTrack={(id) => {
-          mpv.selectTrack("vid", id);
-        }}
-        onAddSubtitleFile={(path) => mpv.addSubtitleFile(path)}
-        onPlaybackRateChange={(rate) => {
-          setPlaybackRate(rate);
-          mpv.setPlaybackSpeed(rate);
-        }}
-        showShortcuts={showShortcuts}
-        onToggleShortcuts={() => setShowShortcuts((current) => !current)}
-        onOpenVlc={openInVlc}
-        onCopyLink={selectedStream?.link ? copyStreamLink : undefined}
-        skips={combinedSkips}
-      />
-      {showEpisodeSidebarSetting && hasMultipleEpisodes && (
-        <button
-          className={`player-episode-sidebar-toggle ${showControls && !showEpisodeSidebar ? "visible" : ""}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowEpisodeSidebar((prev) => !prev);
+      <div className="player-video-wrapper">
+        <video
+          ref={mpv.bindVideo}
+          className={`player-video-element ${isCropped ? "cropped" : ""}`}
+          style={{
+            transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : undefined,
+          }}
+          playsInline
+        />
+      </div>
+
+      {streamLoading && (
+        <div
+          className="player-page-overlay-loading"
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 90,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: bgUrl ? "transparent" : "#000",
+          }}
+        >
+          {bgUrl && (
+            <>
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundImage: `url(${bgUrl})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  zIndex: -2,
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundColor: "rgba(0,0,0,0.95)",
+                  zIndex: -1,
+                }}
+              />
+            </>
+          )}
+          <FocusableButton
+            className="player-loading-back"
+            focusKey="PLAYER_LOADING_BACK"
+            onClick={() => navigate(-1)}
+            aria-label="Go back"
+          >
+            <ArrowLeft size={23} />
+          </FocusableButton>
+          <div
+            className="player-loading"
+            style={{ background: bgUrl ? "transparent" : "#000" }}
+          >
+            <AnimatedHourglass sandColor={hourglassSandColor} />
+            <span className="loading-text">Fetching stream...</span>
+          </div>
+        </div>
+      )}
+
+      {streamError && !streamLoading && (!streamData || streamData.length === 0) && (
+        <div
+          className="player-page-overlay-error"
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 91,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: bgUrl ? "transparent" : "#000",
+          }}
+        >
+          {bgUrl && (
+            <>
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundImage: `url(${bgUrl})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  zIndex: -2,
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundColor: "rgba(0,0,0,0.95)",
+                  zIndex: -1,
+                }}
+              />
+            </>
+          )}
+          <div
+            className="player-error"
+            style={{ background: bgUrl ? "transparent" : "#000", zIndex: 1 }}
+          >
+            <p>{streamError.message || "Failed to load stream"}</p>
+            <button onClick={() => navigate(-1)}>Go Back</button>
+          </div>
+        </div>
+      )}
+
+      {mpv.initializationError && !streamLoading && !streamError && (
+        <div style={{ position: "absolute", inset: 0, zIndex: 92 }}>
+          <PlayerInitError
+            error={mpv.initializationError}
+            onBack={() => navigate(-1)}
+            onOpenVlc={selectedStream?.link ? openInVlc : undefined}
+          />
+        </div>
+      )}
+      <ControlsFocusProvider visible={showControls && !showEpisodeSidebar}>
+        <PlayerControls
+          visible={showControls}
+          isPaused={mpv.isPaused}
+          isBuffering={mpv.isBuffering}
+          currentTime={mpv.currentTime}
+          duration={mpv.duration}
+          cacheDuration={mpv.cacheDuration}
+          primaryTitle={state.primaryTitle}
+          secondaryTitle={activeEpisode?.title || state.secondaryTitle}
+          nextEpisodeTitle={nextEpisodeTitle}
+          showNextEpisode={showNextBtn}
+          onBack={() => navigate(-1)}
+          onTogglePause={() => {
+            mpv.togglePause();
             revealControls();
           }}
-          title="Episodes"
-          aria-label="Toggle episode list sidebar"
-        >
-          <ChevronLeft size={20} />
-        </button>
-      )}
+          onSeek={(t) => {
+            mpv.seek(t);
+            revealControls();
+          }}
+          onRequestThumbnail={mpv.requestThumbnail}
+          thumbnailKey={`${selectedStream?.link || ""}:${activeEpisodeIndex}`}
+          onScrubbingChange={(scrubbing) => {
+            isScrubbingRef.current = scrubbing;
+            if (controlsTimerRef.current) {
+              clearTimeout(controlsTimerRef.current);
+              controlsTimerRef.current = null;
+            }
+            setShowControls(true);
+            if (!scrubbing) scheduleHide();
+          }}
+          onNextEpisode={handleNextEpisode}
+          onPrevEpisode={handlePrevEpisode}
+          hasNextEpisode={activeEpisodeIndex < state.episodeList.length - 1}
+          hasPrevEpisode={activeEpisodeIndex > 0}
+          onToggleFullscreen={toggleFullscreen}
+          isFullscreen={isFullscreen}
+          onTogglePip={togglePip}
+          isPip={isPip}
+          onToggleCrop={toggleCrop}
+          isCropped={isCropped}
+          zoomLevel={zoomLevel}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onResetZoom={handleResetZoom}
+          onSetZoom={applyZoom}
+          onClickBackground={handleBackgroundClick}
+          audioTracks={mpv.audioTracks}
+          subtitleTracks={mpv.subtitleTracks}
+          videoTracks={mpv.videoTracks}
+          audioDelay={mpv.audioDelay}
+          onAudioDelayChange={(delayMs) => {
+            mpv.setAudioDelay?.(delayMs);
+            toast(`Audio Sync: ${delayMs > 0 ? `+${delayMs}` : delayMs}ms`);
+          }}
+          subtitleDelay={mpv.subtitleDelay}
+          onSubtitleDelayChange={(delayMs) => {
+            mpv.setSubtitleDelay?.(delayMs);
+            toast(`Subtitle Sync: ${delayMs > 0 ? `+${delayMs}` : delayMs}ms`);
+          }}
+          chapters={mpv.chapters}
+          videoHeight={mpv.videoHeight}
+          playbackRate={playbackRate}
+          streamData={streamData}
+          selectedStream={selectedStream}
+          onSelectStream={(stream) => handleStreamSelect(stream, true)}
+          onSelectAudioTrack={(id) => {
+            appliedAudioForStreamRef.current = selectedStream?.link || null;
+            mpv.selectTrack("aid", id);
+            const index = mpv.audioTracks.findIndex((item) => item.id === id);
+            const track = mpv.audioTracks[index];
+            if (track) {
+              saveAudioPreference(state, track, index >= 0 ? index : undefined);
+            }
+            toast(`Audio: ${track ? formatTrackLabel(track) : String(id)}`);
+          }}
+          onSelectSubtitleTrack={(id) => {
+            appliedSubtitleForStreamRef.current = selectedStream?.link || null;
+            mpv.selectTrack("sid", id);
+            if (id === "no") {
+              saveSubtitlePreference(state, "off");
+              toast("Subtitles: Off");
+            } else {
+              const index = mpv.subtitleTracks.findIndex(
+                (item) => item.id === id,
+              );
+              const track = mpv.subtitleTracks[index];
+              if (track) {
+                saveSubtitlePreference(
+                  state,
+                  track,
+                  index >= 0 ? index : undefined,
+                );
+              }
+              toast(`Subtitles: ${track ? formatTrackLabel(track) : String(id)}`);
+            }
+          }}
+          onSelectVideoTrack={(id) => {
+            mpv.selectTrack("vid", id);
+          }}
+          onAddSubtitleFile={(path, title) => mpv.addSubtitleFile(path, title)}
+          onPlaybackRateChange={(rate) => {
+            setPlaybackRate(rate);
+            mpv.setPlaybackSpeed(rate);
+          }}
+          showShortcuts={showShortcuts}
+          onToggleShortcuts={() => setShowShortcuts((current) => !current)}
+          onOpenVlc={openInVlc}
+          onCopyLink={selectedStream?.link ? copyStreamLink : undefined}
+          skips={combinedSkips}
+        />
+        {showEpisodeSidebarSetting && hasMultipleEpisodes && (
+          <FocusableButton
+            type="button"
+            focusable={showControls && !showEpisodeSidebar && tvMode}
+            focusKey="PLAYER_EPISODES_DRAWER_TOGGLE"
+            className={`player-episode-sidebar-toggle ${showControls && !showEpisodeSidebar ? "visible" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowEpisodeSidebar((prev) => !prev);
+              revealControls();
+            }}
+            title="Episodes"
+            aria-label="Toggle episode list sidebar"
+          >
+            <ChevronLeft size={20} />
+          </FocusableButton>
+        )}
+      </ControlsFocusProvider>
 
       {showEpisodeSidebarSetting && hasMultipleEpisodes && (
         <>
@@ -1952,62 +2303,68 @@ const DesktopPlayer: React.FC<any> = ({
               setShowEpisodeSidebar(false);
             }}
           />
-          <aside
-            className={`player-episode-sidebar ${showEpisodeSidebar ? "open" : ""}`}
-            data-prevent-wheel-volume="true"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="player-episode-sidebar-header">
-              <div className="player-episode-sidebar-title-group">
-                <ListIcon size={18} className="player-episode-sidebar-icon" />
-                <h3 className="player-episode-sidebar-title">Episodes</h3>
-                <span className="player-episode-sidebar-count">
-                  {state.episodeList.length}
-                </span>
-              </div>
-              <button
-                type="button"
-                className="player-episode-sidebar-close"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowEpisodeSidebar(false);
-                }}
-                aria-label="Close episode list"
-              >
-                <CloseIcon size={18} />
-              </button>
-            </div>
-            <div
-              className="player-episode-sidebar-list"
+          <FocusContext.Provider value={sidebarFocusKey}>
+            <aside
+              ref={sidebarFocusRef}
+              className={`player-episode-sidebar ${showEpisodeSidebar ? "open" : ""}`}
               data-prevent-wheel-volume="true"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
             >
-              {state.episodeList.map((ep: any, index: number) => {
-                const isActive = index === activeEpisodeIndex;
-                const epNum = index + 1;
-                const epTitle = ep?.title || `Episode ${epNum}`;
-                return (
-                  <SidebarEpisodeItem
-                    key={ep?.id || ep?.link || index}
-                    episode={ep}
-                    index={index}
-                    isActive={isActive}
-                    itemRef={isActive ? activeEpisodeItemRef : undefined}
-                    onSelect={() => {
-                      if (index !== activeEpisodeIndex) {
-                        prevStreamLinkRef.current = null;
-                        appliedAudioForStreamRef.current = null;
-                        appliedSubtitleForStreamRef.current = null;
-                        setActiveEpisodeIndex(index);
-                        toast(`Playing: ${epTitle}`);
-                      }
-                      setShowEpisodeSidebar(false);
-                    }}
-                  />
-                );
-              })}
-            </div>
-          </aside>
+              <div className="player-episode-sidebar-header">
+                <div className="player-episode-sidebar-title-group">
+                  <ListIcon size={18} className="player-episode-sidebar-icon" />
+                  <h3 className="player-episode-sidebar-title">Episodes</h3>
+                  <span className="player-episode-sidebar-count">
+                    {state.episodeList.length}
+                  </span>
+                </div>
+                <FocusableButton
+                  type="button"
+                  focusable={showEpisodeSidebar && tvMode}
+                  focusKey="EPISODE_SIDEBAR_CLOSE"
+                  className="player-episode-sidebar-close"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowEpisodeSidebar(false);
+                  }}
+                  aria-label="Close episode list"
+                >
+                  <CloseIcon size={18} />
+                </FocusableButton>
+              </div>
+              <div
+                className="player-episode-sidebar-list"
+                data-prevent-wheel-volume="true"
+              >
+                {state.episodeList.map((ep: any, index: number) => {
+                  const isActive = index === activeEpisodeIndex;
+                  const epNum = index + 1;
+                  const epTitle = ep?.title || `Episode ${epNum}`;
+                  return (
+                    <SidebarEpisodeItem
+                      key={ep?.id || ep?.link || index}
+                      episode={ep}
+                      index={index}
+                      isActive={isActive}
+                      itemRef={isActive ? activeEpisodeItemRef : undefined}
+                      focusable={showEpisodeSidebar && tvMode}
+                      onSelect={() => {
+                        if (index !== activeEpisodeIndex) {
+                          prevStreamLinkRef.current = null;
+                          appliedAudioForStreamRef.current = null;
+                          appliedSubtitleForStreamRef.current = null;
+                          setActiveEpisodeIndex(index);
+                          toast(`Playing: ${epTitle}`);
+                        }
+                        setShowEpisodeSidebar(false);
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </aside>
+          </FocusContext.Provider>
         </>
       )}
 

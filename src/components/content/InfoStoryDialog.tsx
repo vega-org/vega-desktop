@@ -31,6 +31,7 @@ import {
   LuX,
 } from "react-icons/lu";
 import { useTmdbStory } from "../../lib/hooks/useTmdbStory";
+import { useDialogFocusBoundary } from "../../lib/hooks/useDialogFocusBoundary";
 import { FocusableButton } from "../layout/FocusableButton";
 
 interface InfoStoryDialogProps {
@@ -203,6 +204,12 @@ export function InfoStoryDialog({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose, open, pages.length]);
 
+  const { ref: dialogRef, DialogFocusProvider } = useDialogFocusBoundary({
+    isOpen: open,
+    focusKey: "INFO_STORY_DIALOG",
+    preferredChildFocusKey: "STORY_CLOSE",
+  });
+
   if (!open) return null;
 
   const facts = data
@@ -294,13 +301,15 @@ export function InfoStoryDialog({
   };
 
   return (
-    <div
-      className="info-story-dialog"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${title} information`}
-      onClick={handleHalfClick}
-    >
+    <DialogFocusProvider>
+      <div
+        ref={dialogRef as any}
+        className="info-story-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${title} information`}
+        onClick={handleHalfClick}
+      >
       <div className="info-story-orb" />
       <div
         className="info-story-progress"
@@ -399,6 +408,7 @@ export function InfoStoryDialog({
         </nav>
       )}
     </div>
+    </DialogFocusProvider>
   );
 }
 

@@ -12,6 +12,12 @@ import "./WindowControls.css";
 const appWindow = getCurrentWindow();
 
 export const WindowControls: React.FC = () => {
+  const isAndroid =
+    typeof navigator !== "undefined" &&
+    navigator.userAgent.toLowerCase().includes("android");
+
+  if (isAndroid) return null;
+
   const [maximized, setMaximized] = React.useState(false);
   const [fullscreen, setFullscreen] = React.useState(false);
   const maximizedRef = React.useRef(false);
@@ -75,6 +81,7 @@ export const WindowControls: React.FC = () => {
       <div className="window-controls" aria-label="Window controls">
         <button
           type="button"
+          tabIndex={-1}
           className="window-control"
           aria-label="Minimize"
           title="Minimize"
@@ -84,6 +91,7 @@ export const WindowControls: React.FC = () => {
         </button>
         <button
           type="button"
+          tabIndex={-1}
           className="window-control"
           aria-label={maximized ? "Restore" : "Maximize"}
           title={maximized ? "Restore" : "Maximize"}
@@ -93,6 +101,7 @@ export const WindowControls: React.FC = () => {
         </button>
         <button
           type="button"
+          tabIndex={-1}
           className="window-control window-control-close"
           aria-label="Close"
           title="Close"

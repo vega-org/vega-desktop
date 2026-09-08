@@ -96,8 +96,15 @@ export class SettingsStorage {
   }
 
   isTvModeEnabled(): boolean {
-    const defaultTvMode = import.meta.env.VITE_TV_MODE === "true";
-    return mainStorage.getBool(SettingsKeys.TV_MODE_ENABLED, defaultTvMode);
+    const isTv =
+      typeof navigator !== "undefined" &&
+      (navigator.userAgent.toLowerCase().includes("android") ||
+        navigator.userAgent.toLowerCase().includes("tv") ||
+        navigator.userAgent.toLowerCase().includes("smarttv") ||
+        navigator.userAgent.toLowerCase().includes("googletv") ||
+        navigator.userAgent.toLowerCase().includes("leanback") ||
+        import.meta.env.VITE_TV_MODE === "true");
+    return mainStorage.getBool(SettingsKeys.TV_MODE_ENABLED, isTv);
   }
 
   setTvModeEnabled(enabled: boolean): void {
@@ -150,6 +157,7 @@ export class SettingsStorage {
   isVlcEnabled(): boolean {
     return mainStorage.getBool(SettingsKeys.VLC_ENABLED, false);
   }
+
 
   isExternalPlayerEnabled(): boolean {
     return mainStorage.getBool(SettingsKeys.EXTERNAL_PLAYER_ENABLED, false);

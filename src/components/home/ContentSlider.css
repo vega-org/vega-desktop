@@ -94,12 +94,12 @@
 
 .slider-row .swiper-wrapper {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .slider-row.skeleton-row {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 16px;
   padding-inline: 44px;
 }
@@ -110,8 +110,8 @@
   height: auto;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  align-self: flex-end;
+  justify-content: flex-start;
+  align-self: flex-start;
 }
 
 .content-slider-slide .post-card {
@@ -134,8 +134,8 @@
   outline: none;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  align-self: flex-end;
+  justify-content: flex-start;
+  align-self: flex-start;
   transition:
     transform 220ms cubic-bezier(0.2, 0, 0, 1),
     box-shadow 180ms ease;
@@ -270,6 +270,7 @@
 
 .post-copy {
   display: grid;
+  align-content: start;
   min-height: 44px;
   gap: 3px;
   padding: 10px 4px 0;

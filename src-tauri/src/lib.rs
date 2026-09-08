@@ -1,6 +1,8 @@
 mod cookie_manager;
 mod doh_client;
 mod download_manager;
+mod ffmpeg_resolver;
+mod media_probe;
 mod stream_server;
 mod sync_manifest;
 mod torrent;
@@ -121,6 +123,35 @@ fn get_torrent_api_port(
     } else {
         Err("Torrent service is not available".into())
     }
+}
+
+#[tauri::command]
+async fn probe_media_info(
+    _app: tauri::AppHandle,
+    source: String,
+    headers: Option<HashMap<String, String>>,
+) -> Result<media_probe::MediaProbeResult, String> {
+    media_probe::probe_media(&source, headers).await
+}
+
+#[tauri::command]
+async fn extract_subtitles(
+    app: tauri::AppHandle,
+    source: String,
+    track_index: u32,
+    headers: Option<HashMap<String, String>>,
+) -> Result<String, String> {
+    media_probe::extract_subtitles_to_string(Some(app), &source, track_index, headers).await
+}
+
+#[tauri::command]
+async fn get_seek_keyframe(
+    _app: tauri::AppHandle,
+    source: String,
+    target_time: f64,
+    headers: Option<HashMap<String, String>>,
+) -> Result<f64, String> {
+    Ok(media_probe::find_seek_keyframe(&source, target_time, headers).await)
 }
 
 /// Decodes a single frame in an isolated MPV core. This deliberately does not
@@ -847,6 +878,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_libmpv::init());
 
+
     builder
         .manage(ProxyState {
             port: Mutex::new(None),
@@ -860,9 +892,10 @@ pub fn run() {
             }
 
             let app_handle = app.handle().clone();
+            let app_handle_for_server = app_handle.clone();
             tauri::async_runtime::spawn(async move {
                 println!("[stream_proxy] Starting proxy server...");
-                match stream_server::start_server(local_files).await {
+                match stream_server::start_server(local_files, Some(app_handle_for_server)).await {
                     Ok(port) => {
                         println!("[stream_proxy] Server started on port {}", port);
                         let state: tauri::State<ProxyState> = app_handle.state();
@@ -913,7 +946,10 @@ pub fn run() {
             doh_client::doh_fetch,
             sync_manifest::read_sync_manifests,
             sync_manifest::write_sync_manifest,
-            sync_manifest::resolve_sync_media_path
+            sync_manifest::resolve_sync_media_path,
+            probe_media_info,
+            extract_subtitles,
+            get_seek_keyframe
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

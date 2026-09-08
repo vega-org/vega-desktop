@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import * as Dialog from "@radix-ui/react-dialog";
-import { useFocusable } from "@noriginmedia/norigin-spatial-navigation-react";
-import { resume } from "@noriginmedia/norigin-spatial-navigation-core";
+import { useFocusable, FocusContext } from "@noriginmedia/norigin-spatial-navigation-react";
+import { setFocus, doesFocusableExist } from "@noriginmedia/norigin-spatial-navigation-core";
 import {
   LuBlocks as Blocks,
   LuCheck as Check,
@@ -17,6 +16,9 @@ import {
   LuX as X,
 } from "react-icons/lu";
 import { ProviderSettingsDialog } from "../components/settings/ProviderSettingsDialog";
+import { SourcePickerDialog } from "../components/extensions/SourcePickerDialog";
+import { AddSourceDialog } from "../components/extensions/AddSourceDialog";
+import { ConfirmActionDialog } from "../components/extensions/ConfirmActionDialog";
 import { FocusableButton } from "../components/layout/FocusableButton";
 import { extensionManager } from "../lib/services/ExtensionManager";
 import { updateProvidersService } from "../lib/services/UpdateProviders";
@@ -59,68 +61,7 @@ const isSameProvider = (
     left.source?.author === right.source?.author,
   );
 
-const ExtensionInput: React.FC<{
-  inputValue: string;
-  setInputValue: (value: string) => void;
-  onSubmit: () => void;
-  tvMode: boolean;
-}> = ({ inputValue, setInputValue, onSubmit, tvMode }) => {
-  const [isTyping, setIsTyping] = useState(false);
-  const nativeInputRef = useRef<HTMLInputElement>(null);
-  const { ref, focused, focusSelf } = useFocusable({
-    focusable: tvMode,
-    focusKey: "EXTENSION_SOURCE_INPUT",
-    onEnterPress: () => {
-      setIsTyping(true);
-      setTimeout(() => nativeInputRef.current?.focus(), 50);
-    },
-  });
 
-  const beginTyping = () => {
-    setIsTyping(true);
-    setTimeout(() => nativeInputRef.current?.focus(), 50);
-  };
-
-  const finishTyping = () => {
-    setIsTyping(false);
-    if (tvMode) {
-      setTimeout(() => {
-        resume();
-        focusSelf();
-      }, 100);
-    }
-  };
-
-  return (
-    <div
-      ref={ref}
-      className={`extension-dialog-input ${focused ? "tv-focus" : ""}`}
-      onClick={beginTyping}
-    >
-      <Globe size={19} aria-hidden="true" />
-      <input
-        ref={nativeInputRef}
-        type="text"
-        readOnly={tvMode ? !isTyping : false}
-        placeholder="GitHub author or provider source URL"
-        value={inputValue}
-        onChange={(event) => setInputValue(event.target.value)}
-        onBlur={finishTyping}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            nativeInputRef.current?.blur();
-            onSubmit();
-          } else if (event.key === "Escape") {
-            nativeInputRef.current?.blur();
-          }
-          event.stopPropagation();
-        }}
-        aria-label="Provider source"
-      />
-    </div>
-  );
-};
 
 const ProviderIdentity = ({ provider }: { provider: ProviderExtension }) => (
   <div className="provider-identity">
@@ -163,7 +104,62 @@ export const ExtensionsPage: React.FC = () => {
     useState<ProviderExtension | null>(null);
   const [settingsProvider, setSettingsProvider] =
     useState<ProviderExtension | null>(null);
-  const tvMode = settingsStorage.isTvModeEnabled();
+  const isAndroid =
+    typeof navigator !== "undefined" &&
+    navigator.userAgent.toLowerCase().includes("android");
+  const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
+
+  const isAnyDialogOpen = Boolean(
+    showSourcePicker ||
+    showAddSource ||
+    sourceToRemove ||
+    providerToRemove ||
+    settingsProvider
+  );
+
+  const { ref: pageFocusRef, focusKey: pageFocusKey } = useFocusable({
+    focusable: !isAnyDialogOpen,
+    trackChildren: true,
+    saveLastFocusedChild: true,
+    preferredChildFocusKey: "EXTENSIONS_SOURCE_PICKER",
+  });
+
+  const prevAnyDialogOpen = useRef(isAnyDialogOpen);
+  useEffect(() => {
+    if (prevAnyDialogOpen.current && !isAnyDialogOpen && tvMode) {
+      let attempts = 0;
+      const restoreFocus = () => {
+        const target =
+          sources.length > 0
+            ? "EXTENSIONS_SOURCE_PICKER"
+            : "EXTENSIONS_ADD_SOURCE";
+        if (doesFocusableExist(target)) {
+          setFocus(target);
+        } else if (attempts < 8) {
+          attempts++;
+          setTimeout(restoreFocus, 35);
+        }
+      };
+      setTimeout(restoreFocus, 40);
+    }
+    prevAnyDialogOpen.current = isAnyDialogOpen;
+  }, [isAnyDialogOpen, tvMode, sources.length]);
+
+  useEffect(() => {
+    if (tvMode && !isAnyDialogOpen) {
+      const timer = setTimeout(() => {
+        const target =
+          sources.length > 0
+            ? "EXTENSIONS_SOURCE_PICKER"
+            : "EXTENSIONS_ADD_SOURCE";
+        if (doesFocusableExist(target)) {
+          setFocus(target);
+        }
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [tvMode, isAnyDialogOpen, sources.length]);
+
 
   const refreshManifest = async (source: ProviderSource) => {
     try {
@@ -263,16 +259,52 @@ export const ExtensionsPage: React.FC = () => {
       const source = createProviderSource(inputValue);
       extensionStorage.addProviderSources(source.author, source.url);
       extensionStorage.setDefaultProviderSource(source.author);
+      const nextSources = extensionStorage.getProviderSources();
+      setSources(nextSources);
       setInputValue("");
       setError("");
       setShowAddSource(false);
       applySource(extensionStorage.getProviderSource() ?? source);
+      if (tvMode) {
+        let attempts = 0;
+        const focusPicker = () => {
+          if (doesFocusableExist("EXTENSIONS_SOURCE_PICKER")) {
+            setFocus("EXTENSIONS_SOURCE_PICKER");
+          } else if (doesFocusableExist("EXTENSIONS_ADD_SOURCE")) {
+            setFocus("EXTENSIONS_ADD_SOURCE");
+          } else if (attempts < 12) {
+            attempts++;
+            setTimeout(focusPicker, 35);
+          }
+        };
+        setTimeout(focusPicker, 40);
+      }
     } catch (caughtError: unknown) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
           : "Enter a GitHub author or a valid provider source URL.",
       );
+    }
+  };
+
+  const handleCloseAddSource = () => {
+    setShowAddSource(false);
+    if (tvMode) {
+      let attempts = 0;
+      const restoreFocus = () => {
+        const target =
+          extensionStorage.getProviderSources().length > 0
+            ? "EXTENSIONS_SOURCE_PICKER"
+            : "EXTENSIONS_ADD_SOURCE";
+        if (doesFocusableExist(target)) {
+          setFocus(target);
+        } else if (attempts < 8) {
+          attempts++;
+          setTimeout(restoreFocus, 35);
+        }
+      };
+      setTimeout(restoreFocus, 40);
     }
   };
 
@@ -292,6 +324,24 @@ export const ExtensionsPage: React.FC = () => {
           isSameProvider(item, provider),
         );
         if (installedProvider) setProvider(installedProvider);
+      }
+      if (tvMode) {
+        let attempts = 0;
+        const focusActions = () => {
+          if (doesFocusableExist(`PROVIDER_SETTINGS_${key}`)) {
+            setFocus(`PROVIDER_SETTINGS_${key}`);
+          } else if (doesFocusableExist(`PROVIDER_REMOVE_${key}`)) {
+            setFocus(`PROVIDER_REMOVE_${key}`);
+          } else if (doesFocusableExist(`PROVIDER_USE_${key}`)) {
+            setFocus(`PROVIDER_USE_${key}`);
+          } else if (attempts < 10) {
+            attempts++;
+            setTimeout(focusActions, 40);
+          } else {
+            setFocus("EXTENSIONS_SOURCE_PICKER");
+          }
+        };
+        setTimeout(focusActions, 50);
       }
     } catch (caughtError: unknown) {
       setError(
@@ -323,6 +373,20 @@ export const ExtensionsPage: React.FC = () => {
         message: `${provider.display_name} updated to v${targetProvider.version}`,
         type: "success",
       });
+      if (tvMode) {
+        let attempts = 0;
+        const focusUpdate = () => {
+          if (doesFocusableExist(`PROVIDER_SETTINGS_${key}`)) {
+            setFocus(`PROVIDER_SETTINGS_${key}`);
+          } else if (doesFocusableExist(`PROVIDER_REMOVE_${key}`)) {
+            setFocus(`PROVIDER_REMOVE_${key}`);
+          } else if (attempts < 10) {
+            attempts++;
+            setTimeout(focusUpdate, 40);
+          }
+        };
+        setTimeout(focusUpdate, 50);
+      }
     } catch (caughtError: unknown) {
       setError(
         caughtError instanceof Error
@@ -335,6 +399,7 @@ export const ExtensionsPage: React.FC = () => {
   };
 
   const handleUninstall = (provider: ProviderExtension) => {
+    const key = providerKey(provider);
     extensionManager.uninstallProvider(provider.value, provider.source?.author);
     const remaining = extensionStorage.getInstalledProviders();
     setInstalledProviders(remaining);
@@ -353,6 +418,20 @@ export const ExtensionsPage: React.FC = () => {
       );
     }
     setProviderToRemove(null);
+    if (tvMode) {
+      let attempts = 0;
+      const focusInstall = () => {
+        if (doesFocusableExist(`PROVIDER_INSTALL_${key}`)) {
+          setFocus(`PROVIDER_INSTALL_${key}`);
+        } else if (attempts < 10) {
+          attempts++;
+          setTimeout(focusInstall, 40);
+        } else {
+          setFocus("EXTENSIONS_SOURCE_PICKER");
+        }
+      };
+      setTimeout(focusInstall, 50);
+    }
   };
 
   const handleRemoveSource = (source: ProviderSource) => {
@@ -397,7 +476,8 @@ export const ExtensionsPage: React.FC = () => {
   };
 
   return (
-    <main className="extensions-page">
+    <FocusContext.Provider value={pageFocusKey}>
+      <main ref={pageFocusRef} className="extensions-page">
       <header className="extensions-header">
         <div>
           <p className="extensions-eyebrow">Settings</p>
@@ -494,6 +574,7 @@ export const ExtensionsPage: React.FC = () => {
               <FocusableButton
                 className="empty-add-source"
                 onClick={() => setShowAddSource(true)}
+                focusKey="EXTENSIONS_EMPTY_ADD_SOURCE"
               >
                 <Plus size={18} /> Add source
               </FocusableButton>
@@ -616,172 +697,85 @@ export const ExtensionsPage: React.FC = () => {
         aria-hidden="true"
       />
 
-      <Dialog.Root open={showSourcePicker} onOpenChange={setShowSourcePicker}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="extensions-dialog-overlay" />
-          <Dialog.Content className="extensions-dialog-content">
-            <div className="extensions-dialog-header">
-              <div>
-                <Dialog.Title>Provider sources</Dialog.Title>
-                <Dialog.Description>
-                  Choose the manifest used to discover providers.
-                </Dialog.Description>
-              </div>
-              <Dialog.Close
-                className="extensions-dialog-close"
-                aria-label="Close"
-              >
-                <X size={20} />
-              </Dialog.Close>
-            </div>
-            <div className="source-picker-list">
-              {sources.map((source) => {
-                const selected = activeSource?.author === source.author;
-                return (
-                  <div
-                    className={`source-picker-item ${selected ? "selected" : ""}`}
-                    key={source.author}
-                  >
-                    <FocusableButton
-                      className="source-picker-main"
-                      onClick={() => {
-                        applySource(source);
-                        setShowSourcePicker(false);
-                      }}
-                    >
-                      <span className="source-control-icon">
-                        <Blocks size={19} />
-                      </span>
-                      <span>
-                        <strong>{source.author}</strong>
-                        <small>{source.url}</small>
-                      </span>
-                      {selected && <Check size={20} />}
-                    </FocusableButton>
-                    <FocusableButton
-                      className="source-picker-remove"
-                      onClick={() => setSourceToRemove(source)}
-                      title={`Remove ${source.author}`}
-                    >
-                      <Trash2 size={18} />
-                    </FocusableButton>
-                  </div>
-                );
-              })}
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <SourcePickerDialog
+        open={showSourcePicker}
+        onOpenChange={(open) => {
+          setShowSourcePicker(open);
+          if (!open && tvMode) {
+            setTimeout(() => setFocus("EXTENSIONS_SOURCE_PICKER"), 50);
+          }
+        }}
+        sources={sources}
+        activeSource={activeSource}
+        onApplySource={applySource}
+        onRequestRemoveSource={setSourceToRemove}
+      />
 
-      <Dialog.Root open={showAddSource} onOpenChange={setShowAddSource}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="extensions-dialog-overlay" />
-          <Dialog.Content className="extensions-dialog-content add-source-dialog">
-            <div className="extensions-dialog-header">
-              <div>
-                <Dialog.Title>Add source</Dialog.Title>
-                <Dialog.Description>
-                  Enter a GitHub author or a hosted provider manifest URL.
-                </Dialog.Description>
-              </div>
-              {sources.length > 0 && (
-                <Dialog.Close
-                  className="extensions-dialog-close"
-                  aria-label="Close"
-                >
-                  <X size={20} />
-                </Dialog.Close>
-              )}
-            </div>
-            <ExtensionInput
-              inputValue={inputValue}
-              setInputValue={setInputValue}
-              onSubmit={handleAddSource}
-              tvMode={tvMode}
-            />
-            <div className="extensions-dialog-actions">
-              {sources.length > 0 && (
-                <Dialog.Close className="dialog-text-button">
-                  Cancel
-                </Dialog.Close>
-              )}
-              <FocusableButton
-                className="dialog-primary-button"
-                onClick={handleAddSource}
-              >
-                <Plus size={18} /> Add source
-              </FocusableButton>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <AddSourceDialog
+        open={showAddSource}
+        onOpenChange={(open) => {
+          if (!open) handleCloseAddSource();
+          else setShowAddSource(true);
+        }}
+        inputValue={inputValue}
+        setInputValue={setInputValue}
+        onAddSource={handleAddSource}
+        canCancel={sources.length > 0}
+      />
 
-      <Dialog.Root
+      <ConfirmActionDialog
         open={Boolean(sourceToRemove)}
-        onOpenChange={(open) => !open && setSourceToRemove(null)}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="extensions-dialog-overlay nested" />
-          <Dialog.Content className="extensions-dialog-content confirm-dialog">
-            <span className="confirm-dialog-icon">
-              <Trash2 size={23} />
-            </span>
-            <Dialog.Title>Remove {sourceToRemove?.author}?</Dialog.Title>
-            <Dialog.Description>
-              Providers installed from this source will also be removed from
-              this device.
-            </Dialog.Description>
-            <div className="extensions-dialog-actions">
-              <Dialog.Close className="dialog-text-button">Cancel</Dialog.Close>
-              <FocusableButton
-                className="dialog-danger-button"
-                onClick={() =>
-                  sourceToRemove && handleRemoveSource(sourceToRemove)
-                }
-              >
-                Remove source
-              </FocusableButton>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+        onOpenChange={(open) => {
+          if (!open) {
+            setSourceToRemove(null);
+            if (tvMode)
+              setTimeout(() => setFocus("EXTENSIONS_SOURCE_PICKER"), 50);
+          }
+        }}
+        title={`Remove ${sourceToRemove?.author}?`}
+        description="Providers installed from this source will also be removed from this device."
+        confirmLabel="Remove source"
+        focusKeyPrefix="REMOVE_SOURCE"
+        onConfirm={() => {
+          if (sourceToRemove) handleRemoveSource(sourceToRemove);
+          if (tvMode)
+            setTimeout(() => setFocus("EXTENSIONS_SOURCE_PICKER"), 50);
+        }}
+      />
 
-      <Dialog.Root
+      <ConfirmActionDialog
         open={Boolean(providerToRemove)}
-        onOpenChange={(open) => !open && setProviderToRemove(null)}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="extensions-dialog-overlay" />
-          <Dialog.Content className="extensions-dialog-content confirm-dialog">
-            <span className="confirm-dialog-icon">
-              <Trash2 size={23} />
-            </span>
-            <Dialog.Title>
-              Uninstall {providerToRemove?.display_name}?
-            </Dialog.Title>
-            <Dialog.Description>
-              You can install this provider again from its source later.
-            </Dialog.Description>
-            <div className="extensions-dialog-actions">
-              <Dialog.Close className="dialog-text-button">Cancel</Dialog.Close>
-              <FocusableButton
-                className="dialog-danger-button"
-                onClick={() =>
-                  providerToRemove && handleUninstall(providerToRemove)
-                }
-              >
-                Uninstall
-              </FocusableButton>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+        onOpenChange={(open) => {
+          if (!open) {
+            setProviderToRemove(null);
+            if (tvMode)
+              setTimeout(() => setFocus("EXTENSIONS_SOURCE_PICKER"), 50);
+          }
+        }}
+        title={`Uninstall ${providerToRemove?.display_name}?`}
+        description="You can install this provider again from its source later."
+        confirmLabel="Uninstall"
+        focusKeyPrefix="REMOVE_PROVIDER"
+        onConfirm={() => {
+          if (providerToRemove) handleUninstall(providerToRemove);
+          setProviderToRemove(null);
+          if (tvMode)
+            setTimeout(() => setFocus("EXTENSIONS_SOURCE_PICKER"), 50);
+        }}
+      />
 
       <ProviderSettingsDialog
         provider={settingsProvider}
         open={Boolean(settingsProvider)}
-        onOpenChange={(open) => !open && setSettingsProvider(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSettingsProvider(null);
+            if (tvMode)
+              setTimeout(() => setFocus("EXTENSIONS_SOURCE_PICKER"), 50);
+          }
+        }}
       />
     </main>
+  </FocusContext.Provider>
   );
 };
