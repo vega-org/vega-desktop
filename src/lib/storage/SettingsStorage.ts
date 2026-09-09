@@ -41,6 +41,11 @@ export enum SettingsKeys {
   SUBTITLE_FONT_WEIGHT = "subtitleFontWeight",
   SUBTITLE_OUTLINE_SIZE = "subtitleOutlineSize",
   SUBTITLE_BOTTOM_PADDING = "subtitleBottomPadding",
+  SUBTITLE_TEXT_COLOR = "subtitleTextColor",
+  SUBTITLE_OUTLINE_COLOR = "subtitleOutlineColor",
+  SUBTITLE_SHADOW_COLOR = "subtitleShadowColor",
+  SUBTITLE_SHADOW_SIZE = "subtitleShadowSize",
+  SUBTITLE_SHADOW_STYLE = "subtitleShadowStyle",
 
   LIST_VIEW_TYPE = "viewType",
 
@@ -311,6 +316,7 @@ export class SettingsStorage {
 
   setSubtitleFontSize(size: number): void {
     mainStorage.setNumber(SettingsKeys.SUBTITLE_FONT_SIZE, size);
+    this.notifySubtitleSettingsChanged();
   }
 
   getSubtitleFontFamily(): string {
@@ -321,6 +327,7 @@ export class SettingsStorage {
 
   setSubtitleFontFamily(family: string): void {
     mainStorage.setString(SettingsKeys.SUBTITLE_FONT_FAMILY, family);
+    this.notifySubtitleSettingsChanged();
   }
 
   getSubtitleFontWeight(): number {
@@ -329,6 +336,7 @@ export class SettingsStorage {
 
   setSubtitleFontWeight(weight: number): void {
     mainStorage.setNumber(SettingsKeys.SUBTITLE_FONT_WEIGHT, weight);
+    this.notifySubtitleSettingsChanged();
   }
 
   getSubtitleOutlineSize(): number {
@@ -337,6 +345,7 @@ export class SettingsStorage {
 
   setSubtitleOutlineSize(size: number): void {
     mainStorage.setNumber(SettingsKeys.SUBTITLE_OUTLINE_SIZE, size);
+    this.notifySubtitleSettingsChanged();
   }
 
   getSubtitleBottomPadding(): number {
@@ -345,6 +354,66 @@ export class SettingsStorage {
 
   setSubtitleBottomPadding(padding: number): void {
     mainStorage.setNumber(SettingsKeys.SUBTITLE_BOTTOM_PADDING, padding);
+    this.notifySubtitleSettingsChanged();
+  }
+
+  getSubtitleTextColor(): string {
+    return (
+      mainStorage.getString(SettingsKeys.SUBTITLE_TEXT_COLOR) || "#FFFFFF"
+    );
+  }
+
+  setSubtitleTextColor(color: string): void {
+    mainStorage.setString(SettingsKeys.SUBTITLE_TEXT_COLOR, color);
+    this.notifySubtitleSettingsChanged();
+  }
+
+  getSubtitleOutlineColor(): string {
+    return (
+      mainStorage.getString(SettingsKeys.SUBTITLE_OUTLINE_COLOR) || "#000000"
+    );
+  }
+
+  setSubtitleOutlineColor(color: string): void {
+    mainStorage.setString(SettingsKeys.SUBTITLE_OUTLINE_COLOR, color);
+    this.notifySubtitleSettingsChanged();
+  }
+
+  getSubtitleShadowColor(): string {
+    return (
+      mainStorage.getString(SettingsKeys.SUBTITLE_SHADOW_COLOR) || "#000000"
+    );
+  }
+
+  setSubtitleShadowColor(color: string): void {
+    mainStorage.setString(SettingsKeys.SUBTITLE_SHADOW_COLOR, color);
+    this.notifySubtitleSettingsChanged();
+  }
+
+  getSubtitleShadowSize(): number {
+    return mainStorage.getNumber(SettingsKeys.SUBTITLE_SHADOW_SIZE) ?? 2;
+  }
+
+  setSubtitleShadowSize(size: number): void {
+    mainStorage.setNumber(SettingsKeys.SUBTITLE_SHADOW_SIZE, size);
+    this.notifySubtitleSettingsChanged();
+  }
+
+  getSubtitleShadowStyle(): string {
+    return (
+      mainStorage.getString(SettingsKeys.SUBTITLE_SHADOW_STYLE) || "drop"
+    );
+  }
+
+  setSubtitleShadowStyle(style: string): void {
+    mainStorage.setString(SettingsKeys.SUBTITLE_SHADOW_STYLE, style);
+    this.notifySubtitleSettingsChanged();
+  }
+
+  notifySubtitleSettingsChanged(): void {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("vega_subtitle_settings_changed"));
+    }
   }
 
   getListViewType(): number {

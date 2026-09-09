@@ -1286,6 +1286,16 @@ const DesktopPlayer: React.FC<any> = ({
         mpv.setProperty("video-zoom", Math.log2(savedZoom / 100));
       }
     }
+
+    const handleSubSettingsChanged = () => {
+      if (mpv.isInitialized) {
+        mpv.updateSubtitleSettings();
+      }
+    };
+    window.addEventListener("vega_subtitle_settings_changed", handleSubSettingsChanged);
+    return () => {
+      window.removeEventListener("vega_subtitle_settings_changed", handleSubSettingsChanged);
+    };
   }, [mpv.isInitialized]);
 
   // Apply saved audio and subtitle track preferences once per new stream/episode
