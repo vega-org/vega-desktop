@@ -7,13 +7,22 @@ use axum::{
     Router,
 };
 use futures_util::stream;
-use reqwest::Client;
+use hickory_resolver::{
+    config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts},
+    TokioAsyncResolver,
+};
+use reqwest::{
+    dns::{Addrs, Name, Resolve, Resolving},
+    Client,
+};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
     io::SeekFrom,
+    net::SocketAddr,
     path::{Path, PathBuf},
     process::Stdio,
+    str::FromStr,
     sync::{Arc, Mutex},
 };
 use tauri::Emitter;
@@ -22,6 +31,81 @@ use tokio::net::TcpListener;
 
 use crate::ffmpeg_resolver;
 use crate::media_probe;
+
+#[derive(Clone)]
+pub struct StreamDnsResolver {
+    resolver: Arc<TokioAsyncResolver>,
+}
+
+impl StreamDnsResolver {
+    pub fn new() -> Self {
+        let mut opts = ResolverOpts::default();
+        opts.use_hosts_file = true;
+        opts.ip_strategy = hickory_resolver::config::LookupIpStrategy::Ipv4AndIpv6;
+        opts.num_concurrent_reqs = 2;
+
+        let mut config = ResolverConfig::cloudflare_https();
+        if let Ok(addr) = SocketAddr::from_str("8.8.8.8:443") {
+            config.add_name_server(NameServerConfig::new(addr, Protocol::Https));
+        }
+        if let Ok(addr) = SocketAddr::from_str("8.8.4.4:443") {
+            config.add_name_server(NameServerConfig::new(addr, Protocol::Https));
+        }
+
+        let resolver = TokioAsyncResolver::tokio(config, opts);
+        Self {
+            resolver: Arc::new(resolver),
+        }
+    }
+}
+
+impl Resolve for StreamDnsResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        let resolver = self.resolver.clone();
+        let name_str = name.as_str().to_string();
+        Box::pin(async move {
+            if let Ok(ip) = name_str.parse::<std::net::IpAddr>() {
+                return Ok(Box::new(std::iter::once(SocketAddr::new(ip, 0))) as Addrs);
+            }
+
+            if name_str.eq_ignore_ascii_case("localhost") {
+                let local_addrs = vec![
+                    SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 0),
+                ];
+                return Ok(Box::new(local_addrs.into_iter()) as Addrs);
+            }
+
+            match resolver.lookup_ip(name_str.as_str()).await {
+                Ok(response) => {
+                    let addrs: Vec<SocketAddr> = response
+                        .into_iter()
+                        .map(|ip| SocketAddr::new(ip, 0))
+                        .collect();
+                    Ok(Box::new(addrs.into_iter()) as Addrs)
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[stream_proxy] DoH resolution failed for {}: {:?}. Falling back to system DNS...",
+                        name_str, e
+                    );
+                    match tokio::net::lookup_host(format!("{}:0", name_str)).await {
+                        Ok(std_addrs) => {
+                            let addrs: Vec<SocketAddr> = std_addrs.collect();
+                            Ok(Box::new(addrs.into_iter()) as Addrs)
+                        }
+                        Err(sys_err) => {
+                            eprintln!(
+                                "[stream_proxy] System DNS also failed for {}: {:?}",
+                                name_str, sys_err
+                            );
+                            Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+                        }
+                    }
+                }
+            }
+        })
+    }
+}
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct RemuxStreamInfo {
@@ -164,6 +248,7 @@ pub async fn start_server(
     app_handle: Option<tauri::AppHandle>,
 ) -> Result<u16, String> {
     let client = Client::builder()
+        .dns_resolver(Arc::new(StreamDnsResolver::new()))
         .connect_timeout(std::time::Duration::from_secs(10))
         .redirect(reqwest::redirect::Policy::limited(10))
         .pool_idle_timeout(std::time::Duration::from_secs(20))
@@ -746,8 +831,11 @@ async fn handle_segment(
     })?;
     let mut data = bytes.to_vec();
 
-    for i in 0..data.len() {
-        if data[i] == 0x47 && i + 188 < data.len() && data[i + 188] == 0x47 {
+    for i in 0..data.len().saturating_sub(188) {
+        if data[i] == 0x47 && data[i + 188] == 0x47 {
+            if i + 376 < data.len() && data[i + 376] != 0x47 {
+                continue;
+            }
             if i > 0 {
                 data = data[i..].to_vec();
             }
