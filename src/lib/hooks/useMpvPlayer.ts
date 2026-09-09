@@ -467,6 +467,7 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
         let ua =
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
         let referer = "";
+        let origin = "";
 
         if (headers && Object.keys(headers).length > 0) {
           const headerList: string[] = [];
@@ -476,6 +477,8 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
               ua = v;
             } else if (lowerK === "referer") {
               referer = v;
+            } else if (lowerK === "origin") {
+              origin = v;
             }
 
             let val = `${k}: ${v}`;
@@ -636,6 +639,13 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
               }
               if (ua) {
                 proxyUrl += `&ua=${encodeURIComponent(ua)}`;
+              }
+              const effectiveOrigin = origin || (referer ? (() => { try { return new URL(referer).origin; } catch { return ""; } })() : "");
+              if (effectiveOrigin) {
+                proxyUrl += `&origin=${encodeURIComponent(effectiveOrigin)}`;
+              }
+              if (headers && Object.keys(headers).length > 0) {
+                proxyUrl += `&headers=${encodeURIComponent(JSON.stringify(headers))}`;
               }
               proxyUrl += `&_t=${Date.now()}`;
               finalUrl = proxyUrl;

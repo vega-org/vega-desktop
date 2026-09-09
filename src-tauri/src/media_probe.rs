@@ -360,11 +360,18 @@ pub async fn extract_subtitles_to_string(
     // Cancel any in-flight extraction on this same source for a different subtitle track
     {
         let mut src_map = SOURCE_ACTIVE_EXTRACT.lock().await;
-        if let Some((prev_idx, prev_cancel)) = src_map.remove(&clean_source) {
-            if prev_idx != sub_index {
+        let should_cancel = src_map
+            .get(&clean_source)
+            .map(|(prev_idx, _)| *prev_idx != sub_index)
+            .unwrap_or(false);
+        if should_cancel {
+            if let Some((_, prev_cancel)) = src_map.remove(&clean_source) {
                 let _ = prev_cancel.send(());
             }
         }
+        // Keep the sender registered when the same track is requested again.
+        // Removing and dropping it resolves the oneshot receiver and cancels the
+        // extraction that the duplicate caller is trying to join.
     }
 
     // 2. Check if extraction is already active
@@ -564,7 +571,10 @@ pub async fn extract_subtitles_to_string(
                         source: source_string.clone(),
                         track_index: sub_index,
                         subtitles: final_text,
-                        is_final: true,
+                        // A cancelled extraction may still contain early cues,
+                        // but it is not a complete track and must not replace
+                        // the current-time subtitle window.
+                        is_final: success,
                     },
                 );
             }
@@ -592,6 +602,136 @@ pub async fn extract_subtitles_to_string(
     }
 
     Ok(initial)
+}
+
+pub async fn extract_subtitle_window(
+    source: &str,
+    sub_index: u32,
+    start_time: f64,
+    headers: Option<HashMap<String, String>>,
+) -> Result<String, String> {
+    let clean_source = crate::ffmpeg_resolver::clean_source(source);
+    let cache_dir = get_subs_cache_dir();
+    let cache_key = compute_sub_cache_key(&clean_source, sub_index);
+    let cached_srt = cache_dir.join(format!("{}.srt", cache_key));
+    let cached_done = cache_dir.join(format!("{}.done", cache_key));
+    if cached_done.exists() && cached_srt.exists() {
+        if let Ok(cached) = tokio::fs::read_to_string(&cached_srt).await {
+            if cached.contains("-->") {
+                return Ok(cached);
+            }
+        }
+    }
+    let ffmpeg_path = ffmpeg_resolver::get_ffmpeg_path()?;
+    let window_start = if start_time.is_finite() {
+        // Starting too far behind the playhead can fill the quick response
+        // entirely with already-expired cues on dialogue-heavy tracks. Keep a
+        // small overlap for a cue that began just before the current position.
+        (start_time - 8.0).max(0.0)
+    } else {
+        0.0
+    };
+    let window_end = window_start + 330.0;
+    let mut cmd = Command::new(&ffmpeg_path);
+
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
+
+    if let Some(parent) = ffmpeg_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        cmd.current_dir(parent);
+        crate::ffmpeg_resolver::prepend_to_path_tokio(&mut cmd, parent);
+    }
+
+    cmd.arg("-v").arg("error");
+    if clean_source.starts_with("http://") || clean_source.starts_with("https://") {
+        cmd.arg("-reconnect")
+            .arg("1")
+            .arg("-reconnect_at_eof")
+            .arg("1")
+            .arg("-reconnect_streamed")
+            .arg("1")
+            .arg("-reconnect_delay_max")
+            .arg("5");
+    }
+    cmd.arg("-ss")
+        .arg(format!("{window_start:.3}"))
+        .arg("-copyts");
+    if let Some(ref h) = headers {
+        if let Some(formatted) = format_headers_arg(h) {
+            cmd.arg("-headers").arg(formatted);
+        }
+    }
+    cmd.arg("-i")
+        .arg(&clean_source)
+        .arg("-map")
+        .arg(format!("0:{sub_index}"))
+        .arg("-vn")
+        .arg("-an")
+        .arg("-c:s")
+        .arg("srt")
+        .arg("-to")
+        .arg(format!("{window_end:.3}"))
+        .arg("-flush_packets")
+        .arg("1")
+        .arg("-f")
+        .arg("srt")
+        .arg("pipe:1")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|error| format!("Failed to extract subtitle window: {error}"))?;
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "Failed to capture subtitle window output".to_string())?;
+    let mut stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "Failed to capture subtitle window errors".to_string())?;
+    let stderr_task = tokio::spawn(async move {
+        let mut bytes = Vec::new();
+        let _ = stderr.read_to_end(&mut bytes).await;
+        bytes
+    });
+
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+    let mut output = Vec::new();
+    let mut chunk = [0u8; 8192];
+    while tokio::time::Instant::now() < deadline {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        match tokio::time::timeout(remaining, stdout.read(&mut chunk)).await {
+            Ok(Ok(0)) => break,
+            Ok(Ok(count)) => {
+                output.extend_from_slice(&chunk[..count]);
+                // Return a small usable window quickly. The complete track keeps
+                // extracting into the regular subtitle cache in parallel.
+                if output.windows(3).filter(|window| *window == b"-->").count() >= 8 {
+                    break;
+                }
+            }
+            Ok(Err(error)) => {
+                let _ = child.kill().await;
+                return Err(format!("Failed reading subtitle window: {error}"));
+            }
+            Err(_) => break,
+        }
+    }
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+    let error_bytes = stderr_task.await.unwrap_or_default();
+    let text = String::from_utf8_lossy(&output).into_owned();
+    if text.contains("-->") {
+        return Ok(text);
+    }
+    let error = String::from_utf8_lossy(&error_bytes).trim().to_string();
+    Err(if error.is_empty() {
+        "No subtitle cues found near the current position".to_string()
+    } else {
+        error
+    })
 }
 
 pub async fn find_seek_keyframe(
@@ -666,5 +806,3 @@ pub async fn find_seek_keyframe(
 
     None
 }
-
-

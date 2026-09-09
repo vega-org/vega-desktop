@@ -58,6 +58,29 @@ const WEB_FRIENDLY_AUDIO_CODECS = new Set([
   "flac",
 ]);
 
+function mergeSrtContent(first: string, second: string): string {
+  const seen = new Set<string>();
+  const cues: string[] = [];
+  for (const content of [first, second]) {
+    for (const rawBlock of (content || "")
+      .replace(/\r\n/g, "\n")
+      .split(/\n{2,}/)) {
+      const lines = rawBlock
+        .split("\n")
+        .map((line) => line.trimEnd())
+        .filter((line) => line.length > 0);
+      const timingIndex = lines.findIndex((line) => line.includes("-->"));
+      if (timingIndex < 0) continue;
+      const body = lines.slice(timingIndex).join("\n");
+      if (!seen.has(body)) {
+        seen.add(body);
+        cues.push(body);
+      }
+    }
+  }
+  return cues.map((cue, index) => `${index + 1}\n${cue}`).join("\n\n");
+}
+
 function isVideoCodecSupported(codecName?: string): boolean {
   if (!codecName) return true;
   if (typeof window === "undefined" || !window.MediaSource) return true;
@@ -136,7 +159,9 @@ export class HtmlVideoEngine implements PlayerEngine {
   private unlistenStreamInfo: (() => void) | null = null;
   private requestedStartTime: number = 0;
   private subtitleRequestId: number = 0;
+  private subtitleRenderQueue: Promise<void> = Promise.resolve();
   private subtitleContentMap: Map<number, string> = new Map();
+  private subtitleWindowContentMap: Map<number, string> = new Map();
   private streamGeneration: number = 0;
   private sourceReferencePTS: number = 0;
   private outputReferencePTS: number = 0;
@@ -145,6 +170,7 @@ export class HtmlVideoEngine implements PlayerEngine {
   private usesRemuxClock: boolean = false;
   private timingGeneration: number = -1;
   private freezeCanvas: HTMLCanvasElement | null = null;
+  private isPreparingRemuxPreroll: boolean = false;
 
   private captureFreezeFrame(): void {
     const v = this.video;
@@ -222,10 +248,30 @@ export class HtmlVideoEngine implements PlayerEngine {
           event.payload.track_index === this.selectedSubtitleIndex &&
           this.jassub
         ) {
-          this.updateJassubTimeOffset();
-          if (event.payload.subtitles && event.payload.subtitles.trim() && event.payload.subtitles.includes("-->")) {
+          const requestId = this.subtitleRequestId;
+          const trackId = event.payload.track_index;
+          const windowContent = this.subtitleWindowContentMap.get(
+            trackId,
+          );
+          // The current-position window is already usable. Do not let an
+          // incomplete background extraction from the beginning of the file
+          // replace it. Apply again only when the complete track is ready.
+          if (windowContent && !event.payload.is_final) {
+            return;
+          }
+          const subtitleContent = windowContent
+            ? mergeSrtContent(event.payload.subtitles, windowContent)
+            : event.payload.subtitles;
+          if (subtitleContent && subtitleContent.trim() && subtitleContent.includes("-->")) {
             console.warn("[SubDebug] Applying progressive subtitle update, length:", event.payload.subtitles.length);
-            await this.jassub.setTrackContent(event.payload.subtitles);
+            await this.queueSubtitleRender(trackId, requestId, subtitleContent);
+          }
+          if (
+            event.payload.is_final &&
+            this.subtitleRequestId === requestId &&
+            this.selectedSubtitleIndex === trackId
+          ) {
+            this.subtitleWindowContentMap.delete(trackId);
           }
         }
       });
@@ -348,6 +394,81 @@ export class HtmlVideoEngine implements PlayerEngine {
     }
   }
 
+  private queueSubtitleRender(
+    trackId: number | "off",
+    requestId: number,
+    content: string | null,
+  ): Promise<void> {
+    const render = async () => {
+      if (
+        this.isDestroyed ||
+        !this.jassub ||
+        this.subtitleRequestId !== requestId ||
+        this.selectedSubtitleIndex !== trackId
+      ) {
+        return;
+      }
+
+      this.updateJassubTimeOffset();
+      if (
+        content &&
+        content.trim() &&
+        (content.includes("-->") ||
+          content.includes("[Script Info]") ||
+          content.includes("Dialogue:"))
+      ) {
+        await this.jassub.setTrackContent(content);
+      } else {
+        await this.jassub.clearTrack();
+      }
+    };
+
+    const queued = this.subtitleRenderQueue.then(render, render);
+    this.subtitleRenderQueue = queued.catch((error) => {
+      console.warn("[HtmlVideoEngine] Subtitle renderer update failed:", error);
+    });
+    return queued;
+  }
+
+  private async refreshEmbeddedSubtitleWindow(
+    sourceTime: number,
+    streamGeneration: number,
+  ): Promise<void> {
+    const trackId = this.selectedSubtitleIndex;
+    if (typeof trackId !== "number" || trackId >= 10000) return;
+    const requestId = this.subtitleRequestId;
+
+    try {
+      const windowText = await invoke<string>("extract_subtitle_window", {
+        source: this.currentSource,
+        trackIndex: trackId,
+        startTime: sourceTime,
+        headers: this.currentHeaders,
+      });
+      if (
+        this.isDestroyed ||
+        this.streamGeneration !== streamGeneration ||
+        this.subtitleRequestId !== requestId ||
+        this.selectedSubtitleIndex !== trackId ||
+        !windowText ||
+        !windowText.includes("-->")
+      ) {
+        return;
+      }
+
+      this.subtitleWindowContentMap.set(trackId, windowText);
+      const existing = this.subtitleContentMap.get(trackId) || "";
+      const displayText = mergeSrtContent(existing, windowText);
+      this.subtitleContentMap.set(trackId, displayText);
+      await this.queueSubtitleRender(trackId, requestId, displayText);
+    } catch (error) {
+      console.warn(
+        "[HtmlVideoEngine] Failed to refresh subtitles after seek:",
+        error,
+      );
+    }
+  }
+
   private attachVideoListeners(): void {
     const v = this.video;
 
@@ -356,7 +477,10 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("pause", () => {
-      this.updateState({ isPaused: true, isBuffering: this.isSeeking });
+      this.updateState({
+        isPaused: true,
+        isBuffering: this.isSeeking || this.isPreparingRemuxPreroll,
+      });
       if (this.jassub) {
         this.jassub.renderFrame(v.currentTime);
       }
@@ -399,6 +523,11 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("playing", () => {
+      if (this.isPreparingRemuxPreroll) {
+        this.updateState({ isBuffering: true, isPaused: false });
+        if (this.jassub) this.jassub.setBuffering(true);
+        return;
+      }
       this.releaseFreezeFrame();
       finishSeeking();
       this.updateState({ isBuffering: false, isPaused: false });
@@ -409,6 +538,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("canplay", () => {
+      if (this.isPreparingRemuxPreroll) return;
       this.releaseFreezeFrame();
       if (v.paused) {
         finishSeeking();
@@ -421,6 +551,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("canplaythrough", () => {
+      if (this.isPreparingRemuxPreroll) return;
       if (v.paused) {
         this.updateState({ isBuffering: false });
       }
@@ -430,6 +561,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("loadeddata", () => {
+      if (this.isPreparingRemuxPreroll) return;
       this.releaseFreezeFrame();
       this.updateState({ isBuffering: false });
       if (this.jassub) {
@@ -564,12 +696,11 @@ export class HtmlVideoEngine implements PlayerEngine {
     }
 
     this.selectedAudioIndex = null;
+    const subtitleLoadRequestId = ++this.subtitleRequestId;
     this.selectedSubtitleIndex = "off";
     this.subtitleContentMap.clear();
-    if (this.jassub) {
-      this.jassub.clearTrack().catch(() => { });
-      this.updateJassubTimeOffset();
-    }
+    this.subtitleWindowContentMap.clear();
+    await this.queueSubtitleRender("off", subtitleLoadRequestId, null);
 
     this.updateState({
       isInitialized: true,
@@ -791,7 +922,10 @@ export class HtmlVideoEngine implements PlayerEngine {
         isInitialized: true,
       });
 
-      await this.startStream(this.virtualTimeOffset);
+      await this.startStream(
+        this.virtualTimeOffset,
+        options?.autoPlay !== false,
+      );
 
       if (options?.autoPlay !== false) {
         await this.play().catch((e) => {
@@ -824,8 +958,18 @@ export class HtmlVideoEngine implements PlayerEngine {
     if (hasHeaders) {
       const params = new URLSearchParams();
       params.set("url", source);
-      if (this.currentHeaders.Referer) params.set("referer", this.currentHeaders.Referer);
-      if (this.currentHeaders["User-Agent"]) params.set("ua", this.currentHeaders["User-Agent"]);
+      const referer = this.currentHeaders.Referer || this.currentHeaders.referer;
+      const ua = this.currentHeaders["User-Agent"] || this.currentHeaders["user-agent"];
+      let origin = this.currentHeaders.Origin || this.currentHeaders.origin;
+      if (!origin && referer) {
+        try {
+          origin = new URL(referer).origin;
+        } catch {}
+      }
+      if (referer) params.set("referer", referer);
+      if (ua) params.set("ua", ua);
+      if (origin) params.set("origin", origin);
+      params.set("headers", JSON.stringify(this.currentHeaders));
       hlsUrl = `http://127.0.0.1:${port}/playlist.m3u8?${params.toString()}`;
     }
 
@@ -869,17 +1013,40 @@ export class HtmlVideoEngine implements PlayerEngine {
         ];
       }
 
-      const videoTracks: TrackInfo[] = [
-        {
-          id: 0,
-          type: "video",
-          title: "Default Video",
-          lang: "",
-          codec: "auto",
-          selected: true,
-          external: false,
-        },
-      ];
+      let videoTracks: TrackInfo[] = [];
+      if (data.levels && data.levels.length > 0) {
+        videoTracks = data.levels.map((level, idx) => {
+          const height = level.height || 0;
+          const width = level.width || 0;
+          const label = height > 0 ? `${height}p` : `Level ${idx + 1}`;
+          return {
+            id: idx,
+            type: "video",
+            title: label,
+            lang: "",
+            codec: (level.attrs as any)?.CODECS || "auto",
+            selected: hls.currentLevel === idx,
+            external: false,
+            demuxW: width,
+            demuxH: height,
+            bitrate: level.bitrate,
+          };
+        });
+      }
+
+      if (videoTracks.length === 0) {
+        videoTracks = [
+          {
+            id: 0,
+            type: "video",
+            title: "Default Video",
+            lang: "",
+            codec: "auto",
+            selected: true,
+            external: false,
+          },
+        ];
+      }
 
       const hlsSubTracks: TrackInfo[] = (data.subtitleTracks || []).map((st, idx) => ({
         id: idx,
@@ -914,6 +1081,15 @@ export class HtmlVideoEngine implements PlayerEngine {
 
       if (options?.autoPlay !== false) {
         this.play().catch(() => { });
+      }
+    });
+
+    hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
+      const activeLvl = hls.levels?.[data.level];
+      if (activeLvl?.height) {
+        this.updateState({
+          videoHeight: activeLvl.height,
+        });
       }
     });
 
@@ -957,7 +1133,61 @@ export class HtmlVideoEngine implements PlayerEngine {
     throw new Error("FFmpeg did not provide verified seek timing");
   }
 
-  private async startStream(startTime: number): Promise<void> {
+  private async finishRemuxPreroll(
+    generation: number,
+    resumeAfterPrepare: boolean,
+  ): Promise<void> {
+    const target = Math.max(0, this.targetMediaTime);
+    const originalMuted = this.video.muted;
+    this.isPreparingRemuxPreroll = true;
+    this.video.muted = true;
+    this.updateState({ isBuffering: true });
+    if (this.jassub) this.jassub.setBuffering(true);
+
+    try {
+      await this.video.play();
+      const deadline = Date.now() + 30_000;
+      while (
+        !this.isDestroyed &&
+        this.streamGeneration === generation &&
+        this.video.currentTime + 0.04 < target &&
+        Date.now() < deadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+
+      if (this.isDestroyed || this.streamGeneration !== generation) {
+        throw new Error("Remux preroll was superseded");
+      }
+      if (this.video.currentTime + 0.2 < target) {
+        throw new Error(
+          `Remux preroll did not reach ${target.toFixed(3)}s`,
+        );
+      }
+
+      if (!resumeAfterPrepare) this.video.pause();
+    } finally {
+      this.video.muted = originalMuted;
+      this.isPreparingRemuxPreroll = false;
+    }
+
+    this.releaseFreezeFrame();
+    this.updateState({
+      currentTime: this.requestedStartTime,
+      isBuffering: false,
+      isPaused: !resumeAfterPrepare,
+    });
+    if (this.jassub) {
+      this.jassub.setBuffering(false);
+      this.updateJassubTimeOffset();
+      this.jassub.renderFrame(this.video.currentTime);
+    }
+  }
+
+  private async startStream(
+    startTime: number,
+    resumeAfterPrepare = false,
+  ): Promise<void> {
     this.streamGeneration++;
     const gen = this.streamGeneration;
     const oldSessionId = this.sessionId;
@@ -1038,22 +1268,46 @@ export class HtmlVideoEngine implements PlayerEngine {
       params.set("video_index", String(this.selectedVideoIndex));
     }
 
-    if (this.currentHeaders.Referer) {
-      params.set("referer", this.currentHeaders.Referer);
-    }
-    if (this.currentHeaders["User-Agent"]) {
-      params.set("ua", this.currentHeaders["User-Agent"]);
-    }
-    if (this.currentHeaders.Origin) {
-      params.set("origin", this.currentHeaders.Origin);
+    const referer = this.currentHeaders.Referer || this.currentHeaders.referer;
+    const ua = this.currentHeaders["User-Agent"] || this.currentHeaders["user-agent"];
+    let origin = this.currentHeaders.Origin || this.currentHeaders.origin;
+    if (!origin && referer) {
+      try {
+        origin = new URL(referer).origin;
+      } catch {}
     }
 
+    if (referer) {
+      params.set("referer", referer);
+    }
+    if (ua) {
+      params.set("ua", ua);
+    }
+    if (origin) {
+      params.set("origin", origin);
+    }
+    params.set("headers", JSON.stringify(this.currentHeaders));
+
+    this.isPreparingRemuxPreroll = startTime > 0.05;
     this.captureFreezeFrame();
     const streamUrl = `http://127.0.0.1:${port}/remux?${params.toString()}`;
     this.video.src = streamUrl;
     this.video.preload = "auto";
     this.video.load();
-    await this.waitForVerifiedStreamTiming(port, streamSessionId, gen);
+    try {
+      await this.waitForVerifiedStreamTiming(port, streamSessionId, gen);
+      void this.refreshEmbeddedSubtitleWindow(this.requestedStartTime, gen);
+      if (this.isPreparingRemuxPreroll && this.targetMediaTime > 0.05) {
+        await this.finishRemuxPreroll(gen, resumeAfterPrepare);
+      } else {
+        this.isPreparingRemuxPreroll = false;
+        this.releaseFreezeFrame();
+      }
+    } catch (error) {
+      this.isPreparingRemuxPreroll = false;
+      this.releaseFreezeFrame();
+      throw error;
+    }
   }
 
   public async play(): Promise<void> {
@@ -1096,7 +1350,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     this.updateState({ currentTime: clamped, isBuffering: true });
 
     try {
-      await this.startStream(clamped);
+      await this.startStream(clamped, wasPlaying);
     } catch (e) {
       console.error("[HtmlVideoEngine] Seek startStream error:", e);
     }
@@ -1171,7 +1425,7 @@ export class HtmlVideoEngine implements PlayerEngine {
 
         const currentPos = this.state.currentTime;
         const wasPlaying = !this.video.paused || !this.state.isPaused;
-        await this.startStream(currentPos);
+        await this.startStream(currentPos, wasPlaying);
         if (wasPlaying) {
           await this.video.play().catch(() => { });
         }
@@ -1189,10 +1443,14 @@ export class HtmlVideoEngine implements PlayerEngine {
         this.updateState({ subtitleTracks: updated });
         if (this.hlsInstance) {
           this.hlsInstance.subtitleTrack = -1;
+          this.hlsInstance.subtitleDisplay = false;
         }
-        if (this.jassub) {
-          await this.jassub.clearTrack();
+        if (this.video && (this.video as any).textTracks) {
+          for (let i = 0; i < (this.video as any).textTracks.length; i++) {
+            (this.video as any).textTracks[i].mode = "disabled";
+          }
         }
+        await this.queueSubtitleRender("off", currentReqId, null);
       } else if (typeof id === "number") {
         this.selectedSubtitleIndex = id;
         const updated = this.state.subtitleTracks.map((t) => ({
@@ -1203,43 +1461,99 @@ export class HtmlVideoEngine implements PlayerEngine {
 
         if (this.hlsInstance && id < 10000) {
           this.hlsInstance.subtitleTrack = id;
+          this.hlsInstance.subtitleDisplay = true;
+          if (this.jassub) {
+            await this.jassub.clearTrack();
+          }
+          if (this.video && (this.video as any).textTracks) {
+            for (let i = 0; i < (this.video as any).textTracks.length; i++) {
+              (this.video as any).textTracks[i].mode =
+                i === id ? "showing" : "disabled";
+            }
+          }
           return;
         }
 
-        if (this.jassub) {
-          await this.jassub.clearTrack();
-        }
+        await this.queueSubtitleRender(id, currentReqId, null);
 
         if (id >= 10000 && id < 20000) {
           const extSub = this.externalSubtitles[id - 10000];
-          const subUrl = extSub?.url || extSub?.uri;
-          if (subUrl) {
+          const rawSubUrl = extSub?.url || extSub?.uri;
+          if (rawSubUrl) {
             try {
               let text = this.subtitleContentMap.get(id);
               if (!text) {
-                let fetchUrl = subUrl;
+                let fetchUrl = rawSubUrl;
+                let subHeaders: Record<string, string> = { ...this.currentHeaders };
+
                 if (fetchUrl.startsWith("file://")) {
                   fetchUrl = fetchUrl.replace(/^file:\/\//, "");
                 }
+
                 if (fetchUrl.startsWith("http://") || fetchUrl.startsWith("https://")) {
+                  if (
+                    !subHeaders["Referer"] &&
+                    !subHeaders["referer"] &&
+                    this.currentHeaders["Referer"]
+                  ) {
+                    subHeaders["Referer"] = this.currentHeaders["Referer"];
+                  }
+                  if (!subHeaders["User-Agent"] && !subHeaders["user-agent"]) {
+                    subHeaders["User-Agent"] =
+                      this.currentHeaders["User-Agent"] ||
+                      this.currentHeaders["user-agent"] ||
+                      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36";
+                  }
+                  const ref = subHeaders["Referer"] || subHeaders["referer"];
+                  if (ref && !subHeaders["Origin"] && !subHeaders["origin"]) {
+                    try {
+                      subHeaders["Origin"] = new URL(ref).origin;
+                    } catch {}
+                  }
+
                   try {
                     const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
-                    const response = await tauriFetch(fetchUrl);
-                    text = await response.text();
-                  } catch {
-                    const response = await fetch(fetchUrl);
-                    text = await response.text();
+                    const response = await tauriFetch(fetchUrl, {
+                      headers: subHeaders,
+                    });
+                    if (response.ok) {
+                      text = await response.text();
+                    }
+                  } catch (e) {
+                    console.warn("[HtmlVideoEngine] tauriFetch failed for subtitle:", e);
+                  }
+
+                  if (
+                    !text ||
+                    (!text.includes("-->") &&
+                      !text.includes("[Script Info]") &&
+                      !text.includes("Dialogue:"))
+                  ) {
+                    try {
+                      const response = await fetch(fetchUrl, {
+                        headers: subHeaders,
+                      });
+                      if (response.ok) {
+                        text = await response.text();
+                      }
+                    } catch {}
                   }
                 } else {
                   try {
                     const { readTextFile } = await import("@tauri-apps/plugin-fs");
                     text = await readTextFile(fetchUrl);
                   } catch {
-                    const response = await fetch(subUrl);
+                    const response = await fetch(rawSubUrl);
                     text = await response.text();
                   }
                 }
-                if (text) {
+
+                if (
+                  text &&
+                  (text.includes("-->") ||
+                    text.includes("[Script Info]") ||
+                    text.includes("Dialogue:"))
+                ) {
                   this.subtitleContentMap.set(id, text);
                 }
               }
@@ -1251,8 +1565,10 @@ export class HtmlVideoEngine implements PlayerEngine {
                 text.trim() &&
                 this.jassub
               ) {
-                this.updateJassubTimeOffset();
-                await this.jassub.setTrackContent(text);
+                if (this.hlsInstance) {
+                  this.hlsInstance.subtitleTrack = -1;
+                }
+                await this.queueSubtitleRender(id, currentReqId, text);
               }
             } catch (err) {
               console.warn("[HtmlVideoEngine] Failed to load external subtitle track:", err);
@@ -1269,41 +1585,106 @@ export class HtmlVideoEngine implements PlayerEngine {
             cachedText &&
             this.jassub
           ) {
-            this.updateJassubTimeOffset();
-            await this.jassub.setTrackContent(cachedText);
+            await this.queueSubtitleRender(id, currentReqId, cachedText);
           }
           return;
         }
 
         try {
           console.warn("[SubDebug] Starting extraction for track", id, "source:", this.currentSource?.substring(0, 80));
-          const subText = await invoke<string>("extract_subtitles", {
+          const previousWindow = this.subtitleWindowContentMap.get(id);
+          if (previousWindow && previousWindow.includes("-->")) {
+            await this.queueSubtitleRender(id, currentReqId, previousWindow);
+          }
+          const windowText = await invoke<string>("extract_subtitle_window", {
+            source: this.currentSource,
+            trackIndex: id,
+            startTime: this.state.currentTime,
+            headers: this.currentHeaders,
+          }).catch((error) => {
+            console.warn(
+              "[HtmlVideoEngine] Fast subtitle-window extraction failed:",
+              error,
+            );
+            return "";
+          });
+          if (
+            windowText &&
+            windowText.includes("-->") &&
+            this.subtitleRequestId === currentReqId &&
+            this.selectedSubtitleIndex === id
+          ) {
+            this.subtitleWindowContentMap.set(id, windowText);
+            this.subtitleContentMap.set(id, windowText);
+            await this.queueSubtitleRender(id, currentReqId, windowText);
+          }
+
+          // Only start the complete extraction after the current-time window
+          // is rendered. Running both FFmpeg reads together makes remote MKV
+          // track switching slow and unreliable.
+          void invoke<string>("extract_subtitles", {
             source: this.currentSource,
             trackIndex: id,
             headers: this.currentHeaders,
-          });
-
-          if (
-            this.subtitleRequestId === currentReqId &&
-            this.selectedSubtitleIndex === id &&
-            this.jassub
-          ) {
-            this.updateJassubTimeOffset();
-            if (subText && subText.trim() && subText.includes("-->")) {
-              this.subtitleContentMap.set(id, subText);
-              await this.jassub.setTrackContent(subText);
-            }
-          }
+          })
+            .then(async (subText) => {
+              if (
+                this.subtitleRequestId !== currentReqId ||
+                this.selectedSubtitleIndex !== id ||
+                !subText ||
+                !subText.includes("-->")
+              ) {
+                return;
+              }
+              const currentWindow = this.subtitleWindowContentMap.get(id) || "";
+              if (currentWindow) {
+                // Progressive events will eventually deliver the completed
+                // file. Keep the working current-time window until then.
+                return;
+              }
+              const displayText = mergeSrtContent(subText, currentWindow);
+              this.subtitleContentMap.set(id, displayText);
+              await this.queueSubtitleRender(id, currentReqId, displayText);
+            })
+            .catch((error) => {
+              console.warn(
+                "[HtmlVideoEngine] Full subtitle extraction failed:",
+                error,
+              );
+            });
         } catch (err) {
           console.warn("[HtmlVideoEngine] Failed to extract subtitle track:", err);
         }
       }
     } else if (type === "vid") {
+      if (this.hlsInstance) {
+        const targetLevel =
+          id === "auto" || id === "no" || id === undefined
+            ? -1
+            : typeof id === "number"
+            ? id
+            : -1;
+        this.hlsInstance.currentLevel = targetLevel;
+        this.selectedVideoIndex = targetLevel;
+        const updatedVideoTracks = this.state.videoTracks.map((t) => ({
+          ...t,
+          selected: targetLevel >= 0 && t.id === targetLevel,
+        }));
+        this.updateState({
+          videoTracks: updatedVideoTracks,
+          tracks: [
+            ...updatedVideoTracks,
+            ...this.state.audioTracks,
+            ...this.state.subtitleTracks,
+          ],
+        });
+        return;
+      }
       if (typeof id === "number") {
         this.selectedVideoIndex = id;
         const currentPos = this.state.currentTime;
         const wasPlaying = !this.video.paused || !this.state.isPaused;
-        await this.startStream(currentPos);
+        await this.startStream(currentPos, wasPlaying);
         if (wasPlaying) {
           await this.video.play().catch(() => { });
         }
@@ -1344,11 +1725,9 @@ export class HtmlVideoEngine implements PlayerEngine {
 
       const newId = 20000 + Math.floor(Math.random() * 10000);
       this.subtitleContentMap.set(newId, text);
-
-      if (this.jassub) {
-        this.updateJassubTimeOffset();
-        await this.jassub.setTrackContent(text);
-      }
+      const currentReqId = ++this.subtitleRequestId;
+      this.selectedSubtitleIndex = newId;
+      await this.queueSubtitleRender(newId, currentReqId, text);
 
       const filename = path.split("/").pop()?.split("\\").pop() || "External Subtitle";
       const newTrack: TrackInfo = {
@@ -1361,7 +1740,6 @@ export class HtmlVideoEngine implements PlayerEngine {
         external: true,
       };
 
-      this.selectedSubtitleIndex = newId;
       const updated = this.state.subtitleTracks.map((t) => ({
         ...t,
         selected: false,
@@ -1434,7 +1812,7 @@ export class HtmlVideoEngine implements PlayerEngine {
       this.audioDelayDebounceTimer = null;
       const currentPos = this.state.currentTime;
       const wasPlaying = !this.video.paused || !this.state.isPaused;
-      await this.startStream(currentPos);
+      await this.startStream(currentPos, wasPlaying);
       if (wasPlaying) {
         await this.video.play().catch(() => { });
       }

@@ -54,6 +54,12 @@ pub struct ProxyQuery {
     referer: Option<String>,
     #[serde(default)]
     ua: Option<String>,
+    #[serde(default)]
+    origin: Option<String>,
+    #[serde(default)]
+    headers: Option<String>,
+    #[serde(default)]
+    sub: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -63,6 +69,10 @@ pub struct SegmentQuery {
     referer: Option<String>,
     #[serde(default)]
     ua: Option<String>,
+    #[serde(default)]
+    origin: Option<String>,
+    #[serde(default)]
+    headers: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -90,6 +100,8 @@ pub struct RemuxQuery {
     ua: Option<String>,
     #[serde(default)]
     origin: Option<String>,
+    #[serde(default)]
+    headers: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -101,6 +113,8 @@ pub struct ProbeQuery {
     ua: Option<String>,
     #[serde(default)]
     origin: Option<String>,
+    #[serde(default)]
+    headers: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -113,6 +127,8 @@ pub struct SubsQuery {
     ua: Option<String>,
     #[serde(default)]
     origin: Option<String>,
+    #[serde(default)]
+    headers: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -179,6 +195,7 @@ pub async fn start_server(
         .route("/remux/cancel", get(handle_cancel_remux))
         .route("/probe", get(handle_probe))
         .route("/subs", get(handle_subs))
+        .layer(tower_http::cors::CorsLayer::permissive())
         .with_state(state);
 
     tokio::spawn(async move {
@@ -368,11 +385,7 @@ async fn handle_direct_file(
         .status(status)
         .header(header::ACCEPT_RANGES, "bytes")
         .header(header::CONTENT_LENGTH, content_length)
-        .header(header::CONTENT_TYPE, content_type)
-        .header(
-            header::HeaderName::from_static("access-control-allow-origin"),
-            "*",
-        );
+        .header(header::CONTENT_TYPE, content_type);
     if status == StatusCode::PARTIAL_CONTENT {
         response = response.header(
             header::CONTENT_RANGE,
@@ -388,20 +401,69 @@ fn encode_url(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect::<String>()
 }
 
+fn collect_request_headers(
+    referer: &Option<String>,
+    ua: &Option<String>,
+    origin: &Option<String>,
+    headers_json: &Option<String>,
+) -> HashMap<String, String> {
+    let mut map: HashMap<String, String> = HashMap::new();
+
+    if let Some(ref json_str) = headers_json {
+        if let Ok(parsed) = serde_json::from_str::<HashMap<String, String>>(json_str) {
+            for (k, v) in parsed {
+                map.insert(k, v);
+            }
+        }
+    }
+
+    if let Some(ref r) = referer {
+        map.insert("Referer".to_string(), r.clone());
+    }
+    if let Some(ref u) = ua {
+        map.insert("User-Agent".to_string(), u.clone());
+    }
+    if let Some(ref o) = origin {
+        map.insert("Origin".to_string(), o.clone());
+    }
+
+    let has_ua = map.keys().any(|k| k.eq_ignore_ascii_case("user-agent"));
+    if !has_ua {
+        map.insert(
+            "User-Agent".to_string(),
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".to_string(),
+        );
+    }
+
+    let has_origin = map.keys().any(|k| k.eq_ignore_ascii_case("origin"));
+    if !has_origin {
+        let referer_val = map
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("referer"))
+            .map(|(_, v)| v.clone());
+        if let Some(ref r) = referer_val {
+            if let Ok(u) = url::Url::parse(r) {
+                let ascii_origin = u.origin().ascii_serialization();
+                if ascii_origin != "null" {
+                    map.insert("Origin".to_string(), ascii_origin);
+                }
+            }
+        }
+    }
+
+    map
+}
+
 fn build_request(
     client: &Client,
     url: &str,
-    referer: &Option<String>,
-    ua: &Option<String>,
+    headers_map: &HashMap<String, String>,
 ) -> reqwest::RequestBuilder {
     let mut req = client.get(url);
-    if let Some(ref r) = referer {
-        req = req.header("Referer", r);
-    }
-    if let Some(ref u) = ua {
-        req = req.header("User-Agent", u);
-    } else {
-        req = req.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+    for (k, v) in headers_map {
+        if !k.eq_ignore_ascii_case("host") && !k.eq_ignore_ascii_case("content-length") {
+            req = req.header(k.as_str(), v.as_str());
+        }
     }
     req
 }
@@ -422,8 +484,7 @@ fn build_proxy_url(
     port: u16,
     target_url: &str,
     is_playlist: bool,
-    referer: &Option<String>,
-    ua: &Option<String>,
+    headers_map: &HashMap<String, String>,
 ) -> String {
     let encoded = encode_url(target_url);
     let route = if is_playlist {
@@ -432,11 +493,20 @@ fn build_proxy_url(
         "segment.ts"
     };
     let mut result = format!("http://127.0.0.1:{}/{}?url={}", port, route, encoded);
-    if let Some(ref r) = referer {
-        result.push_str(&format!("&referer={}", encode_url(r)));
+    if is_playlist {
+        result.push_str("&sub=true");
     }
-    if let Some(ref u) = ua {
-        result.push_str(&format!("&ua={}", encode_url(u)));
+    if let Ok(json_str) = serde_json::to_string(headers_map) {
+        result.push_str(&format!("&headers={}", encode_url(&json_str)));
+    }
+    for (k, v) in headers_map {
+        if k.eq_ignore_ascii_case("referer") {
+            result.push_str(&format!("&referer={}", encode_url(v)));
+        } else if k.eq_ignore_ascii_case("user-agent") {
+            result.push_str(&format!("&ua={}", encode_url(v)));
+        } else if k.eq_ignore_ascii_case("origin") {
+            result.push_str(&format!("&origin={}", encode_url(v)));
+        }
     }
     result
 }
@@ -444,13 +514,12 @@ fn build_proxy_url(
 async fn fetch_with_retry(
     client: &Client,
     url: &str,
-    referer: &Option<String>,
-    ua: &Option<String>,
+    headers_map: &HashMap<String, String>,
     label: &str,
 ) -> Result<reqwest::Response, StatusCode> {
     let max_attempts = 3;
     for attempt in 1..=max_attempts {
-        let req = build_request(client, url, referer, ua);
+        let req = build_request(client, url, headers_map);
         match req.send().await {
             Ok(res) => {
                 let status = res.status();
@@ -495,11 +564,17 @@ async fn handle_proxy(
         "[stream_proxy] Received playlist request for: {}",
         query.url
     );
+    let headers_map = collect_request_headers(
+        &query.referer,
+        &query.ua,
+        &query.origin,
+        &query.headers,
+    );
+
     let response = fetch_with_retry(
         &state.client,
         &query.url,
-        &query.referer,
-        &query.ua,
+        &headers_map,
         "playlist",
     )
     .await?;
@@ -531,6 +606,96 @@ async fn handle_proxy(
 
     let is_master = text.contains("#EXT-X-STREAM-INF");
 
+    // If this is a media playlist (not a master playlist), and not already requested as a child sub-playlist (sub != Some(true)),
+    // check if it has a parent master playlist containing separate audio track(s) (RFC 8216 demuxed streams).
+    // If so, synthesize a master playlist linking this video playlist with the parent's audio tracks!
+    if !is_master && query.sub != Some(true) {
+        let parent_master_url = resolve_url(&query.url, "../master.m3u8");
+        if parent_master_url != query.url && !query.url.ends_with("master.m3u8") {
+            if let Ok(master_res) = fetch_with_retry(
+                &state.client,
+                &parent_master_url,
+                &headers_map,
+                "parent_master",
+            )
+            .await
+            {
+                if master_res.status().is_success() {
+                    if let Ok(master_text) = master_res.text().await {
+                        if master_text.contains("#EXT-X-MEDIA:TYPE=AUDIO") {
+                            let mut synth = String::from("#EXTM3U\n#EXT-X-INDEPENDENT-SEGMENTS\n");
+                            let mut found_audio = false;
+
+                            // 1. Copy and proxy all #EXT-X-MEDIA:TYPE=AUDIO and SUBTITLE lines from master
+                            for line in master_text.lines() {
+                                if line.starts_with("#EXT-X-MEDIA:TYPE=AUDIO")
+                                    || line.starts_with("#EXT-X-MEDIA:TYPE=SUBTITLES")
+                                {
+                                    let mut processed = line.to_string();
+                                    if let Some(start) = processed.find("URI=\"") {
+                                        let uri_start = start + 5;
+                                        if let Some(end_offset) = processed[uri_start..].find('"') {
+                                            let uri_end = uri_start + end_offset;
+                                            let orig_uri = processed[uri_start..uri_end].to_string();
+                                            let resolved = resolve_url(&parent_master_url, &orig_uri);
+                                            let new_uri = build_proxy_url(state.port, &resolved, true, &headers_map);
+                                            processed.replace_range(uri_start..uri_end, &new_uri);
+                                            found_audio = true;
+                                        }
+                                    }
+                                    synth.push_str(&processed);
+                                    synth.push('\n');
+                                }
+                            }
+
+                            if found_audio {
+                                // 2. Find matching #EXT-X-STREAM-INF from parent master, or synthesize one
+                                let mut stream_inf_line = None;
+                                let master_lines: Vec<&str> = master_text.lines().collect();
+                                for (i, mline) in master_lines.iter().enumerate() {
+                                    if mline.starts_with("#EXT-X-STREAM-INF") {
+                                        if let Some(next) = master_lines.get(i + 1) {
+                                            let next_trimmed = next.trim();
+                                            let res_url = resolve_url(&parent_master_url, next_trimmed);
+                                            if res_url == query.url || query.url.ends_with(next_trimmed) {
+                                                stream_inf_line = Some(mline.to_string());
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                let effective_inf = stream_inf_line.unwrap_or_else(|| {
+                                    "#EXT-X-STREAM-INF:BANDWIDTH=5000000,AUDIO=\"stereo\"".to_string()
+                                });
+                                synth.push_str(&effective_inf);
+                                synth.push('\n');
+
+                                // 3. The video variant playlist URL (marked with sub=true)
+                                let video_variant_url = build_proxy_url(state.port, &query.url, true, &headers_map);
+                                synth.push_str(&video_variant_url);
+                                synth.push('\n');
+
+                                println!(
+                                    "[stream_proxy] Synthesized master playlist for single quality track: {}",
+                                    query.url
+                                );
+
+                                return Ok(Response::builder()
+                                    .header(
+                                        axum::http::header::CONTENT_TYPE,
+                                        "application/vnd.apple.mpegurl",
+                                    )
+                                    .body(Body::from(synth))
+                                    .unwrap());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let mut new_playlist = String::new();
 
     for line in text.lines() {
@@ -553,8 +718,7 @@ async fn handle_proxy(
                         state.port,
                         &resolved,
                         is_sub_playlist,
-                        &query.referer,
-                        &query.ua,
+                        &headers_map,
                     );
                     processed.replace_range(uri_start..uri_end, &new_uri);
                 }
@@ -567,7 +731,7 @@ async fn handle_proxy(
         } else {
             let resolved = resolve_url(&query.url, line.trim());
             let new_uri =
-                build_proxy_url(state.port, &resolved, is_master, &query.referer, &query.ua);
+                build_proxy_url(state.port, &resolved, is_master, &headers_map);
             new_playlist.push_str(&new_uri);
             new_playlist.push('\n');
         }
@@ -587,11 +751,17 @@ async fn handle_segment(
     State(state): State<ProxyState>,
     Query(query): Query<SegmentQuery>,
 ) -> Result<Response, StatusCode> {
+    let headers_map = collect_request_headers(
+        &query.referer,
+        &query.ua,
+        &query.origin,
+        &query.headers,
+    );
+
     let response = fetch_with_retry(
         &state.client,
         &query.url,
-        &query.referer,
-        &query.ua,
+        &headers_map,
         "segment",
     )
     .await?;
@@ -633,7 +803,13 @@ async fn handle_segment(
         }
     }
 
-    Ok(([(axum::http::header::CONTENT_TYPE, content_type)], data).into_response())
+    let response_content_type = if data.starts_with(b"\x47") {
+        "video/MP2T".to_string()
+    } else {
+        content_type
+    };
+
+    Ok(([(axum::http::header::CONTENT_TYPE, response_content_type)], data).into_response())
 }
 
 fn resolve_source_url(state: &ProxyState, raw_url: &str) -> String {
@@ -663,20 +839,16 @@ async fn handle_probe(
     Query(query): Query<ProbeQuery>,
 ) -> impl IntoResponse {
     let source = resolve_source_url(&state, &query.url);
-    let mut headers = HashMap::new();
-    if let Some(ref r) = query.referer {
-        headers.insert("Referer".to_string(), r.clone());
-    }
-    if let Some(ref ua) = query.ua {
-        headers.insert("User-Agent".to_string(), ua.clone());
-    }
-    if let Some(ref orig) = query.origin {
-        headers.insert("Origin".to_string(), orig.clone());
-    }
-    let headers_opt = if headers.is_empty() {
+    let headers_map = collect_request_headers(
+        &query.referer,
+        &query.ua,
+        &query.origin,
+        &query.headers,
+    );
+    let headers_opt = if headers_map.is_empty() {
         None
     } else {
-        Some(headers)
+        Some(headers_map)
     };
 
     match media_probe::probe_media(&source, headers_opt).await {
@@ -684,13 +856,7 @@ async fn handle_probe(
             let json = serde_json::to_string(&info).unwrap_or_default();
             (
                 StatusCode::OK,
-                [
-                    (header::CONTENT_TYPE, "application/json"),
-                    (
-                        header::HeaderName::from_static("access-control-allow-origin"),
-                        "*",
-                    ),
-                ],
+                [(header::CONTENT_TYPE, "application/json")],
                 json,
             )
                 .into_response()
@@ -699,13 +865,7 @@ async fn handle_probe(
             eprintln!("[probe] Error: {}", err);
             (
                 StatusCode::BAD_REQUEST,
-                [
-                    (header::CONTENT_TYPE, "text/plain"),
-                    (
-                        header::HeaderName::from_static("access-control-allow-origin"),
-                        "*",
-                    ),
-                ],
+                [(header::CONTENT_TYPE, "text/plain")],
                 err,
             )
                 .into_response()
@@ -718,20 +878,16 @@ async fn handle_subs(
     Query(query): Query<SubsQuery>,
 ) -> impl IntoResponse {
     let source = resolve_source_url(&state, &query.url);
-    let mut headers = HashMap::new();
-    if let Some(ref r) = query.referer {
-        headers.insert("Referer".to_string(), r.clone());
-    }
-    if let Some(ref ua) = query.ua {
-        headers.insert("User-Agent".to_string(), ua.clone());
-    }
-    if let Some(ref orig) = query.origin {
-        headers.insert("Origin".to_string(), orig.clone());
-    }
-    let headers_opt = if headers.is_empty() {
+    let headers_map = collect_request_headers(
+        &query.referer,
+        &query.ua,
+        &query.origin,
+        &query.headers,
+    );
+    let headers_opt = if headers_map.is_empty() {
         None
     } else {
-        Some(headers)
+        Some(headers_map)
     };
 
     match media_probe::extract_subtitles_to_string(None, &source, query.sub_index, headers_opt)
@@ -739,13 +895,7 @@ async fn handle_subs(
     {
         Ok(text) => (
             StatusCode::OK,
-            [
-                (header::CONTENT_TYPE, "text/plain; charset=utf-8"),
-                (
-                    header::HeaderName::from_static("access-control-allow-origin"),
-                    "*",
-                ),
-            ],
+            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
             text,
         )
             .into_response(),
@@ -753,13 +903,7 @@ async fn handle_subs(
             eprintln!("[subs] Error: {}", err);
             (
                 StatusCode::BAD_REQUEST,
-                [
-                    (header::CONTENT_TYPE, "text/plain"),
-                    (
-                        header::HeaderName::from_static("access-control-allow-origin"),
-                        "*",
-                    ),
-                ],
+                [(header::CONTENT_TYPE, "text/plain")],
                 err,
             )
                 .into_response()
@@ -1116,23 +1260,18 @@ async fn handle_remux(
             .arg("5");
     }
 
+    let headers_map = collect_request_headers(
+        &query.referer,
+        &query.ua,
+        &query.origin,
+        &query.headers,
+    );
     let mut headers_str = Vec::new();
-    if let Some(ref r) = query.referer {
+    for (k, v) in &headers_map {
         headers_str.push(format!(
-            "Referer: {}",
-            r.replace('\r', "").replace('\n', "")
-        ));
-    }
-    if let Some(ref ua) = query.ua {
-        headers_str.push(format!(
-            "User-Agent: {}",
-            ua.replace('\r', "").replace('\n', "")
-        ));
-    }
-    if let Some(ref orig) = query.origin {
-        headers_str.push(format!(
-            "Origin: {}",
-            orig.replace('\r', "").replace('\n', "")
+            "{}: {}",
+            k.replace(['\r', '\n'], ""),
+            v.replace(['\r', '\n'], "")
         ));
     }
     if !headers_str.is_empty() {
@@ -1351,10 +1490,6 @@ async fn handle_remux(
         .header(header::CONTENT_TYPE, "video/mp4")
         .header(header::CACHE_CONTROL, "no-cache, no-store")
         .header(header::ACCEPT_RANGES, "none")
-        .header(
-            header::HeaderName::from_static("access-control-allow-origin"),
-            "*",
-        )
         .body(Body::from_stream(body_stream))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 

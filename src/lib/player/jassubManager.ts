@@ -201,20 +201,14 @@ export class JassubManager {
     if (!this.instance) {
       await this.createInstance(assContent);
     } else {
+      const previousInstance = this.instance;
+      this.instance = null;
       try {
-        await this.instance.ready;
-        this.instance.timeOffset = this.timeOffset;
-        await (this.instance.renderer as any).freeTrack().catch(() => {});
-        await (this.instance.renderer as any).setTrack(assContent);
-        this.updateCanvasBounds();
-        await this.triggerImmediateRender();
-      } catch (err) {
-        console.warn("[JassubManager] Failed to update subtitle track, recreating instance:", err);
-        try {
-          await this.instance.destroy().catch(() => {});
-        } catch {}
-        this.instance = null;
+        await previousInstance.destroy();
         await this.createInstance(assContent);
+      } catch (err) {
+        console.warn("[JassubManager] Failed to replace subtitle renderer:", err);
+        if (!this.instance) await this.createInstance(assContent);
       }
     }
   }
@@ -239,10 +233,10 @@ export class JassubManager {
     this.activeSubtitle = null;
     this.rawSubtitle = null;
     if (this.instance) {
+      const instance = this.instance;
+      this.instance = null;
       try {
-        await this.instance.ready;
-        await (this.instance.renderer as any).freeTrack().catch(() => {});
-        await this.triggerImmediateRender();
+        await instance.destroy();
       } catch (err) {
         console.warn("[JassubManager] Failed to clear track:", err);
       }

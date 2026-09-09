@@ -145,6 +145,16 @@ async fn extract_subtitles(
 }
 
 #[tauri::command]
+async fn extract_subtitle_window(
+    source: String,
+    track_index: u32,
+    start_time: f64,
+    headers: Option<HashMap<String, String>>,
+) -> Result<String, String> {
+    media_probe::extract_subtitle_window(&source, track_index, start_time, headers).await
+}
+
+#[tauri::command]
 async fn get_seek_keyframe(
     _app: tauri::AppHandle,
     source: String,
@@ -1045,6 +1055,7 @@ pub fn run() {
             sync_manifest::resolve_sync_media_path,
             probe_media_info,
             extract_subtitles,
+            extract_subtitle_window,
             get_seek_keyframe
         ])
         .run(tauri::generate_context!())
