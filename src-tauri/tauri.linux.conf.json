@@ -1,7 +1,5 @@
 {
   "bundle": {
-    "resources": [
-      "lib/*.so"
-    ]
+    "resources": ["resources/ffmpeg-sidecar/*"]
   }
 }

@@ -125,12 +125,23 @@ pub fn resolve_binary(base_name: &str, env_var: &str) -> Result<PathBuf, String>
     if let Ok(current_exe) = std::env::current_exe() {
         if let Some(parent) = current_exe.parent() {
             candidate_dirs.push(parent.to_path_buf());
+            candidate_dirs.push(parent.join("resources").join("ffmpeg-sidecar"));
+            candidate_dirs.push(parent.join("resources").join("resources").join("ffmpeg-sidecar"));
             candidate_dirs.push(parent.join("resources").join("ffmpeg"));
+            // Tauri preserves the configured resource path in some Windows
+            // bundles, yielding `<app>/resources/resources/ffmpeg`.
+            candidate_dirs.push(parent.join("resources").join("resources").join("ffmpeg"));
             candidate_dirs.push(parent.join("resources"));
             if let Some(contents) = parent.parent() {
+                candidate_dirs.push(contents.join("Resources").join("ffmpeg-sidecar"));
+                candidate_dirs.push(contents.join("Resources").join("resources").join("ffmpeg-sidecar"));
                 candidate_dirs.push(contents.join("Resources").join("ffmpeg"));
+                candidate_dirs.push(contents.join("Resources").join("resources").join("ffmpeg"));
                 candidate_dirs.push(contents.join("Resources"));
                 candidate_dirs.push(contents.join("resources").join("ffmpeg"));
+                candidate_dirs.push(contents.join("resources").join("ffmpeg-sidecar"));
+                candidate_dirs.push(contents.join("resources").join("resources").join("ffmpeg-sidecar"));
+                candidate_dirs.push(contents.join("resources").join("resources").join("ffmpeg"));
                 candidate_dirs.push(contents.join("resources"));
             }
             candidate_dirs.push(parent.join("binaries"));
@@ -139,6 +150,8 @@ pub fn resolve_binary(base_name: &str, env_var: &str) -> Result<PathBuf, String>
     }
 
     if let Ok(cwd) = std::env::current_dir() {
+        candidate_dirs.push(cwd.join("resources").join("ffmpeg-sidecar"));
+        candidate_dirs.push(cwd.join("src-tauri").join("resources").join("ffmpeg-sidecar"));
         candidate_dirs.push(cwd.join("resources").join("ffmpeg"));
         candidate_dirs.push(cwd.join("src-tauri").join("resources").join("ffmpeg"));
         candidate_dirs.push(cwd.join("src-tauri").join("binaries"));

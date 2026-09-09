@@ -3,7 +3,7 @@ import { useFocusable, FocusContext } from "@noriginmedia/norigin-spatial-naviga
 import { LuCheck as Check } from "react-icons/lu";
 import { FocusableButton } from "../layout/FocusableButton";
 import { settingsStorage } from "../../lib/storage";
-import type { MpvTrack } from "../../lib/hooks/useMpvPlayer";
+import type { MpvTrack } from "../../lib/player/PlayerEngine";
 
 interface QualitySelectMenuProps {
   videoTracks?: MpvTrack[];

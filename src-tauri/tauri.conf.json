@@ -32,9 +32,7 @@
       "frameworks": []
     },
     "linux": {
-      "deb": {
-        "depends": ["libmpv2", "mpv"]
-      }
+      "deb": {}
     },
     "android": {
       "versionCode": 15

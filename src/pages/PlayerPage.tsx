@@ -6,7 +6,7 @@ import React, {
   useMemo,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { MpvTrack } from "../lib/hooks/useMpvPlayer";
+import type { MpvTrack } from "../lib/player/PlayerEngine";
 import { usePlayerEngine } from "../lib/hooks/usePlayerEngine";
 import { useStream } from "../lib/hooks/useStream";
 import { usePlayerProgress } from "../lib/hooks/usePlayerSettings";

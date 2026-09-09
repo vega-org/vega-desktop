@@ -10,7 +10,6 @@
   ],
   "permissions": [
     "window-state:default",
-    "libmpv:default",
     "updater:default"
   ]
 }

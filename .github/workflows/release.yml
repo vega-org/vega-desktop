@@ -29,34 +29,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - name: Bundle libmpv for macOS
-        if: matrix.platform == 'macos-latest'
-        run: |
-          brew install mpv dylibbundler
-
-          # Copy brew's libmpv into src-tauri/lib/
-          MPV_PREFIX=$(brew --prefix mpv)
-          cp "${MPV_PREFIX}/lib/libmpv.2.dylib" src-tauri/lib/libmpv.2.dylib
-
-          # Collect ALL transitive dependencies into src-tauri/lib/ and rewrite paths
-          dylibbundler -b \
-            -x src-tauri/lib/libmpv.2.dylib \
-            -d src-tauri/lib/ \
-            -p @loader_path/ \
-            -of
-
-          # Also fix libmpv's own install name
-          install_name_tool -id @loader_path/libmpv.2.dylib src-tauri/lib/libmpv.2.dylib
-
-          # Build the frameworks list for tauri.conf.json from all dylibs in lib/
-          FRAMEWORKS=$(find src-tauri/lib -name "*.dylib" | sed 's|src-tauri/||' | jq -R . | jq -s .)
-          # Update tauri.conf.json with the full list
-          jq --argjson fw "$FRAMEWORKS" '.bundle.macOS.frameworks = $fw' src-tauri/tauri.conf.json > src-tauri/tauri.conf.tmp.json
-          mv src-tauri/tauri.conf.tmp.json src-tauri/tauri.conf.json
-
-          echo "Bundled dylibs:"
-          ls -la src-tauri/lib/*.dylib
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -65,6 +37,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm install
+
+      - name: Bundle native FFmpeg sidecars
+        run: node scripts/setup-ffmpeg.mjs
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable

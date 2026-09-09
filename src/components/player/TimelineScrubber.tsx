@@ -2,7 +2,7 @@ import React from "react";
 import { useFocusable } from "@noriginmedia/norigin-spatial-navigation-react";
 import { settingsStorage } from "../../lib/storage";
 import { useControlsFocus } from "../../lib/context/ControlsFocusContext";
-import type { MpvChapter } from "../../lib/hooks/useMpvPlayer";
+import type { MpvChapter } from "../../lib/player/PlayerEngine";
 import type { SkipInterval } from "../../lib/providers/types";
 
 interface TimelineScrubberProps {

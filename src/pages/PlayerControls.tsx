@@ -32,7 +32,7 @@ import {
   MdReplay10,
   MdForward10,
 } from "react-icons/md";
-import type { MpvChapter, MpvTrack } from "../lib/hooks/useMpvPlayer";
+import type { MpvChapter, MpvTrack } from "../lib/player/PlayerEngine";
 import type { SkipInterval } from "../lib/providers/types";
 import { SearchSubtitlesModal } from "../components/SearchSubtitlesModal";
 import { settingsStorage } from "../lib/storage";

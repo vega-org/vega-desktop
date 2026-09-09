@@ -17,6 +17,9 @@ export interface ChapterInfo {
   time: number;
 }
 
+export type MpvTrack = TrackInfo;
+export type MpvChapter = ChapterInfo;
+
 export interface PlayerEngineState {
   isInitialized: boolean;
   isPaused: boolean;

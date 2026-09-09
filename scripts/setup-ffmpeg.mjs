@@ -1,37 +1,92 @@
-import { existsSync, mkdirSync, createWriteStream } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
-import https from "https";
-import { execSync } from "child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { arch, platform, tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const rootDir = join(__dirname, "..");
-const ffmpegDir = join(rootDir, "src-tauri", "resources", "ffmpeg");
-const isWin = process.platform === "win32";
+const releaseTag = "b6.1.1";
+const releaseBase =
+  `https://github.com/eugeneware/ffmpeg-static/releases/download/${releaseTag}`;
+const root = join(fileURLToPath(new URL("..", import.meta.url)));
+const destination = join(root, "src-tauri", "resources", "ffmpeg-sidecar");
+const temporary = mkdtempSync(join(tmpdir(), "vega-ffmpeg-"));
+const executableSuffix = platform() === "win32" ? ".exe" : "";
 
-const ffmpegExe = join(ffmpegDir, isWin ? "ffmpeg.exe" : "ffmpeg");
-const ffprobeExe = join(ffmpegDir, isWin ? "ffprobe.exe" : "ffprobe");
-
-async function checkOrDownload() {
-  // Check if already present in resources or in PATH
-  if (existsSync(ffmpegExe) && existsSync(ffprobeExe)) {
-    console.log("[setup-ffmpeg] FFmpeg and FFprobe binaries already exist in resources/ffmpeg");
-    return;
+async function downloadAsset(name, output) {
+  console.log(`Downloading ${name}...`);
+  const response = await fetch(`${releaseBase}/${name}`, { redirect: "follow" });
+  if (!response.ok) {
+    throw new Error(`${name} download failed: HTTP ${response.status}`);
   }
-
-  try {
-    execSync("ffmpeg -version", { stdio: "ignore" });
-    execSync("ffprobe -version", { stdio: "ignore" });
-    console.log("[setup-ffmpeg] FFmpeg and FFprobe found in system PATH");
-    return;
-  } catch {
-    // Not in PATH
-  }
-
-  mkdirSync(ffmpegDir, { recursive: true });
-  console.log("[setup-ffmpeg] Note: To package on Windows, place static ffmpeg.exe and ffprobe.exe in src-tauri/resources/ffmpeg/");
+  writeFileSync(output, Buffer.from(await response.arrayBuffer()));
+  if (platform() !== "win32") chmodSync(output, 0o755);
 }
 
-checkOrDownload().catch((err) => {
-  console.error("[setup-ffmpeg] Setup encountered error:", err);
-});
+function platformAssetName(tool, cpu = arch()) {
+  if (platform() === "win32") {
+    if (cpu !== "x64") throw new Error(`Unsupported Windows architecture: ${cpu}`);
+    return `${tool}-win32-x64`;
+  }
+
+  if (platform() === "linux") {
+    const linuxCpu = { x64: "x64", arm64: "arm64", arm: "arm", ia32: "ia32" }[cpu];
+    if (!linuxCpu) throw new Error(`Unsupported Linux architecture: ${cpu}`);
+    return `${tool}-linux-${linuxCpu}`;
+  }
+
+  if (platform() === "darwin") {
+    if (cpu !== "x64" && cpu !== "arm64") {
+      throw new Error(`Unsupported macOS architecture: ${cpu}`);
+    }
+    return `${tool}-darwin-${cpu}`;
+  }
+
+  throw new Error(`Unsupported release platform: ${platform()}`);
+}
+
+function verifyBinary(path, tool) {
+  const result = spawnSync(path, ["-version"], { encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(
+      `${tool} verification failed: ${result.error?.message ?? result.stderr ?? "unknown error"}`,
+    );
+  }
+}
+
+try {
+  rmSync(destination, { recursive: true, force: true });
+  mkdirSync(destination, { recursive: true });
+
+  for (const tool of ["ffmpeg", "ffprobe"]) {
+    const output = join(destination, `${tool}${executableSuffix}`);
+
+    if (platform() === "darwin") {
+      const intel = join(temporary, `${tool}-x64`);
+      const appleSilicon = join(temporary, `${tool}-arm64`);
+      await downloadAsset(platformAssetName(tool, "x64"), intel);
+      await downloadAsset(platformAssetName(tool, "arm64"), appleSilicon);
+      execFileSync("lipo", ["-create", "-output", output, intel, appleSilicon], {
+        stdio: "inherit",
+      });
+      chmodSync(output, 0o755);
+    } else {
+      await downloadAsset(platformAssetName(tool), output);
+    }
+
+    if (!existsSync(output)) throw new Error(`${tool} sidecar was not created`);
+    verifyBinary(output, tool);
+  }
+
+  console.log(
+    `Bundled native FFmpeg and FFprobe sidecars for ${platform()}/${arch()} (no MPV libraries).`,
+  );
+} finally {
+  rmSync(temporary, { recursive: true, force: true });
+}

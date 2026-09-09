@@ -1,7 +1,5 @@
 {
   "bundle": {
-    "resources": [
-      "lib/*.dylib"
-    ]
+    "resources": ["resources/ffmpeg-sidecar/*"]
   }
 }
