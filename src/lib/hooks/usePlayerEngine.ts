@@ -339,7 +339,12 @@ export function usePlayerEngine(
         setupEngine(el);
       }
     },
-    destroyPlayer: async () => { },
+    destroyPlayer: async () => {
+      if (engineRef.current) {
+        engineRef.current.destroy();
+        engineRef.current = null;
+      }
+    },
     setProperty: async (_prop: string, _val: any) => { },
   };
 }

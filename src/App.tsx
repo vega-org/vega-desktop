@@ -36,6 +36,7 @@ import { applyThemeTokens } from "./lib/theme";
 import { ToastContainer } from "./components/ui/ToastContainer";
 import { useGamepadNavigation } from "./lib/hooks/useGamepadNavigation";
 import { ModalFocusProvider } from "./lib/context/ModalFocusContext";
+import { cleanupAllStreamTorrents } from "./lib/services/torrentStreamService";
 
 let isNavInitialized = false;
 
@@ -70,8 +71,14 @@ export default function App() {
         );
       }
     }, 30000);
+    const handleBeforeUnload = () => {
+      cleanupAllStreamTorrents().catch(() => {});
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
       window.clearInterval(interval);
     };
   }, []);

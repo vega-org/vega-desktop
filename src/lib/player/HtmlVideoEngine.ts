@@ -8,6 +8,12 @@ import type {
   ChapterInfo,
 } from "./PlayerEngine";
 import { JassubManager } from "./jassubManager";
+import {
+  isTorrentUrl,
+  resolveTorrentStream,
+  deleteTorrentStream,
+  getInfoHashFromStreamUrl,
+} from "../services/torrentStreamService";
 
 interface ProbeStreamInfo {
   index: number;
@@ -171,6 +177,8 @@ export class HtmlVideoEngine implements PlayerEngine {
   private timingGeneration: number = -1;
   private freezeCanvas: HTMLCanvasElement | null = null;
   private isPreparingRemuxPreroll: boolean = false;
+  private loadRequestId: number = 0;
+  private currentTorrentInfoHash: string | null = null;
 
   private captureFreezeFrame(): void {
     const v = this.video;
@@ -678,6 +686,47 @@ export class HtmlVideoEngine implements PlayerEngine {
   }
 
   public async load(source: string, options?: PlayerEngineOptions): Promise<void> {
+    const currentLoadId = ++this.loadRequestId;
+
+    if (this.currentTorrentInfoHash) {
+      const prevHash = this.currentTorrentInfoHash;
+      this.currentTorrentInfoHash = null;
+      deleteTorrentStream(prevHash).catch((err) => {
+        console.warn("[HtmlVideoEngine] Failed to delete previous torrent stream:", err);
+      });
+    }
+
+    if (isTorrentUrl(source)) {
+      this.updateState({
+        isInitialized: true,
+        isBuffering: true,
+        error: null,
+        currentTime: options?.startTime || 0,
+        duration: 0,
+      });
+
+      try {
+        const resolved = await resolveTorrentStream(source);
+        if (this.loadRequestId !== currentLoadId || this.isDestroyed) {
+          deleteTorrentStream(resolved.infoHash).catch(() => {});
+          return;
+        }
+        this.currentTorrentInfoHash = resolved.infoHash;
+        source = resolved.streamUrl;
+      } catch (err: any) {
+        if (this.loadRequestId !== currentLoadId || this.isDestroyed) return;
+        console.error("[HtmlVideoEngine] Failed to resolve torrent stream:", err);
+        const msg = err?.message || "Failed to resolve torrent stream";
+        this.updateState({ error: msg, isBuffering: false, isPaused: true });
+        throw err;
+      }
+    } else {
+      const existingHash = getInfoHashFromStreamUrl(source);
+      if (existingHash) {
+        this.currentTorrentInfoHash = existingHash;
+      }
+    }
+
     this.currentSource = source;
     this.currentHeaders = options?.headers || {};
     this.externalSubtitles = options?.subtitles || [];
@@ -801,7 +850,8 @@ export class HtmlVideoEngine implements PlayerEngine {
           !source.startsWith("http://") &&
           !source.startsWith("https://") &&
           !source.startsWith("asset://") &&
-          !source.startsWith("blob:");
+          !source.startsWith("blob:") &&
+          !source.startsWith("magnet:");
 
         if (audioTracks.length === 0) {
           audioTracks = [
@@ -1210,7 +1260,8 @@ export class HtmlVideoEngine implements PlayerEngine {
       !this.currentSource.startsWith("http://") &&
       !this.currentSource.startsWith("https://") &&
       !this.currentSource.startsWith("asset://") &&
-      !this.currentSource.startsWith("blob:");
+      !this.currentSource.startsWith("blob:") &&
+      !this.currentSource.startsWith("magnet:");
 
     const hasHeaders = Object.keys(this.currentHeaders).length > 0;
 
@@ -1881,5 +1932,13 @@ export class HtmlVideoEngine implements PlayerEngine {
     this.video.pause();
     this.video.removeAttribute("src");
     this.video.load();
+
+    if (this.currentTorrentInfoHash) {
+      const infoHash = this.currentTorrentInfoHash;
+      this.currentTorrentInfoHash = null;
+      deleteTorrentStream(infoHash).catch((err) => {
+        console.warn("[HtmlVideoEngine] Failed to delete torrent stream on destroy:", err);
+      });
+    }
   }
 }
