@@ -1,7 +1,7 @@
 use axum::{
     body::{Body, Bytes},
     extract::{Path as AxumPath, Query, State},
-    http::{header, HeaderMap, StatusCode},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
     Router,
@@ -12,7 +12,7 @@ use serde::Deserialize;
 use std::{
     collections::HashMap,
     io::SeekFrom,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Stdio,
     sync::{Arc, Mutex},
 };
@@ -244,18 +244,14 @@ fn parse_byte_range(value: &str, file_size: u64) -> Result<(u64, u64), StatusCod
     Ok((start, end))
 }
 
-async fn handle_local_file(
-    State(state): State<ProxyState>,
-    AxumPath((token, _file_name)): AxumPath<(String, String)>,
-    headers: HeaderMap,
+async fn serve_local_file(
+    path: &Path,
+    range_header: Option<&HeaderValue>,
 ) -> Result<Response, StatusCode> {
-    let path = state
-        .local_files
-        .lock()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .get(&token)
-        .cloned()
-        .ok_or(StatusCode::NOT_FOUND)?;
+    if !path.is_file() {
+        eprintln!("[stream_server] serve_local_file: not found: {:?}", path);
+        return Err(StatusCode::NOT_FOUND);
+    }
     let mut file = tokio::fs::File::open(path)
         .await
         .map_err(|_| StatusCode::NOT_FOUND)?;
@@ -265,79 +261,7 @@ async fn handle_local_file(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .len();
 
-    let requested_range = headers
-        .get(header::RANGE)
-        .and_then(|value| value.to_str().ok())
-        .map(|value| parse_byte_range(value, file_size))
-        .transpose()?;
-    let (start, end, status) = match requested_range {
-        Some((start, end)) => (start, end, StatusCode::PARTIAL_CONTENT),
-        None if file_size > 0 => (0, file_size - 1, StatusCode::OK),
-        None => (0, 0, StatusCode::OK),
-    };
-    let content_length = if file_size == 0 { 0 } else { end - start + 1 };
-
-    file.seek(SeekFrom::Start(start))
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let body_stream =
-        stream::try_unfold((file, content_length), |(mut file, remaining)| async move {
-            if remaining == 0 {
-                return Ok::<_, std::io::Error>(None);
-            }
-            let mut buffer = vec![0; remaining.min(64 * 1024) as usize];
-            let read = file.read(&mut buffer).await?;
-            if read == 0 {
-                return Ok(None);
-            }
-            buffer.truncate(read);
-            Ok(Some((
-                Bytes::from(buffer),
-                (file, remaining.saturating_sub(read as u64)),
-            )))
-        });
-
-    let mut response = Response::builder()
-        .status(status)
-        .header(header::ACCEPT_RANGES, "bytes")
-        .header(header::CONTENT_LENGTH, content_length)
-        .header(header::CONTENT_TYPE, "application/octet-stream");
-    if status == StatusCode::PARTIAL_CONTENT {
-        response = response.header(
-            header::CONTENT_RANGE,
-            format!("bytes {start}-{end}/{file_size}"),
-        );
-    }
-    response
-        .body(Body::from_stream(body_stream))
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
-}
-
-#[derive(Deserialize)]
-pub struct LocalDirectFileQuery {
-    path: String,
-}
-
-async fn handle_direct_file(
-    Query(query): Query<LocalDirectFileQuery>,
-    headers: HeaderMap,
-) -> Result<Response, StatusCode> {
-    let path = PathBuf::from(&query.path);
-    if !path.is_file() {
-        eprintln!("[stream_server] /file: not found: {:?}", path);
-        return Err(StatusCode::NOT_FOUND);
-    }
-    let mut file = tokio::fs::File::open(&path)
-        .await
-        .map_err(|_| StatusCode::NOT_FOUND)?;
-    let file_size = file
-        .metadata()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .len();
-
-    let requested_range = headers
-        .get(header::RANGE)
+    let requested_range = range_header
         .and_then(|value| value.to_str().ok())
         .map(|value| parse_byte_range(value, file_size))
         .transpose()?;
@@ -395,6 +319,34 @@ async fn handle_direct_file(
     response
         .body(Body::from_stream(body_stream))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn handle_local_file(
+    State(state): State<ProxyState>,
+    AxumPath((token, _file_name)): AxumPath<(String, String)>,
+    headers: HeaderMap,
+) -> Result<Response, StatusCode> {
+    let path = state
+        .local_files
+        .lock()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .get(&token)
+        .cloned()
+        .ok_or(StatusCode::NOT_FOUND)?;
+    serve_local_file(&path, headers.get(header::RANGE)).await
+}
+
+#[derive(Deserialize)]
+pub struct LocalDirectFileQuery {
+    path: String,
+}
+
+async fn handle_direct_file(
+    Query(query): Query<LocalDirectFileQuery>,
+    headers: HeaderMap,
+) -> Result<Response, StatusCode> {
+    let path = PathBuf::from(&query.path);
+    serve_local_file(&path, headers.get(header::RANGE)).await
 }
 
 fn encode_url(s: &str) -> String {
@@ -813,14 +765,15 @@ async fn handle_segment(
 }
 
 fn resolve_source_url(state: &ProxyState, raw_url: &str) -> String {
-    if let Some(token) = raw_url.strip_prefix("local://") {
+    let cleaned = crate::ffmpeg_resolver::clean_source(raw_url);
+    if let Some(token) = cleaned.strip_prefix("local://") {
         if let Ok(files) = state.local_files.lock() {
             if let Some(path) = files.get(token) {
                 return path.to_string_lossy().to_string();
             }
         }
     }
-    raw_url.to_string()
+    cleaned
 }
 
 async fn handle_cancel_remux(
@@ -1106,8 +1059,13 @@ fn parse_ffmpeg_source_video_pts(line: &str, video_stream_index: u32) -> Option<
     if !line.contains("demuxer ->") || !line.contains("type:video") {
         return None;
     }
-    let stream_marker = format!("ist_index:{}", video_stream_index);
-    if !line.contains(&stream_marker) {
+    let ist_part = line.split("ist_index:").nth(1)?.split_whitespace().next()?;
+    let stream_idx: u32 = if let Some((_, sub)) = ist_part.split_once(':') {
+        sub.parse().ok()?
+    } else {
+        ist_part.parse().ok()?
+    };
+    if stream_idx != video_stream_index {
         return None;
     }
     let marker = "pkt_pts_time:";
@@ -1132,6 +1090,14 @@ mod remux_timing_tests {
         let line = "demuxer -> ist_index:2 type:video next_dts:0 pkt_pts:270000 pkt_pts_time:3.000 pkt_dts:270000";
         assert_eq!(parse_ffmpeg_source_video_pts(line, 2), Some(3.0));
         assert_eq!(parse_ffmpeg_source_video_pts(line, 0), None);
+
+        // FFmpeg 6.x compound input format (ist_index:file_idx:stream_idx)
+        let line_v6 = "[vist#0:0/h264] demuxer -> ist_index:0:0 type:video pkt_pts:2000 pkt_pts_time:2.000 pkt_dts:1958";
+        assert_eq!(parse_ffmpeg_source_video_pts(line_v6, 0), Some(2.0));
+        assert_eq!(parse_ffmpeg_source_video_pts(line_v6, 1), None);
+
+        let line_v6_stream2 = "[vist#0:2/h264] demuxer -> ist_index:0:2 type:video pkt_pts:2000 pkt_pts_time:4.500 pkt_dts:1958";
+        assert_eq!(parse_ffmpeg_source_video_pts(line_v6_stream2, 2), Some(4.5));
     }
 
     #[test]
@@ -1174,8 +1140,10 @@ mod remux_timing_tests {
 async fn handle_remux(
     State(state): State<ProxyState>,
     Query(query): Query<RemuxQuery>,
+    headers: HeaderMap,
 ) -> Result<Response, StatusCode> {
     let source = resolve_source_url(&state, &query.url);
+    let is_network = source.starts_with("http://") || source.starts_with("https://");
     let ffmpeg_path = match ffmpeg_resolver::get_ffmpeg_path() {
         Ok(p) => p,
         Err(e) => {
@@ -1183,6 +1151,10 @@ async fn handle_remux(
                 "[remux] FFmpeg not found ({}), streaming directly via proxy",
                 e
             );
+            if !is_network {
+                let path = PathBuf::from(&source);
+                return serve_local_file(&path, headers.get(header::RANGE)).await;
+            }
             let mut req = state.client.get(&source);
             if let Some(ref r) = query.referer {
                 req = req.header("Referer", r);
@@ -1274,7 +1246,7 @@ async fn handle_remux(
             v.replace(['\r', '\n'], "")
         ));
     }
-    if !headers_str.is_empty() {
+    if is_network && !headers_str.is_empty() {
         headers_str.push(String::new());
         cmd.arg("-headers").arg(headers_str.join("\r\n"));
     }
@@ -1405,16 +1377,23 @@ async fn handle_remux(
     let session_id_opt = query.session_id.clone();
     let generation = query.generation.unwrap_or(0);
     let requested_start = query.start.unwrap_or(0.0);
-    let source_reference_pts = if is_transcode {
+    let mut source_reference_pts = if is_transcode {
         // Input seeking is accurate when video is decoded; the first output frame
         // represents the requested source position.
         Some(requested_start)
     } else {
-        tokio::time::timeout(std::time::Duration::from_secs(2), source_pts_receiver)
+        tokio::time::timeout(std::time::Duration::from_secs(5), source_pts_receiver)
             .await
             .ok()
             .and_then(Result::ok)
     };
+
+    if source_reference_pts.is_none() && requested_start <= 0.05 {
+        source_reference_pts = Some(0.0);
+    }
+    if output_reference_pts.is_none() && requested_start <= 0.05 {
+        output_reference_pts = Some(0.0);
+    }
     let remux_infos = state.remux_infos.clone();
     let app_opt = state.app.clone();
 

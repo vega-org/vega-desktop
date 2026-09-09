@@ -42,8 +42,7 @@ vega.key
 vega.key.pub
 src-tauri/resources/windows/vc_redist.x64.exe
 src-tauri/resources/ffmpeg/
-src-tauri/resources/ffmpeg-sidecar/
-!src-tauri/resources/ffmpeg-sidecar/
+src-tauri/resources/ffmpeg-sidecar/*
 !src-tauri/resources/ffmpeg-sidecar/.gitkeep
 .build_ffmpeg_android/
 scratch/

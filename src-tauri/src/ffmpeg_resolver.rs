@@ -144,6 +144,12 @@ pub fn resolve_binary(base_name: &str, env_var: &str) -> Result<PathBuf, String>
                 candidate_dirs.push(contents.join("resources").join("resources").join("ffmpeg"));
                 candidate_dirs.push(contents.join("resources"));
             }
+            if let Some(target_dir) = parent.parent() {
+                if let Some(src_tauri_dir) = target_dir.parent() {
+                    candidate_dirs.push(src_tauri_dir.join("resources").join("ffmpeg-sidecar"));
+                    candidate_dirs.push(src_tauri_dir.join("resources").join("ffmpeg"));
+                }
+            }
             candidate_dirs.push(parent.join("binaries"));
             candidate_dirs.push(parent.join("bin"));
         }

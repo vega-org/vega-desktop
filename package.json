@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "postinstall": "node scripts/setup-ffmpeg.mjs",
     "build:msix": "npx -y cross-env VITE_IS_MS_STORE=true tauri-windows-bundle build --arch x64 --runner npm"
   },
   "dependencies": {

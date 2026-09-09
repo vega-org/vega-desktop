@@ -128,13 +128,16 @@ pub async fn probe_media(
         .arg("-of")
         .arg("json");
 
-    if let Some(ref h) = headers {
-        if let Some(formatted) = format_headers_arg(h) {
-            cmd.arg("-headers").arg(formatted);
+    let clean_source = crate::ffmpeg_resolver::clean_source(source);
+    let is_network = clean_source.starts_with("http://") || clean_source.starts_with("https://");
+    if is_network {
+        if let Some(ref h) = headers {
+            if let Some(formatted) = format_headers_arg(h) {
+                cmd.arg("-headers").arg(formatted);
+            }
         }
     }
 
-    let clean_source = crate::ffmpeg_resolver::clean_source(source);
     cmd.arg(&clean_source);
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
@@ -428,11 +431,11 @@ pub async fn extract_subtitles_to_string(
             .arg("1")
             .arg("-reconnect_delay_max")
             .arg("5");
-    }
 
-    if let Some(ref h) = headers {
-        if let Some(formatted) = format_headers_arg(h) {
-            cmd.arg("-headers").arg(formatted);
+        if let Some(ref h) = headers {
+            if let Some(formatted) = format_headers_arg(h) {
+                cmd.arg("-headers").arg(formatted);
+            }
         }
     }
 
@@ -656,9 +659,11 @@ pub async fn extract_subtitle_window(
     cmd.arg("-ss")
         .arg(format!("{window_start:.3}"))
         .arg("-copyts");
-    if let Some(ref h) = headers {
-        if let Some(formatted) = format_headers_arg(h) {
-            cmd.arg("-headers").arg(formatted);
+    if clean_source.starts_with("http://") || clean_source.starts_with("https://") {
+        if let Some(ref h) = headers {
+            if let Some(formatted) = format_headers_arg(h) {
+                cmd.arg("-headers").arg(formatted);
+            }
         }
     }
     cmd.arg("-i")
@@ -771,9 +776,11 @@ pub async fn find_seek_keyframe(
         .arg("-of")
         .arg("csv=p=0");
 
-    if let Some(ref h) = headers {
-        if let Some(formatted) = format_headers_arg(h) {
-            cmd.arg("-headers").arg(formatted);
+    if clean_source.starts_with("http://") || clean_source.starts_with("https://") {
+        if let Some(ref h) = headers {
+            if let Some(formatted) = format_headers_arg(h) {
+                cmd.arg("-headers").arg(formatted);
+            }
         }
     }
 

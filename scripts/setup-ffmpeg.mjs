@@ -16,8 +16,16 @@ const releaseBase =
   `https://github.com/eugeneware/ffmpeg-static/releases/download/${releaseTag}`;
 const root = join(fileURLToPath(new URL("..", import.meta.url)));
 const destination = join(root, "src-tauri", "resources", "ffmpeg-sidecar");
-const temporary = mkdtempSync(join(tmpdir(), "vega-ffmpeg-"));
 const executableSuffix = platform() === "win32" ? ".exe" : "";
+
+function verifyBinary(path, tool) {
+  const result = spawnSync(path, ["-version"], { encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(
+      `${tool} verification failed: ${result.error?.message ?? result.stderr ?? "unknown error"}`,
+    );
+  }
+}
 
 async function downloadAsset(name, output) {
   console.log(`Downloading ${name}...`);
@@ -51,14 +59,22 @@ function platformAssetName(tool, cpu = arch()) {
   throw new Error(`Unsupported release platform: ${platform()}`);
 }
 
-function verifyBinary(path, tool) {
-  const result = spawnSync(path, ["-version"], { encoding: "utf8" });
-  if (result.status !== 0) {
-    throw new Error(
-      `${tool} verification failed: ${result.error?.message ?? result.stderr ?? "unknown error"}`,
+const ffmpegOut = join(destination, `ffmpeg${executableSuffix}`);
+const ffprobeOut = join(destination, `ffprobe${executableSuffix}`);
+if (existsSync(ffmpegOut) && existsSync(ffprobeOut)) {
+  try {
+    verifyBinary(ffmpegOut, "ffmpeg");
+    verifyBinary(ffprobeOut, "ffprobe");
+    console.log(
+      `Native FFmpeg and FFprobe sidecars already verified for ${platform()}/${arch()}.`,
     );
+    process.exit(0);
+  } catch {
+    // Re-download if existing files failed verification
   }
 }
+
+const temporary = mkdtempSync(join(tmpdir(), "vega-ffmpeg-"));
 
 try {
   rmSync(destination, { recursive: true, force: true });
