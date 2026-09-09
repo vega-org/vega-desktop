@@ -47,6 +47,7 @@ export default function App() {
   const { primary } = useThemeStore();
 
   useEffect(() => {
+    settingsStorage.syncStreamDoh();
     initializeSyncService().catch((error) =>
       console.warn("[VegaSync] Startup sync failed:", error),
     );

@@ -11,6 +11,44 @@ use wreq::{dns::Resolve, redirect::Policy, Client, Method};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use wreq_util::Emulation;
 
+pub fn build_hickory_resolver(provider: &str, custom_url: Option<String>) -> TokioAsyncResolver {
+    let mut opts = ResolverOpts::default();
+    opts.use_hosts_file = true;
+    opts.ip_strategy = hickory_resolver::config::LookupIpStrategy::Ipv4AndIpv6;
+    opts.num_concurrent_reqs = 2;
+
+    let config = if let Some(url) = custom_url.filter(|u| !u.is_empty()) {
+        if url.to_lowercase().contains("google") {
+            ResolverConfig::google_https()
+        } else if url.to_lowercase().contains("adguard") {
+            let mut config = ResolverConfig::new();
+            if let Ok(addr) = SocketAddr::from_str("94.140.14.14:443") {
+                config.add_name_server(NameServerConfig::new(addr, Protocol::Https));
+            }
+            config
+        } else if url.to_lowercase().contains("quad9") {
+            ResolverConfig::quad9_https()
+        } else {
+            ResolverConfig::cloudflare_https()
+        }
+    } else {
+        match provider.to_lowercase().as_str() {
+            "google" => ResolverConfig::google_https(),
+            "adguard" => {
+                let mut config = ResolverConfig::new();
+                if let Ok(addr) = SocketAddr::from_str("94.140.14.14:443") {
+                    config.add_name_server(NameServerConfig::new(addr, Protocol::Https));
+                }
+                config
+            }
+            "quad9" => ResolverConfig::quad9_https(),
+            _ => ResolverConfig::cloudflare_https(),
+        }
+    };
+
+    TokioAsyncResolver::tokio(config, opts)
+}
+
 #[derive(Clone)]
 struct CustomDnsResolver {
     resolver: Arc<TokioAsyncResolver>,
@@ -18,44 +56,7 @@ struct CustomDnsResolver {
 
 impl CustomDnsResolver {
     fn new(provider: &str, custom_url: Option<String>) -> Self {
-        let mut opts = ResolverOpts::default();
-        opts.use_hosts_file = true;
-        opts.ip_strategy = hickory_resolver::config::LookupIpStrategy::Ipv4AndIpv6;
-
-        let config = if let Some(url) = custom_url.filter(|u| !u.is_empty()) {
-            if url.to_lowercase().contains("google") {
-                ResolverConfig::google_https()
-            } else if url.to_lowercase().contains("adguard") {
-                let mut config = ResolverConfig::new();
-                let name_server = NameServerConfig::new(
-                    SocketAddr::from_str("94.140.14.14:443").unwrap(),
-                    Protocol::Https,
-                );
-                config.add_name_server(name_server);
-                config
-            } else if url.to_lowercase().contains("quad9") {
-                ResolverConfig::quad9_https()
-            } else {
-                ResolverConfig::cloudflare_https()
-            }
-        } else {
-            match provider.to_lowercase().as_str() {
-                "google" => ResolverConfig::google_https(),
-                "adguard" => {
-                    let mut config = ResolverConfig::new();
-                    let name_server = NameServerConfig::new(
-                        SocketAddr::from_str("94.140.14.14:443").unwrap(),
-                        Protocol::Https,
-                    );
-                    config.add_name_server(name_server);
-                    config
-                }
-                "quad9" => ResolverConfig::quad9_https(),
-                _ => ResolverConfig::cloudflare_https(),
-            }
-        };
-
-        let resolver = TokioAsyncResolver::tokio(config, opts);
+        let resolver = build_hickory_resolver(provider, custom_url);
         Self {
             resolver: Arc::new(resolver),
         }

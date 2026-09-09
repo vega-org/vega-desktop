@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { mainStorage } from "./StorageService";
 
 /**
@@ -394,6 +395,7 @@ export class SettingsStorage {
 
   setDohEnabled(enabled: boolean): void {
     mainStorage.setBool("dohEnabled", enabled);
+    this.syncStreamDoh();
   }
 
   getDohProvider(): string {
@@ -402,6 +404,7 @@ export class SettingsStorage {
 
   setDohProvider(provider: string): void {
     mainStorage.setString("dohProvider", provider);
+    this.syncStreamDoh();
   }
 
   getDohCustomUrl(): string {
@@ -410,6 +413,19 @@ export class SettingsStorage {
 
   setDohCustomUrl(url: string): void {
     mainStorage.setString("dohCustomUrl", url);
+    this.syncStreamDoh();
+  }
+
+  syncStreamDoh(): void {
+    try {
+      invoke("set_stream_doh", {
+        provider: this.getDohProvider(),
+        customUrl: this.getDohCustomUrl() || null,
+        enabled: this.isDohEnabled(),
+      }).catch((err) => console.warn("[SettingsStorage] Failed to sync stream DoH:", err));
+    } catch (e) {
+      console.warn("[SettingsStorage] Could not invoke set_stream_doh:", e);
+    }
   }
 
   // Player Zoom level

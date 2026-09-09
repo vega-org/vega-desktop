@@ -7,10 +7,7 @@ use axum::{
     Router,
 };
 use futures_util::stream;
-use hickory_resolver::{
-    config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts},
-    TokioAsyncResolver,
-};
+use hickory_resolver::TokioAsyncResolver;
 use reqwest::{
     dns::{Addrs, Name, Resolve, Resolving},
     Client,
@@ -22,7 +19,6 @@ use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
     process::Stdio,
-    str::FromStr,
     sync::{Arc, Mutex},
 };
 use tauri::Emitter;
@@ -34,35 +30,58 @@ use crate::media_probe;
 
 #[derive(Clone)]
 pub struct StreamDnsResolver {
-    resolver: Arc<TokioAsyncResolver>,
+    resolver: Arc<tokio::sync::RwLock<TokioAsyncResolver>>,
+    enabled: Arc<tokio::sync::RwLock<bool>>,
+    config_key: Arc<tokio::sync::RwLock<String>>,
 }
 
 impl StreamDnsResolver {
     pub fn new() -> Self {
-        let mut opts = ResolverOpts::default();
-        opts.use_hosts_file = true;
-        opts.ip_strategy = hickory_resolver::config::LookupIpStrategy::Ipv4AndIpv6;
-        opts.num_concurrent_reqs = 2;
-
-        let mut config = ResolverConfig::cloudflare_https();
-        if let Ok(addr) = SocketAddr::from_str("8.8.8.8:443") {
-            config.add_name_server(NameServerConfig::new(addr, Protocol::Https));
-        }
-        if let Ok(addr) = SocketAddr::from_str("8.8.4.4:443") {
-            config.add_name_server(NameServerConfig::new(addr, Protocol::Https));
-        }
-
-        let resolver = TokioAsyncResolver::tokio(config, opts);
+        let resolver = crate::doh_client::build_hickory_resolver("cloudflare", None);
         Self {
-            resolver: Arc::new(resolver),
+            resolver: Arc::new(tokio::sync::RwLock::new(resolver)),
+            enabled: Arc::new(tokio::sync::RwLock::new(true)),
+            config_key: Arc::new(tokio::sync::RwLock::new("true_cloudflare_".to_string())),
         }
+    }
+
+    pub async fn update_config(&self, provider: &str, custom_url: Option<String>, enabled: bool) {
+        let key = format!("{}_{}_{}", enabled, provider, custom_url.as_deref().unwrap_or_default());
+        {
+            let current = self.config_key.read().await;
+            if *current == key {
+                return;
+            }
+        }
+
+        let is_system = provider.eq_ignore_ascii_case("system") || provider.eq_ignore_ascii_case("none");
+        let effective_enabled = enabled && !is_system;
+
+        if effective_enabled {
+            let new_res = crate::doh_client::build_hickory_resolver(provider, custom_url.clone());
+            let mut res_guard = self.resolver.write().await;
+            *res_guard = new_res;
+        }
+
+        let mut enabled_guard = self.enabled.write().await;
+        *enabled_guard = effective_enabled;
+
+        let mut key_guard = self.config_key.write().await;
+        *key_guard = key;
+
+        println!(
+            "[stream_proxy] DNS resolver updated: enabled={}, provider={}, custom={:?}",
+            effective_enabled, provider, custom_url
+        );
     }
 }
 
 impl Resolve for StreamDnsResolver {
     fn resolve(&self, name: Name) -> Resolving {
-        let resolver = self.resolver.clone();
+        let resolver_lock = self.resolver.clone();
+        let enabled_lock = self.enabled.clone();
         let name_str = name.as_str().to_string();
+
         Box::pin(async move {
             if let Ok(ip) = name_str.parse::<std::net::IpAddr>() {
                 return Ok(Box::new(std::iter::once(SocketAddr::new(ip, 0))) as Addrs);
@@ -75,36 +94,57 @@ impl Resolve for StreamDnsResolver {
                 return Ok(Box::new(local_addrs.into_iter()) as Addrs);
             }
 
-            match resolver.lookup_ip(name_str.as_str()).await {
-                Ok(response) => {
-                    let addrs: Vec<SocketAddr> = response
-                        .into_iter()
-                        .map(|ip| SocketAddr::new(ip, 0))
-                        .collect();
+            let is_enabled = *enabled_lock.read().await;
+            if is_enabled {
+                let resolver = resolver_lock.read().await;
+                match resolver.lookup_ip(name_str.as_str()).await {
+                    Ok(response) => {
+                        let addrs: Vec<SocketAddr> = response
+                            .into_iter()
+                            .map(|ip| SocketAddr::new(ip, 0))
+                            .collect();
+                        return Ok(Box::new(addrs.into_iter()) as Addrs);
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[stream_proxy] DoH resolution failed for {}: {:?}. Falling back to system DNS...",
+                            name_str, e
+                        );
+                    }
+                }
+            }
+
+            match tokio::net::lookup_host(format!("{}:0", name_str)).await {
+                Ok(std_addrs) => {
+                    let addrs: Vec<SocketAddr> = std_addrs.collect();
                     Ok(Box::new(addrs.into_iter()) as Addrs)
                 }
-                Err(e) => {
+                Err(sys_err) => {
                     eprintln!(
-                        "[stream_proxy] DoH resolution failed for {}: {:?}. Falling back to system DNS...",
-                        name_str, e
+                        "[stream_proxy] System DNS also failed for {}: {:?}",
+                        name_str, sys_err
                     );
-                    match tokio::net::lookup_host(format!("{}:0", name_str)).await {
-                        Ok(std_addrs) => {
-                            let addrs: Vec<SocketAddr> = std_addrs.collect();
-                            Ok(Box::new(addrs.into_iter()) as Addrs)
-                        }
-                        Err(sys_err) => {
-                            eprintln!(
-                                "[stream_proxy] System DNS also failed for {}: {:?}",
-                                name_str, sys_err
-                            );
-                            Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-                        }
-                    }
+                    Err(Box::new(sys_err) as Box<dyn std::error::Error + Send + Sync>)
                 }
             }
         })
     }
+}
+
+lazy_static::lazy_static! {
+    pub static ref GLOBAL_STREAM_RESOLVER: Arc<StreamDnsResolver> = Arc::new(StreamDnsResolver::new());
+}
+
+#[tauri::command]
+pub async fn set_stream_doh(
+    provider: String,
+    custom_url: Option<String>,
+    enabled: bool,
+) -> Result<(), String> {
+    GLOBAL_STREAM_RESOLVER
+        .update_config(&provider, custom_url, enabled)
+        .await;
+    Ok(())
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -248,7 +288,7 @@ pub async fn start_server(
     app_handle: Option<tauri::AppHandle>,
 ) -> Result<u16, String> {
     let client = Client::builder()
-        .dns_resolver(Arc::new(StreamDnsResolver::new()))
+        .dns_resolver(GLOBAL_STREAM_RESOLVER.clone())
         .connect_timeout(std::time::Duration::from_secs(10))
         .redirect(reqwest::redirect::Policy::limited(10))
         .pool_idle_timeout(std::time::Duration::from_secs(20))

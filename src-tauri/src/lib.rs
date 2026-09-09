@@ -696,6 +696,7 @@ pub fn run() {
             set_player_fullscreen,
             ensure_window_in_work_area,
             doh_client::doh_fetch,
+            stream_server::set_stream_doh,
             sync_manifest::read_sync_manifests,
             sync_manifest::write_sync_manifest,
             sync_manifest::resolve_sync_media_path,
