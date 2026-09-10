@@ -113,7 +113,7 @@ try {
       execFileSync("lipo", ["-create", "-output", output, intel, appleSilicon], {
         stdio: "inherit",
       });
-      execFileSync("lipo", ["-verify_arch", "x86_64", "arm64", output], {
+      execFileSync("lipo", [output, "-verify_arch", "x86_64", "arm64"], {
         stdio: "inherit",
       });
       chmodSync(output, 0o755);
