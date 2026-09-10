@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -11,9 +12,10 @@ import { arch, platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const releaseTag = "b6.1.1";
+const releaseTag = "b6.1.2-rc.1";
+const releaseIdentity = `descriptinc/ffmpeg-ffprobe-static@${releaseTag}`;
 const releaseBase =
-  `https://github.com/eugeneware/ffmpeg-static/releases/download/${releaseTag}`;
+  `https://github.com/descriptinc/ffmpeg-ffprobe-static/releases/download/${releaseTag}`;
 const root = join(fileURLToPath(new URL("..", import.meta.url)));
 const destination = join(root, "src-tauri", "resources", "ffmpeg-sidecar");
 const executableSuffix = platform() === "win32" ? ".exe" : "";
@@ -24,6 +26,18 @@ function verifyBinary(path, tool) {
     throw new Error(
       `${tool} verification failed: ${result.error?.message ?? result.stderr ?? "unknown error"}`,
     );
+  }
+  if (tool === "ffmpeg") {
+    const encoders = spawnSync(path, ["-hide_banner", "-encoders"], { encoding: "utf8" });
+    if (encoders.status !== 0 || !encoders.stdout.includes("libx264")) {
+      throw new Error("Bundled FFmpeg does not provide the required libx264 encoder");
+    }
+  }
+  if (platform() === "darwin") {
+    const signature = spawnSync("codesign", ["--verify", path], { encoding: "utf8" });
+    if (signature.status !== 0) {
+      throw new Error(`${tool} is not validly signed: ${signature.stderr || "unknown error"}`);
+    }
   }
 }
 
@@ -44,7 +58,7 @@ function platformAssetName(tool, cpu = arch()) {
   }
 
   if (platform() === "linux") {
-    const linuxCpu = { x64: "x64", arm64: "arm64", arm: "arm", ia32: "ia32" }[cpu];
+    const linuxCpu = { x64: "x64", arm64: "arm64" }[cpu];
     if (!linuxCpu) throw new Error(`Unsupported Linux architecture: ${cpu}`);
     return `${tool}-linux-${linuxCpu}`;
   }
@@ -61,7 +75,15 @@ function platformAssetName(tool, cpu = arch()) {
 
 const ffmpegOut = join(destination, `ffmpeg${executableSuffix}`);
 const ffprobeOut = join(destination, `ffprobe${executableSuffix}`);
-if (existsSync(ffmpegOut) && existsSync(ffprobeOut)) {
+const versionMarker = join(destination, ".vega-ffmpeg-version");
+const installedRelease = existsSync(versionMarker)
+  ? readFileSync(versionMarker, "utf8").trim()
+  : "";
+if (
+  installedRelease === releaseIdentity &&
+  existsSync(ffmpegOut) &&
+  existsSync(ffprobeOut)
+) {
   try {
     verifyBinary(ffmpegOut, "ffmpeg");
     verifyBinary(ffprobeOut, "ffprobe");
@@ -91,7 +113,15 @@ try {
       execFileSync("lipo", ["-create", "-output", output, intel, appleSilicon], {
         stdio: "inherit",
       });
+      execFileSync("lipo", ["-verify_arch", "x86_64", "arm64", output], {
+        stdio: "inherit",
+      });
       chmodSync(output, 0o755);
+      // Combining slices invalidates signatures from the source binaries.
+      // Tauri replaces this ad-hoc signature when signing a release bundle.
+      execFileSync("codesign", ["--force", "--sign", "-", output], {
+        stdio: "inherit",
+      });
     } else {
       await downloadAsset(platformAssetName(tool), output);
     }
@@ -99,6 +129,8 @@ try {
     if (!existsSync(output)) throw new Error(`${tool} sidecar was not created`);
     verifyBinary(output, tool);
   }
+
+  writeFileSync(versionMarker, `${releaseIdentity}\n`);
 
   console.log(
     `Bundled native FFmpeg and FFprobe sidecars for ${platform()}/${arch()} (no MPV libraries).`,

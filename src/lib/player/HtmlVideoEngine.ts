@@ -88,28 +88,33 @@ function mergeSrtContent(first: string, second: string): string {
 }
 
 function isVideoCodecSupported(codecName?: string): boolean {
-  if (!codecName) return true;
-  if (typeof window === "undefined" || !window.MediaSource) return true;
+  if (!codecName || typeof document === "undefined") return false;
   const name = codecName.toLowerCase();
+  const video = document.createElement("video");
+
+  const canPlay = (...mimeTypes: string[]) =>
+    mimeTypes.some((mimeType) => video.canPlayType(mimeType) !== "");
 
   try {
     if (name.includes("h264") || name.includes("avc")) {
-      return (
-        MediaSource.isTypeSupported('video/mp4; codecs="avc1.640028, mp4a.40.2"') ||
-        MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E"')
+      return canPlay(
+        'video/mp4; codecs="avc1.640028"',
+        'video/mp4; codecs="avc1.42E01E"',
       );
     }
     if (name.includes("hevc") || name.includes("h265")) {
-      return (
-        MediaSource.isTypeSupported('video/mp4; codecs="hev1.1.6.L93.B0, mp4a.40.2"') ||
-        MediaSource.isTypeSupported('video/mp4; codecs="hvc1.1.6.L93.B0, mp4a.40.2"')
+      // Apple WebKit requires the hvc1 sample-entry tag. The remuxer applies
+      // that tag when copying HEVC into MP4.
+      return canPlay(
+        'video/mp4; codecs="hvc1"',
+        'video/mp4; codecs="hvc1.1.6.L93.B0"',
       );
     }
     if (name.includes("av1") || name.includes("av01")) {
-      return MediaSource.isTypeSupported('video/mp4; codecs="av01.0.08M.08, mp4a.40.2"');
+      return canPlay('video/mp4; codecs="av01.0.08M.08"');
     }
     if (name.includes("vp9")) {
-      return MediaSource.isTypeSupported('video/webm; codecs="vp9, opus"');
+      return canPlay('video/mp4; codecs="vp09.00.10.08"');
     }
   } catch {
     return false;
@@ -179,6 +184,7 @@ export class HtmlVideoEngine implements PlayerEngine {
   private isPreparingRemuxPreroll: boolean = false;
   private loadRequestId: number = 0;
   private currentTorrentInfoHash: string | null = null;
+  private hasTriedCodecFallback: boolean = false;
 
   private captureFreezeFrame(): void {
     const v = this.video;
@@ -674,6 +680,37 @@ export class HtmlVideoEngine implements PlayerEngine {
       const err = v.error;
       const msg = err ? `Video error code ${err.code}: ${err.message}` : "Playback error";
       console.warn("[HtmlVideoEngine] Video element error:", msg);
+
+      // canPlayType() is only a capability hint. Some WebKit/GStreamer builds
+      // claim a codec but reject the actual profile once bytes arrive. Retry
+      // once through FFmpeg instead of leaving macOS/Linux on error code 4.
+      if (
+        err?.code === 4 && // MEDIA_ERR_SRC_NOT_SUPPORTED
+        this.playbackMode === "remux" &&
+        !this.hasTriedCodecFallback &&
+        !this.isDestroyed
+      ) {
+        this.hasTriedCodecFallback = true;
+        this.playbackMode = "transcode";
+        const resumeAfterPrepare = !this.state.isPaused;
+        const restartTime = Math.max(
+          0,
+          Number.isFinite(this.state.currentTime)
+            ? this.state.currentTime
+            : this.requestedStartTime,
+        );
+        this.updateState({ error: null, isBuffering: true });
+        void this.startStream(restartTime, resumeAfterPrepare)
+          .then(() => resumeAfterPrepare ? this.play() : undefined)
+          .catch((fallbackError) => {
+            const fallbackMessage = fallbackError instanceof Error
+              ? fallbackError.message
+              : String(fallbackError);
+            console.warn("[HtmlVideoEngine] Codec fallback failed:", fallbackError);
+            this.updateState({ error: fallbackMessage, isBuffering: false });
+          });
+        return;
+      }
       this.updateState({ error: msg, isBuffering: false });
     });
   }
@@ -687,6 +724,7 @@ export class HtmlVideoEngine implements PlayerEngine {
 
   public async load(source: string, options?: PlayerEngineOptions): Promise<void> {
     const currentLoadId = ++this.loadRequestId;
+    this.hasTriedCodecFallback = false;
 
     if (this.currentTorrentInfoHash) {
       const prevHash = this.currentTorrentInfoHash;
@@ -985,6 +1023,15 @@ export class HtmlVideoEngine implements PlayerEngine {
       }
     } catch (err: any) {
       console.warn("[HtmlVideoEngine] Playback setup error:", err);
+      if (
+        this.hasTriedCodecFallback &&
+        this.playbackMode === "transcode" &&
+        String(err?.message || err).toLowerCase().includes("superseded")
+      ) {
+        // Error-code fallback intentionally replaced the rejected remux. Its
+        // own startStream call now owns playback preparation.
+        return;
+      }
       if (this.usesRemuxClock) {
         const message = err?.message || "Failed to prepare remux stream";
         this.updateState({ error: message, isBuffering: false, isPaused: true });
@@ -1160,7 +1207,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     sessionId: string,
     generation: number,
   ): Promise<void> {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + 20_000;
     while (!this.isDestroyed && this.streamGeneration === generation && Date.now() < deadline) {
       if (this.timingGeneration === generation) return;
       try {
@@ -1168,7 +1215,9 @@ export class HtmlVideoEngine implements PlayerEngine {
           `http://127.0.0.1:${port}/remux/info?session_id=${encodeURIComponent(sessionId)}&generation=${generation}`,
           { cache: "no-store" },
         );
-        if (response.ok) {
+        if (response.status === 204) {
+          // FFmpeg has not published the first output timestamp yet.
+        } else if (response.ok) {
           const info = (await response.json()) as RemuxStreamInfo;
           if (this.applyStreamInfo(info)) return;
         }
@@ -1315,6 +1364,13 @@ export class HtmlVideoEngine implements PlayerEngine {
       params.set("audio_codec", selectedAudio.codec);
     }
 
+    const selectedVideo = this.state.videoTracks.find(
+      (t) => t.id === this.selectedVideoIndex,
+    ) || this.state.videoTracks[0];
+    if (selectedVideo?.codec) {
+      params.set("video_codec", selectedVideo.codec);
+    }
+
     if (this.selectedVideoIndex !== null) {
       params.set("video_index", String(this.selectedVideoIndex));
     }
@@ -1345,16 +1401,26 @@ export class HtmlVideoEngine implements PlayerEngine {
     this.video.src = streamUrl;
     this.video.preload = "auto";
     this.video.load();
+    // WebKit on macOS may defer a media request despite preload="auto". Start
+    // it muted so FFmpeg and its timing metadata are guaranteed to begin.
+    const originalMuted = this.video.muted;
+    if (!resumeAfterPrepare) this.video.muted = true;
+    void this.video.play().catch((error) => {
+      console.debug("[HtmlVideoEngine] Initial media request is pending:", error);
+    });
     try {
       await this.waitForVerifiedStreamTiming(port, streamSessionId, gen);
+      this.video.muted = originalMuted;
       void this.refreshEmbeddedSubtitleWindow(this.requestedStartTime, gen);
       if (this.isPreparingRemuxPreroll && this.targetMediaTime > 0.05) {
         await this.finishRemuxPreroll(gen, resumeAfterPrepare);
       } else {
         this.isPreparingRemuxPreroll = false;
+        if (!resumeAfterPrepare) this.video.pause();
         this.releaseFreezeFrame();
       }
     } catch (error) {
+      this.video.muted = originalMuted;
       this.isPreparingRemuxPreroll = false;
       this.releaseFreezeFrame();
       throw error;

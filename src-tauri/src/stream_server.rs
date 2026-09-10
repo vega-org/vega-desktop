@@ -215,6 +215,8 @@ pub struct RemuxQuery {
     #[serde(default)]
     audio_codec: Option<String>,
     #[serde(default)]
+    video_codec: Option<String>,
+    #[serde(default)]
     mode: Option<String>,
     #[serde(default)]
     session_id: Option<String>,
@@ -270,17 +272,17 @@ pub struct RemuxInfoQuery {
 async fn handle_remux_info(
     State(state): State<ProxyState>,
     Query(query): Query<RemuxInfoQuery>,
-) -> Result<axum::Json<RemuxStreamInfo>, StatusCode> {
+) -> Response {
     let infos = state.remux_infos.lock().await;
     if let Some(info) = infos.get(&query.session_id) {
         if query
             .generation
             .map_or(true, |generation| generation == info.generation)
         {
-            return Ok(axum::Json(info.clone()));
+            return axum::Json(info.clone()).into_response();
         }
     }
-    Err(StatusCode::NOT_FOUND)
+    StatusCode::NO_CONTENT.into_response()
 }
 
 pub async fn start_server(
@@ -1411,6 +1413,16 @@ async fn handle_remux(
             .arg("yuv420p");
     } else {
         cmd.arg("-c:v").arg("copy");
+        let video_codec = query
+            .video_codec
+            .as_deref()
+            .unwrap_or_default()
+            .to_lowercase();
+        if video_codec.contains("hevc") || video_codec.contains("h265") {
+            // Safari/WebKit requires Apple's hvc1 sample-entry tag for HEVC
+            // inside MP4. FFmpeg otherwise commonly preserves/writes hev1.
+            cmd.arg("-tag:v").arg("hvc1");
+        }
     }
 
     let audio_delay_val = query.audio_delay.unwrap_or(0.0);
