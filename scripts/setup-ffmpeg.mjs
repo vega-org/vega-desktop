@@ -41,6 +41,38 @@ function verifyBinary(path, tool) {
   }
 }
 
+function verifyPlaybackPipeline(ffmpegPath, ffprobePath, directory) {
+  const sample = join(directory, "vega-ffmpeg-smoke.mp4");
+  const encode = spawnSync(
+    ffmpegPath,
+    [
+      "-v", "error",
+      "-f", "lavfi", "-i", "color=c=black:s=320x180:r=24",
+      "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+      "-t", "0.5",
+      "-map", "0:v:0", "-map", "1:a:0",
+      "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+      "-c:a", "aac",
+      "-movflags", "frag_keyframe+empty_moov+default_base_moof+cmaf",
+      "-f", "mp4", "-y", sample,
+    ],
+    { encoding: "utf8", timeout: 30_000 },
+  );
+  if (encode.status !== 0) {
+    throw new Error(`FFmpeg playback smoke test failed: ${encode.stderr || encode.error?.message}`);
+  }
+
+  const probe = spawnSync(
+    ffprobePath,
+    ["-v", "error", "-show_entries", "stream=codec_name", "-of", "csv=p=0", sample],
+    { encoding: "utf8", timeout: 15_000 },
+  );
+  const codecs = probe.stdout.toLowerCase();
+  if (probe.status !== 0 || !codecs.includes("h264") || !codecs.includes("aac")) {
+    throw new Error(`FFprobe playback smoke test failed: ${probe.stderr || codecs}`);
+  }
+}
+
 async function downloadAsset(name, output) {
   console.log(`Downloading ${name}...`);
   const response = await fetch(`${releaseBase}/${name}`, { redirect: "follow" });
@@ -87,8 +119,14 @@ if (
   try {
     verifyBinary(ffmpegOut, "ffmpeg");
     verifyBinary(ffprobeOut, "ffprobe");
+    const smokeDirectory = mkdtempSync(join(tmpdir(), "vega-ffmpeg-smoke-"));
+    try {
+      verifyPlaybackPipeline(ffmpegOut, ffprobeOut, smokeDirectory);
+    } finally {
+      rmSync(smokeDirectory, { recursive: true, force: true });
+    }
     console.log(
-      `Native FFmpeg and FFprobe sidecars already verified for ${platform()}/${arch()}.`,
+      `Native FFmpeg sidecars and playback pipeline verified for ${platform()}/${arch()}.`,
     );
     process.exit(0);
   } catch {
@@ -129,6 +167,8 @@ try {
     if (!existsSync(output)) throw new Error(`${tool} sidecar was not created`);
     verifyBinary(output, tool);
   }
+
+  verifyPlaybackPipeline(ffmpegOut, ffprobeOut, temporary);
 
   writeFileSync(versionMarker, `${releaseIdentity}\n`);
 

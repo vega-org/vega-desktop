@@ -185,6 +185,7 @@ export class HtmlVideoEngine implements PlayerEngine {
   private loadRequestId: number = 0;
   private currentTorrentInfoHash: string | null = null;
   private hasTriedCodecFallback: boolean = false;
+  private isCodecFallbackInProgress: boolean = false;
 
   private captureFreezeFrame(): void {
     const v = this.video;
@@ -681,6 +682,11 @@ export class HtmlVideoEngine implements PlayerEngine {
       const msg = err ? `Video error code ${err.code}: ${err.message}` : "Playback error";
       console.warn("[HtmlVideoEngine] Video element error:", msg);
 
+      // WebKit commonly dispatches the same source failure twice. The first
+      // event starts the replacement stream; the duplicate belongs to the
+      // rejected source and must not overwrite the in-progress fallback.
+      if (this.isCodecFallbackInProgress) return;
+
       // canPlayType() is only a capability hint. Some WebKit/GStreamer builds
       // claim a codec but reject the actual profile once bytes arrive. Retry
       // once through FFmpeg instead of leaving macOS/Linux on error code 4.
@@ -691,7 +697,9 @@ export class HtmlVideoEngine implements PlayerEngine {
         !this.isDestroyed
       ) {
         this.hasTriedCodecFallback = true;
+        this.isCodecFallbackInProgress = true;
         this.playbackMode = "transcode";
+        const fallbackLoadId = this.loadRequestId;
         const resumeAfterPrepare = !this.state.isPaused;
         const restartTime = Math.max(
           0,
@@ -701,11 +709,18 @@ export class HtmlVideoEngine implements PlayerEngine {
         );
         this.updateState({ error: null, isBuffering: true });
         void this.startStream(restartTime, resumeAfterPrepare)
-          .then(() => resumeAfterPrepare ? this.play() : undefined)
+          .then(async () => {
+            if (fallbackLoadId !== this.loadRequestId) return;
+            if (resumeAfterPrepare) await this.play();
+            this.isCodecFallbackInProgress = false;
+          })
           .catch((fallbackError) => {
+            if (fallbackLoadId !== this.loadRequestId) return;
+            this.isCodecFallbackInProgress = false;
             const fallbackMessage = fallbackError instanceof Error
               ? fallbackError.message
               : String(fallbackError);
+            if (fallbackMessage.toLowerCase().includes("superseded")) return;
             console.warn("[HtmlVideoEngine] Codec fallback failed:", fallbackError);
             this.updateState({ error: fallbackMessage, isBuffering: false });
           });
@@ -725,6 +740,7 @@ export class HtmlVideoEngine implements PlayerEngine {
   public async load(source: string, options?: PlayerEngineOptions): Promise<void> {
     const currentLoadId = ++this.loadRequestId;
     this.hasTriedCodecFallback = false;
+    this.isCodecFallbackInProgress = false;
 
     if (this.currentTorrentInfoHash) {
       const prevHash = this.currentTorrentInfoHash;
@@ -788,6 +804,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     this.subtitleContentMap.clear();
     this.subtitleWindowContentMap.clear();
     await this.queueSubtitleRender("off", subtitleLoadRequestId, null);
+    if (this.loadRequestId !== currentLoadId || this.isDestroyed) return;
 
     this.updateState({
       isInitialized: true,
@@ -817,6 +834,7 @@ export class HtmlVideoEngine implements PlayerEngine {
         console.warn("[HtmlVideoEngine] Probing failed, falling back to direct play:", e);
         return null;
       });
+      if (this.loadRequestId !== currentLoadId || this.isDestroyed) return;
 
       let audioTracks: TrackInfo[] = [];
       let subtitleTracks: TrackInfo[] = [];
@@ -1014,6 +1032,7 @@ export class HtmlVideoEngine implements PlayerEngine {
         this.virtualTimeOffset,
         options?.autoPlay !== false,
       );
+      if (this.loadRequestId !== currentLoadId || this.isDestroyed) return;
 
       if (options?.autoPlay !== false) {
         await this.play().catch((e) => {
@@ -1023,13 +1042,10 @@ export class HtmlVideoEngine implements PlayerEngine {
       }
     } catch (err: any) {
       console.warn("[HtmlVideoEngine] Playback setup error:", err);
-      if (
-        this.hasTriedCodecFallback &&
-        this.playbackMode === "transcode" &&
-        String(err?.message || err).toLowerCase().includes("superseded")
-      ) {
-        // Error-code fallback intentionally replaced the rejected remux. Its
-        // own startStream call now owns playback preparation.
+      if (this.loadRequestId !== currentLoadId || this.isDestroyed) return;
+      if (String(err?.message || err).toLowerCase().includes("superseded")) {
+        // A newer load, seek, server selection, or codec fallback now owns
+        // playback preparation. Supersession is expected cancellation.
         return;
       }
       if (this.usesRemuxClock) {

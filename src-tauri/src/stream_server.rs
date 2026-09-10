@@ -1463,7 +1463,7 @@ async fn handle_remux(
     cmd.arg("-f")
         .arg("mp4")
         .arg("-movflags")
-        .arg("frag_keyframe+empty_moov+default_base_moof")
+        .arg("frag_keyframe+empty_moov+default_base_moof+cmaf")
         .arg("pipe:1");
 
     cmd.stdout(Stdio::piped())
