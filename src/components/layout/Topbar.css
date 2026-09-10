@@ -4,13 +4,17 @@
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 12px 162px 12px 24px;
+  padding: 12px 24px;
   background-color: transparent;
   position: sticky;
   top: 0;
   z-index: 100;
   margin-bottom: -80px;
   pointer-events: none;
+}
+
+body.platform-windows .topbar {
+  padding-right: 162px;
 }
 
 .search-wrapper {
@@ -167,8 +171,12 @@
 
 @media (max-width: 760px) {
   .topbar {
-    padding-right: 154px;
+    padding-right: 16px;
     padding-left: 16px;
+  }
+
+  body.platform-windows .topbar {
+    padding-right: 154px;
   }
 
   .search-container {

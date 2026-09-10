@@ -1,4 +1,14 @@
 {
+  "app": {
+    "windows": [
+      {
+        "title": "Vega",
+        "width": 800,
+        "height": 600,
+        "decorations": true
+      }
+    ]
+  },
   "bundle": {
     "resources": ["resources/ffmpeg-sidecar/*"]
   }

@@ -639,9 +639,14 @@ pub fn run() {
         })
         .manage(download_manager::DownloadState::new())
         .setup(|app| {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
                 window.set_decorations(false)?;
+            }
+
+            #[cfg(not(any(target_os = "windows", target_os = "android", target_os = "ios")))]
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_decorations(true)?;
             }
 
             let app_handle = app.handle().clone();

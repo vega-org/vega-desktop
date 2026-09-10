@@ -11,12 +11,17 @@ import "./WindowControls.css";
 
 const appWindow = getCurrentWindow();
 
-export const WindowControls: React.FC = () => {
-  const isAndroid =
-    typeof navigator !== "undefined" &&
-    navigator.userAgent.toLowerCase().includes("android");
+export const isWindowsPlatform = (): boolean => {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes("windows") || ua.includes("win32") || ua.includes("win64")) return true;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const platform = (navigator as any).userAgentData?.platform?.toLowerCase?.();
+  return platform === "windows";
+};
 
-  if (isAndroid) return null;
+export const WindowControls: React.FC = () => {
+  if (!isWindowsPlatform()) return null;
 
   const [maximized, setMaximized] = React.useState(false);
   const [fullscreen, setFullscreen] = React.useState(false);

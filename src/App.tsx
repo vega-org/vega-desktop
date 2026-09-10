@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { client } from "./lib/client";
 import { Layout } from "./components/layout/Layout";
-import { WindowControls } from "./components/layout/WindowControls";
+import { WindowControls, isWindowsPlatform } from "./components/layout/WindowControls";
 import { ExtensionsPage } from "./pages/ExtensionsPage";
 import { HomePage } from "./pages/HomePage";
 import { MetaPage } from "./pages/MetaPage";
@@ -126,9 +126,11 @@ export default function App() {
     applyThemeTokens(primary);
   }, [primary]);
 
-  const isAndroid =
-    typeof navigator !== "undefined" &&
-    navigator.userAgent.toLowerCase().includes("android");
+  const isWindows = isWindowsPlatform();
+
+  useEffect(() => {
+    document.body.classList.toggle("platform-windows", isWindows);
+  }, [isWindows]);
 
   return (
     <ModalFocusProvider>
@@ -136,7 +138,7 @@ export default function App() {
         <WafDialog />
         <ToastContainer />
         <BrowserRouter>
-          {!isAndroid && <WindowControls />}
+          {isWindows && <WindowControls />}
           <Routes>
             {/* Player is outside Layout since it needs fullscreen without sidebar */}
             <Route path="player" element={<PlayerPage />} />
