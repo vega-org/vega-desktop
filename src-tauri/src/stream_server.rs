@@ -1607,7 +1607,7 @@ async fn handle_remux(
     let response = Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "video/mp4")
-        .header(header::CACHE_CONTROL, "no-cache, no-store")
+        .header(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")
         .header(header::ACCEPT_RANGES, "none")
         .body(Body::from_stream(body_stream))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

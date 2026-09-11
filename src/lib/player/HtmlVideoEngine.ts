@@ -87,13 +87,83 @@ function mergeSrtContent(first: string, second: string): string {
   return cues.map((cue, index) => `${index + 1}\n${cue}`).join("\n\n");
 }
 
+function resolveMseMimeType(videoCodec: string, hasAudio: boolean): string | null {
+  if (typeof window === "undefined" || !window.MediaSource) return null;
+  const v = videoCodec.toLowerCase();
+  const isHevc = v.includes("hevc") || v.includes("h265");
+  const isH264 = v.includes("h264") || v.includes("avc");
+
+  const candidates: string[] = [];
+  if (isHevc) {
+    if (hasAudio) {
+      candidates.push(
+        'video/mp4; codecs="hvc1, mp4a.40.2"',
+        'video/mp4; codecs="hvc1.1.6.L93.B0, mp4a.40.2"',
+        'video/mp4; codecs="hvc1.1.6.L120.B0, mp4a.40.2"',
+        'video/mp4; codecs="hvc1.1.6.L150.B0, mp4a.40.2"',
+        'video/mp4; codecs="hev1, mp4a.40.2"',
+        'video/mp4; codecs="hev1.1.6.L93.B0, mp4a.40.2"',
+      );
+    } else {
+      candidates.push(
+        'video/mp4; codecs="hvc1"',
+        'video/mp4; codecs="hvc1.1.6.L93.B0"',
+        'video/mp4; codecs="hvc1.1.6.L120.B0"',
+        'video/mp4; codecs="hev1"',
+      );
+    }
+  } else if (isH264) {
+    if (hasAudio) {
+      candidates.push(
+        'video/mp4; codecs="avc1.640028, mp4a.40.2"',
+        'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
+        'video/mp4; codecs="avc1.4d401f, mp4a.40.2"',
+      );
+    } else {
+      candidates.push(
+        'video/mp4; codecs="avc1.640028"',
+        'video/mp4; codecs="avc1.42E01E"',
+        'video/mp4; codecs="avc1.4d401f"',
+      );
+    }
+  } else {
+    if (hasAudio) {
+      candidates.push(
+        'video/mp4; codecs="avc1.640028, mp4a.40.2"',
+        'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
+      );
+    } else {
+      candidates.push('video/mp4; codecs="avc1.640028"');
+    }
+  }
+
+  for (const mime of candidates) {
+    try {
+      if (MediaSource.isTypeSupported(mime)) {
+        return mime;
+      }
+    } catch {}
+  }
+  return null;
+}
+
 function isVideoCodecSupported(codecName?: string): boolean {
   if (!codecName || typeof document === "undefined") return false;
   const name = codecName.toLowerCase();
   const video = document.createElement("video");
 
-  const canPlay = (...mimeTypes: string[]) =>
-    mimeTypes.some((mimeType) => video.canPlayType(mimeType) !== "");
+  const canPlay = (...mimeTypes: string[]) => {
+    if (typeof window !== "undefined" && window.MediaSource) {
+      return mimeTypes.some((mimeType) => {
+        try {
+          return MediaSource.isTypeSupported(mimeType);
+        } catch {
+          return false;
+        }
+      });
+    }
+    return mimeTypes.some((mimeType) => video.canPlayType(mimeType) !== "");
+  };
 
   try {
     if (name.includes("h264") || name.includes("avc")) {
@@ -108,6 +178,8 @@ function isVideoCodecSupported(codecName?: string): boolean {
       return canPlay(
         'video/mp4; codecs="hvc1"',
         'video/mp4; codecs="hvc1.1.6.L93.B0"',
+        'video/mp4; codecs="hvc1.1.6.L120.B0"',
+        'video/mp4; codecs="hev1"',
       );
     }
     if (name.includes("av1") || name.includes("av01")) {
@@ -186,6 +258,13 @@ export class HtmlVideoEngine implements PlayerEngine {
   private currentTorrentInfoHash: string | null = null;
   private hasTriedCodecFallback: boolean = false;
   private isCodecFallbackInProgress: boolean = false;
+  private mseSession: {
+    mediaSource: MediaSource;
+    sourceBuffer: SourceBuffer | null;
+    abortController: AbortController;
+    objectUrl: string;
+    generation: number;
+  } | null = null;
 
   private captureFreezeFrame(): void {
     const v = this.video;
@@ -730,6 +809,210 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
   }
 
+  private cleanupMse(): void {
+    if (this.mseSession) {
+      const session = this.mseSession;
+      this.mseSession = null;
+      session.abortController.abort();
+      if (session.sourceBuffer) {
+        try {
+          session.sourceBuffer.onupdateend = null;
+          session.sourceBuffer.onerror = null;
+          if (session.sourceBuffer.updating) {
+            session.sourceBuffer.abort();
+          }
+        } catch {}
+      }
+      if (session.mediaSource.readyState === "open") {
+        try {
+          session.mediaSource.endOfStream();
+        } catch {}
+      }
+      try {
+        URL.revokeObjectURL(session.objectUrl);
+      } catch {}
+    }
+  }
+
+  private async startMseStream(streamUrl: string, generation: number): Promise<void> {
+    this.cleanupMse();
+
+    const mediaSource = new MediaSource();
+    const objectUrl = URL.createObjectURL(mediaSource);
+    const abortController = new AbortController();
+
+    const session = {
+      mediaSource,
+      sourceBuffer: null as SourceBuffer | null,
+      abortController,
+      objectUrl,
+      generation,
+    };
+    this.mseSession = session;
+
+    this.video.src = objectUrl;
+    this.video.preload = "auto";
+    this.video.load();
+
+    await new Promise<void>((resolve, reject) => {
+      if (mediaSource.readyState === "open") {
+        resolve();
+        return;
+      }
+      const onOpen = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = () => {
+        cleanup();
+        reject(new Error("MediaSource open failed"));
+      };
+      const onAbort = () => {
+        cleanup();
+        reject(new Error("MSE stream superseded"));
+      };
+      const cleanup = () => {
+        mediaSource.removeEventListener("sourceopen", onOpen);
+        mediaSource.removeEventListener("error", onError);
+        abortController.signal.removeEventListener("abort", onAbort);
+      };
+      mediaSource.addEventListener("sourceopen", onOpen);
+      mediaSource.addEventListener("error", onError);
+      abortController.signal.addEventListener("abort", onAbort);
+    });
+
+    if (
+      this.streamGeneration !== generation ||
+      this.isDestroyed ||
+      abortController.signal.aborted
+    ) {
+      throw new Error("MSE stream superseded");
+    }
+
+    if (this.probedDuration > 0 && Number.isFinite(this.probedDuration)) {
+      try {
+        mediaSource.duration = this.probedDuration;
+      } catch {}
+    }
+
+    const isTranscode = this.playbackMode === "transcode";
+    const selectedAudio =
+      this.state.audioTracks.find((t) => t.id === this.selectedAudioIndex) ||
+      this.state.audioTracks[0];
+    const hasAudio = Boolean(selectedAudio);
+
+    const selectedVideo =
+      this.state.videoTracks.find((t) => t.id === this.selectedVideoIndex) ||
+      this.state.videoTracks[0];
+    const vCodec = isTranscode ? "h264" : (selectedVideo?.codec || "h264");
+
+    const mimeType =
+      resolveMseMimeType(vCodec, hasAudio) ||
+      (hasAudio
+        ? 'video/mp4; codecs="avc1.640028, mp4a.40.2"'
+        : 'video/mp4; codecs="avc1.640028"');
+
+    const sourceBuffer = mediaSource.addSourceBuffer(mimeType);
+    sourceBuffer.mode = "segments";
+    session.sourceBuffer = sourceBuffer;
+
+    const queue: Uint8Array[] = [];
+    let isAppending = false;
+
+    const processQueue = () => {
+      if (
+        isAppending ||
+        queue.length === 0 ||
+        !this.mseSession ||
+        this.mseSession.generation !== generation ||
+        mediaSource.readyState !== "open" ||
+        sourceBuffer.updating
+      ) {
+        return;
+      }
+
+      const chunk = queue.shift();
+      if (!chunk) return;
+
+      isAppending = true;
+      try {
+        sourceBuffer.appendBuffer(chunk as unknown as BufferSource);
+      } catch (err: any) {
+        isAppending = false;
+        if (err?.name === "QuotaExceededError") {
+          const removeEnd = Math.max(0, this.video.currentTime - 15);
+          if (removeEnd > 0 && !sourceBuffer.updating) {
+            try {
+              sourceBuffer.remove(0, removeEnd);
+            } catch {}
+            queue.unshift(chunk);
+          } else {
+            queue.unshift(chunk);
+            setTimeout(() => {
+              if (this.streamGeneration === generation) processQueue();
+            }, 1000);
+          }
+        } else {
+          console.warn("[HtmlVideoEngine] SourceBuffer appendBuffer error:", err);
+        }
+      }
+    };
+
+    sourceBuffer.addEventListener("updateend", () => {
+      isAppending = false;
+      processQueue();
+    });
+
+    sourceBuffer.addEventListener("error", (e) => {
+      console.warn("[HtmlVideoEngine] SourceBuffer error:", e);
+    });
+
+    void (async () => {
+      try {
+        const response = await fetch(streamUrl, {
+          signal: abortController.signal,
+          cache: "no-store",
+        });
+        if (!response.ok || !response.body) {
+          throw new Error(`Stream HTTP ${response.status}`);
+        }
+        const reader = response.body.getReader();
+
+        while (
+          !this.isDestroyed &&
+          this.streamGeneration === generation &&
+          !abortController.signal.aborted
+        ) {
+          const { done, value } = await reader.read();
+          if (done) {
+            if (
+              mediaSource.readyState === "open" &&
+              !sourceBuffer.updating &&
+              queue.length === 0
+            ) {
+              try {
+                mediaSource.endOfStream();
+              } catch {}
+            }
+            break;
+          }
+          if (value && value.byteLength > 0) {
+            queue.push(value);
+            processQueue();
+          }
+        }
+      } catch (err: any) {
+        if (
+          abortController.signal.aborted ||
+          String(err?.message || err).includes("aborted")
+        ) {
+          return;
+        }
+        console.warn("[HtmlVideoEngine] MSE fetch error:", err);
+      }
+    })();
+  }
+
   private async getProxyPort(): Promise<number> {
     if (this.proxyPort) return this.proxyPort;
     const port = await invoke<number>("get_stream_proxy_port");
@@ -1053,6 +1336,7 @@ export class HtmlVideoEngine implements PlayerEngine {
         this.updateState({ error: message, isBuffering: false, isPaused: true });
         throw err;
       }
+      this.cleanupMse();
       this.video.src = source;
       this.video.load();
       if (options?.autoPlay !== false) {
@@ -1064,6 +1348,7 @@ export class HtmlVideoEngine implements PlayerEngine {
   }
 
   private async startHlsStream(source: string, options?: PlayerEngineOptions): Promise<void> {
+    this.cleanupMse();
     const port = await this.getProxyPort();
     const hasHeaders = Object.keys(this.currentHeaders).length > 0;
 
@@ -1332,6 +1617,7 @@ export class HtmlVideoEngine implements PlayerEngine {
 
     if (this.playbackMode === "direct" && this.audioDelay === 0) {
       if (isLocal) {
+        this.cleanupMse();
         this.usesRemuxClock = false;
         this.captureFreezeFrame();
         this.video.src = `http://127.0.0.1:${port}/file?path=${encodeURIComponent(this.currentSource)}`;
@@ -1341,6 +1627,7 @@ export class HtmlVideoEngine implements PlayerEngine {
         this.video.load();
         return;
       } else if (!hasHeaders) {
+        this.cleanupMse();
         this.usesRemuxClock = false;
         this.captureFreezeFrame();
         this.video.src = this.currentSource;
@@ -1414,16 +1701,23 @@ export class HtmlVideoEngine implements PlayerEngine {
     this.isPreparingRemuxPreroll = startTime > 0.05;
     this.captureFreezeFrame();
     const streamUrl = `http://127.0.0.1:${port}/remux?${params.toString()}`;
-    this.video.src = streamUrl;
-    this.video.preload = "auto";
-    this.video.load();
-    // WebKit on macOS may defer a media request despite preload="auto". Start
-    // it muted so FFmpeg and its timing metadata are guaranteed to begin.
+
     const originalMuted = this.video.muted;
     if (!resumeAfterPrepare) this.video.muted = true;
-    void this.video.play().catch((error) => {
-      console.debug("[HtmlVideoEngine] Initial media request is pending:", error);
-    });
+
+    const useMse = typeof window !== "undefined" && Boolean(window.MediaSource);
+    if (useMse) {
+      await this.startMseStream(streamUrl, gen);
+    } else {
+      this.cleanupMse();
+      this.video.src = streamUrl;
+      this.video.preload = "auto";
+      this.video.load();
+      void this.video.play().catch((error) => {
+        console.debug("[HtmlVideoEngine] Initial media request is pending:", error);
+      });
+    }
+
     try {
       await this.waitForVerifiedStreamTiming(port, streamSessionId, gen);
       this.video.muted = originalMuted;
@@ -2011,6 +2305,7 @@ export class HtmlVideoEngine implements PlayerEngine {
       this.freezeCanvas = null;
     }
 
+    this.cleanupMse();
     this.video.pause();
     this.video.removeAttribute("src");
     this.video.load();
