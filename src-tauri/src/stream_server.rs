@@ -157,8 +157,28 @@ pub struct RemuxStreamInfo {
 }
 
 pub type LocalFileRegistry = Arc<Mutex<HashMap<String, PathBuf>>>;
-pub type SessionRegistry =
-    Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>>;
+pub struct RemuxSessionEntry {
+    pub cancel_tx: tokio::sync::oneshot::Sender<()>,
+    pub pid: Option<u32>,
+}
+
+lazy_static::lazy_static! {
+    pub static ref GLOBAL_ACTIVE_SESSIONS: Arc<tokio::sync::Mutex<HashMap<String, RemuxSessionEntry>>> =
+        Arc::new(tokio::sync::Mutex::new(HashMap::new()));
+}
+
+pub fn kill_all_active_sessions() {
+    if let Ok(mut sessions) = GLOBAL_ACTIVE_SESSIONS.try_lock() {
+        for (_sid, entry) in sessions.drain() {
+            let _ = entry.cancel_tx.send(());
+            if let Some(pid) = entry.pid {
+                crate::process_guard::kill_pid(pid);
+            }
+        }
+    }
+}
+
+pub type SessionRegistry = Arc<tokio::sync::Mutex<HashMap<String, RemuxSessionEntry>>>;
 pub type RemuxInfoRegistry = Arc<tokio::sync::Mutex<HashMap<String, RemuxStreamInfo>>>;
 
 #[derive(Clone)]
@@ -307,7 +327,7 @@ pub async fn start_server(
         client,
         port,
         local_files,
-        sessions: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+        sessions: GLOBAL_ACTIVE_SESSIONS.clone(),
         remux_infos: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         app: app_handle,
     };
@@ -911,8 +931,11 @@ async fn handle_cancel_remux(
     Query(query): Query<CancelQuery>,
 ) -> impl IntoResponse {
     let mut sessions = state.sessions.lock().await;
-    if let Some(tx) = sessions.remove(&query.session_id) {
-        let _ = tx.send(());
+    if let Some(entry) = sessions.remove(&query.session_id) {
+        let _ = entry.cancel_tx.send(());
+        if let Some(pid) = entry.pid {
+            crate::process_guard::kill_pid(pid);
+        }
     }
     StatusCode::OK
 }
@@ -1474,6 +1497,26 @@ async fn handle_remux(
         eprintln!("[remux] Failed to spawn FFmpeg: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
+    let child_pid = child.id();
+
+    let (cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
+    let session_id_opt = query.session_id.clone();
+    if let Some(ref sid) = session_id_opt {
+        let mut sessions = state.sessions.lock().await;
+        if let Some(old_entry) = sessions.remove(sid) {
+            let _ = old_entry.cancel_tx.send(());
+            if let Some(pid) = old_entry.pid {
+                crate::process_guard::kill_pid(pid);
+            }
+        }
+        sessions.insert(
+            sid.clone(),
+            RemuxSessionEntry {
+                cancel_tx,
+                pid: child_pid,
+            },
+        );
+    }
 
     let mut stdout = child
         .stdout
@@ -1501,6 +1544,13 @@ async fn handle_remux(
     let mut output_reference_pts = None;
 
     while initial_bytes.len() < 4 * 1024 * 1024 {
+        if cancel_rx.try_recv().is_ok() {
+            let _ = child.start_kill();
+            if let Some(pid) = child_pid {
+                crate::process_guard::kill_pid(pid);
+            }
+            return Err(StatusCode::NO_CONTENT);
+        }
         match tokio::time::timeout(std::time::Duration::from_secs(3), stdout.read(&mut chunk)).await
         {
             Ok(Ok(n)) if n > 0 => {
@@ -1514,7 +1564,14 @@ async fn handle_remux(
         }
     }
 
-    let session_id_opt = query.session_id.clone();
+    if cancel_rx.try_recv().is_ok() {
+        let _ = child.start_kill();
+        if let Some(pid) = child_pid {
+            crate::process_guard::kill_pid(pid);
+        }
+        return Err(StatusCode::NO_CONTENT);
+    }
+
     let generation = query.generation.unwrap_or(0);
     let requested_start = query.start.unwrap_or(0.0);
     let mut source_reference_pts = if is_transcode {
@@ -1527,6 +1584,14 @@ async fn handle_remux(
             .ok()
             .and_then(Result::ok)
     };
+
+    if cancel_rx.try_recv().is_ok() {
+        let _ = child.start_kill();
+        if let Some(pid) = child_pid {
+            crate::process_guard::kill_pid(pid);
+        }
+        return Err(StatusCode::NO_CONTENT);
+    }
 
     if source_reference_pts.is_none() && requested_start <= 0.05 {
         source_reference_pts = Some(0.0);
@@ -1563,41 +1628,66 @@ async fn handle_remux(
         );
     }
 
-    let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
-    let session_id_opt = query.session_id.clone();
-    if let Some(ref sid) = session_id_opt {
-        let mut sessions = state.sessions.lock().await;
-        if let Some(old_tx) = sessions.remove(sid) {
-            let _ = old_tx.send(());
-        }
-        sessions.insert(sid.clone(), cancel_tx);
-    }
-
     let init_chunk = if !initial_bytes.is_empty() {
         Some(Bytes::from(initial_bytes))
     } else {
         None
     };
 
+    struct RemuxStreamGuard {
+        pid: Option<u32>,
+        session_id: Option<String>,
+        sessions: SessionRegistry,
+    }
+
+    impl Drop for RemuxStreamGuard {
+        fn drop(&mut self) {
+            if let Some(pid) = self.pid {
+                crate::process_guard::kill_pid(pid);
+            }
+            if let Some(ref sid) = self.session_id {
+                let sessions = self.sessions.clone();
+                let sid = sid.clone();
+                tokio::spawn(async move {
+                    let mut lock = sessions.lock().await;
+                    lock.remove(&sid);
+                });
+            }
+        }
+    }
+
+    let stream_guard = Arc::new(RemuxStreamGuard {
+        pid: child_pid,
+        session_id: session_id_opt.clone(),
+        sessions: state.sessions.clone(),
+    });
+
     let body_stream = stream::try_unfold(
-        (stdout, child, cancel_rx, init_chunk),
-        move |(mut stdout, child, mut cancel_rx, mut init_chunk)| async move {
+        (stdout, child, cancel_rx, init_chunk, stream_guard),
+        move |(mut stdout, mut child, mut cancel_rx, mut init_chunk, stream_guard)| async move {
             if let Some(first) = init_chunk.take() {
-                return Ok(Some((first, (stdout, child, cancel_rx, None))));
+                return Ok(Some((first, (stdout, child, cancel_rx, None, stream_guard))));
             }
             let mut buffer = vec![0u8; 64 * 1024];
             tokio::select! {
                 _ = &mut cancel_rx => {
+                    let _ = child.start_kill();
                     Ok::<_, std::io::Error>(None)
                 }
                 res = stdout.read(&mut buffer) => {
                     match res {
-                        Ok(0) => Ok(None),
+                        Ok(0) => {
+                            let _ = child.start_kill();
+                            Ok(None)
+                        }
                         Ok(n) => {
                             buffer.truncate(n);
-                            Ok(Some((Bytes::from(buffer), (stdout, child, cancel_rx, None))))
+                            Ok(Some((Bytes::from(buffer), (stdout, child, cancel_rx, None, stream_guard))))
                         }
-                        Err(e) => Err(e),
+                        Err(e) => {
+                            let _ = child.start_kill();
+                            Err(e)
+                        }
                     }
                 }
             }

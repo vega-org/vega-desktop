@@ -6,6 +6,7 @@ mod media_probe;
 mod stream_server;
 mod sync_manifest;
 mod torrent;
+pub mod process_guard;
 
 use std::{
     collections::HashMap,
@@ -122,6 +123,11 @@ async fn extract_subtitle_window(
     headers: Option<HashMap<String, String>>,
 ) -> Result<String, String> {
     media_probe::extract_subtitle_window(&source, track_index, start_time, headers).await
+}
+
+#[tauri::command]
+async fn cancel_subtitle_extractions(source: Option<String>) -> Result<(), String> {
+    media_probe::cancel_subtitle_extractions_internal(source).await
 }
 
 #[tauri::command]
@@ -638,7 +644,15 @@ pub fn run() {
             local_files: local_files.clone(),
         })
         .manage(download_manager::DownloadState::new())
+        .on_window_event(|_window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                stream_server::kill_all_active_sessions();
+                media_probe::cancel_all_active_extractions();
+            }
+        })
         .setup(|app| {
+            process_guard::init_process_guard();
+
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
                 window.set_decorations(false)?;
@@ -708,8 +722,15 @@ pub fn run() {
             probe_media_info,
             extract_subtitles,
             extract_subtitle_window,
+            cancel_subtitle_extractions,
             get_seek_keyframe
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                stream_server::kill_all_active_sessions();
+                media_probe::cancel_all_active_extractions();
+            }
+        });
 }

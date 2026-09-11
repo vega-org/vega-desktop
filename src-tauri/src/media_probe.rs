@@ -307,11 +307,49 @@ struct ActiveSubExtraction {
     is_done: Arc<AtomicBool>,
 }
 
+pub struct SubExtractionHandle {
+    pub sub_index: u32,
+    pub cancel_tx: tokio::sync::oneshot::Sender<()>,
+    pub pid: Option<u32>,
+}
+
 lazy_static! {
     static ref ACTIVE_EXTRACTIONS: Mutex<HashMap<String, ActiveSubExtraction>> =
         Mutex::new(HashMap::new());
-    static ref SOURCE_ACTIVE_EXTRACT: Mutex<HashMap<String, (u32, tokio::sync::oneshot::Sender<()>)>> =
+    static ref SOURCE_ACTIVE_EXTRACT: Mutex<HashMap<String, SubExtractionHandle>> =
         Mutex::new(HashMap::new());
+}
+
+pub async fn cancel_subtitle_extractions_internal(source: Option<String>) -> Result<(), String> {
+    let mut src_map = SOURCE_ACTIVE_EXTRACT.lock().await;
+    if let Some(src) = source {
+        let clean = crate::ffmpeg_resolver::clean_source(&src);
+        if let Some(handle) = src_map.remove(&clean) {
+            let _ = handle.cancel_tx.send(());
+            if let Some(pid) = handle.pid {
+                crate::process_guard::kill_pid(pid);
+            }
+        }
+    } else {
+        for (_src, handle) in src_map.drain() {
+            let _ = handle.cancel_tx.send(());
+            if let Some(pid) = handle.pid {
+                crate::process_guard::kill_pid(pid);
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn cancel_all_active_extractions() {
+    if let Ok(mut src_map) = SOURCE_ACTIVE_EXTRACT.try_lock() {
+        for (_src, handle) in src_map.drain() {
+            let _ = handle.cancel_tx.send(());
+            if let Some(pid) = handle.pid {
+                crate::process_guard::kill_pid(pid);
+            }
+        }
+    }
 }
 
 pub fn get_subs_cache_dir() -> std::path::PathBuf {
@@ -365,16 +403,16 @@ pub async fn extract_subtitles_to_string(
         let mut src_map = SOURCE_ACTIVE_EXTRACT.lock().await;
         let should_cancel = src_map
             .get(&clean_source)
-            .map(|(prev_idx, _)| *prev_idx != sub_index)
+            .map(|handle| handle.sub_index != sub_index)
             .unwrap_or(false);
         if should_cancel {
-            if let Some((_, prev_cancel)) = src_map.remove(&clean_source) {
-                let _ = prev_cancel.send(());
+            if let Some(prev) = src_map.remove(&clean_source) {
+                let _ = prev.cancel_tx.send(());
+                if let Some(pid) = prev.pid {
+                    crate::process_guard::kill_pid(pid);
+                }
             }
         }
-        // Keep the sender registered when the same track is requested again.
-        // Removing and dropping it resolves the oneshot receiver and cancels the
-        // extraction that the duplicate caller is trying to join.
     }
 
     // 2. Check if extraction is already active
@@ -453,7 +491,9 @@ pub async fn extract_subtitles_to_string(
         .arg("1")
         .arg("pipe:1");
 
-    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
 
     let mut child = match cmd.spawn() {
         Ok(c) => c,
@@ -463,6 +503,7 @@ pub async fn extract_subtitles_to_string(
             return Err(format!("Failed to spawn ffmpeg: {}", e));
         }
     };
+    let pid = child.id();
 
     let stdout = match child.stdout.take() {
         Some(s) => s,
@@ -476,7 +517,14 @@ pub async fn extract_subtitles_to_string(
     let (cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
     {
         let mut src_map = SOURCE_ACTIVE_EXTRACT.lock().await;
-        src_map.insert(clean_source.clone(), (sub_index, cancel_tx));
+        src_map.insert(
+            clean_source.clone(),
+            SubExtractionHandle {
+                sub_index,
+                cancel_tx,
+                pid,
+            },
+        );
     }
 
     let buffer_clone = Arc::clone(&active.buffer);
@@ -503,6 +551,9 @@ pub async fn extract_subtitles_to_string(
                 _ = &mut cancel_rx => {
                     eprintln!("[subs] Extraction cancelled for track {} after {}ms", sub_index, spawn_time.elapsed().as_millis());
                     let _ = child.kill().await;
+                    if let Some(p) = pid {
+                        crate::process_guard::kill_pid(p);
+                    }
                     break;
                 }
                 res = reader.read(&mut chunk) => {
@@ -589,8 +640,8 @@ pub async fn extract_subtitles_to_string(
         }
         {
             let mut src_map = SOURCE_ACTIVE_EXTRACT.lock().await;
-            if let Some((idx, _)) = src_map.get(&clean_source_clone) {
-                if *idx == sub_index {
+            if let Some(handle) = src_map.get(&clean_source_clone) {
+                if handle.sub_index == sub_index {
                     src_map.remove(&clean_source_clone);
                 }
             }

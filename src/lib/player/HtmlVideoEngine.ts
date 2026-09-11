@@ -1025,6 +1025,27 @@ export class HtmlVideoEngine implements PlayerEngine {
     this.hasTriedCodecFallback = false;
     this.isCodecFallbackInProgress = false;
 
+    // Immediately teardown previous stream session so the previous server/FFmpeg is killed instantly
+    const prevSessionId = this.sessionId;
+    this.sessionId = "";
+    this.cleanupMse();
+    this.video.pause();
+    this.video.removeAttribute("src");
+    this.video.load();
+
+    if (this.proxyPort && prevSessionId) {
+      fetch(
+        `http://127.0.0.1:${this.proxyPort}/remux/cancel?session_id=${encodeURIComponent(prevSessionId)}`,
+        { keepalive: true },
+      ).catch(() => {});
+    }
+
+    if (this.currentSource) {
+      invoke("cancel_subtitle_extractions", { source: this.currentSource }).catch(() => {});
+    } else {
+      invoke("cancel_subtitle_extractions", { source: null }).catch(() => {});
+    }
+
     if (this.currentTorrentInfoHash) {
       const prevHash = this.currentTorrentInfoHash;
       this.currentTorrentInfoHash = null;
@@ -1074,7 +1095,6 @@ export class HtmlVideoEngine implements PlayerEngine {
       clearTimeout(this.audioDelayDebounceTimer);
       this.audioDelayDebounceTimer = null;
     }
-    this.sessionId = `session-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
     if (this.hlsInstance) {
       this.hlsInstance.destroy();
@@ -2280,9 +2300,16 @@ export class HtmlVideoEngine implements PlayerEngine {
     }
 
     if (this.proxyPort && this.sessionId) {
-      fetch(`http://127.0.0.1:${this.proxyPort}/remux/cancel?session_id=${this.sessionId}`).catch(
-        () => { },
-      );
+      fetch(
+        `http://127.0.0.1:${this.proxyPort}/remux/cancel?session_id=${encodeURIComponent(this.sessionId)}`,
+        { keepalive: true },
+      ).catch(() => {});
+    }
+
+    if (this.currentSource) {
+      invoke("cancel_subtitle_extractions", { source: this.currentSource }).catch(() => {});
+    } else {
+      invoke("cancel_subtitle_extractions", { source: null }).catch(() => {});
     }
 
     if (this.unlistenSubtitles) {
