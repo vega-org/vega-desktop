@@ -61,6 +61,9 @@ export function usePlayerEngine(
     headers?: Record<string, string>;
   } | null>(null);
 
+  const pendingSeekTargetRef = useRef<number | null>(null);
+  const seekDebounceTimerRef = useRef<any>(null);
+
   const resolveVideoElement = useCallback((): HTMLVideoElement | null => {
     if (videoNode) return videoNode;
     if (videoRef && typeof videoRef === "object" && "current" in videoRef) {
@@ -155,6 +158,10 @@ export function usePlayerEngine(
     setupEngine(el);
 
     return () => {
+      if (seekDebounceTimerRef.current) {
+        clearTimeout(seekDebounceTimerRef.current);
+        seekDebounceTimerRef.current = null;
+      }
       if (engineRef.current) {
         engineRef.current.destroy();
         engineRef.current = null;
@@ -219,9 +226,38 @@ export function usePlayerEngine(
     async (time: number, mode?: "absolute" | "relative") => {
       if (!engineRef.current) return;
       const currentState = engineRef.current.state;
-      const target =
-        mode === "relative" ? Math.max(0, currentState.currentTime + time) : time;
-      await engineRef.current.seek(target);
+      const duration = currentState.duration || 0;
+
+      let target: number;
+      if (mode === "relative") {
+        const base =
+          pendingSeekTargetRef.current !== null
+            ? pendingSeekTargetRef.current
+            : currentState.currentTime;
+        target = Math.max(
+          0,
+          duration > 0 ? Math.min(base + time, duration) : Math.max(0, base + time),
+        );
+        pendingSeekTargetRef.current = target;
+      } else {
+        target = Math.max(0, duration > 0 ? Math.min(time, duration) : time);
+        pendingSeekTargetRef.current = target;
+      }
+
+      setEngineState((prev) => ({ ...prev, currentTime: target }));
+
+      if (seekDebounceTimerRef.current) {
+        clearTimeout(seekDebounceTimerRef.current);
+      }
+
+      seekDebounceTimerRef.current = setTimeout(async () => {
+        seekDebounceTimerRef.current = null;
+        const finalTarget = pendingSeekTargetRef.current;
+        pendingSeekTargetRef.current = null;
+        if (finalTarget !== null && engineRef.current) {
+          await engineRef.current.seek(finalTarget);
+        }
+      }, 40);
     },
     [],
   );
@@ -340,6 +376,10 @@ export function usePlayerEngine(
       }
     },
     destroyPlayer: async () => {
+      if (seekDebounceTimerRef.current) {
+        clearTimeout(seekDebounceTimerRef.current);
+        seekDebounceTimerRef.current = null;
+      }
       if (engineRef.current) {
         engineRef.current.destroy();
         engineRef.current = null;

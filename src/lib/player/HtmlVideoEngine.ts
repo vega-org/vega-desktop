@@ -254,6 +254,8 @@ export class HtmlVideoEngine implements PlayerEngine {
   private timingGeneration: number = -1;
   private freezeCanvas: HTMLCanvasElement | null = null;
   private isPreparingRemuxPreroll: boolean = false;
+  private isUserMuted: boolean = false;
+  private seekGeneration: number = 0;
   private loadRequestId: number = 0;
   private currentTorrentInfoHash: string | null = null;
   private hasTriedCodecFallback: boolean = false;
@@ -419,13 +421,14 @@ export class HtmlVideoEngine implements PlayerEngine {
     this.sourceReferencePTS = source_reference_pts;
     this.outputReferencePTS = output_reference_pts;
     this.timelineOffset = source_reference_pts - output_reference_pts;
-    this.targetMediaTime = output_reference_pts + (requested_start - source_reference_pts);
+    // Align directly to keyframe for instant playback like MPV & VLC without preroll buffering
+    this.targetMediaTime = 0;
     this.virtualTimeOffset = this.timelineOffset;
     this.timingGeneration = generation;
     this.updateJassubTimeOffset();
 
     console.log(
-      `[HtmlVideoEngine] Stream timing aligned (gen ${generation}): req=${requested_start.toFixed(3)}s, srcPTS=${source_reference_pts.toFixed(3)}s, outPTS=${output_reference_pts.toFixed(3)}s, offset=${this.timelineOffset.toFixed(3)}s, targetMediaTime=${this.targetMediaTime.toFixed(3)}s`,
+      `[HtmlVideoEngine] Stream timing aligned (gen ${generation}): req=${requested_start.toFixed(3)}s, srcPTS=${source_reference_pts.toFixed(3)}s, outPTS=${output_reference_pts.toFixed(3)}s, offset=${this.timelineOffset.toFixed(3)}s`,
     );
     return true;
   }
@@ -1558,36 +1561,63 @@ export class HtmlVideoEngine implements PlayerEngine {
     resumeAfterPrepare: boolean,
   ): Promise<void> {
     const target = Math.max(0, this.targetMediaTime);
-    const originalMuted = this.video.muted;
     this.isPreparingRemuxPreroll = true;
     this.video.muted = true;
     this.updateState({ isBuffering: true });
     if (this.jassub) this.jassub.setBuffering(true);
 
     try {
-      await this.video.play();
-      const deadline = Date.now() + 30_000;
-      while (
-        !this.isDestroyed &&
-        this.streamGeneration === generation &&
-        this.video.currentTime + 0.04 < target &&
-        Date.now() < deadline
-      ) {
-        await new Promise((resolve) => setTimeout(resolve, 25));
+      if (target > 0.04) {
+        const deadline = Date.now() + 5_000;
+        while (
+          !this.isDestroyed &&
+          this.streamGeneration === generation &&
+          Date.now() < deadline
+        ) {
+          const buffered = this.video.buffered;
+          let hasTarget = false;
+          for (let i = 0; i < buffered.length; i++) {
+            if (buffered.start(i) <= target && buffered.end(i) >= target) {
+              hasTarget = true;
+              break;
+            }
+          }
+          if (
+            hasTarget ||
+            (buffered.length > 0 && buffered.end(buffered.length - 1) >= target)
+          ) {
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+
+        if (this.isDestroyed || this.streamGeneration !== generation) {
+          throw new Error("Remux preroll was superseded");
+        }
+
+        try {
+          this.video.currentTime = target;
+          const seekDeadline = Date.now() + 500;
+          while (
+            !this.isDestroyed &&
+            this.streamGeneration === generation &&
+            Math.abs(this.video.currentTime - target) > 0.1 &&
+            Date.now() < seekDeadline
+          ) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          }
+        } catch (err) {
+          console.warn("[HtmlVideoEngine] Failed to seek to target media time:", err);
+        }
       }
 
-      if (this.isDestroyed || this.streamGeneration !== generation) {
-        throw new Error("Remux preroll was superseded");
+      if (!resumeAfterPrepare) {
+        this.video.pause();
+      } else {
+        await this.video.play().catch(() => {});
       }
-      if (this.video.currentTime + 0.2 < target) {
-        throw new Error(
-          `Remux preroll did not reach ${target.toFixed(3)}s`,
-        );
-      }
-
-      if (!resumeAfterPrepare) this.video.pause();
     } finally {
-      this.video.muted = originalMuted;
+      this.video.muted = this.isUserMuted;
       this.isPreparingRemuxPreroll = false;
     }
 
@@ -1718,11 +1748,10 @@ export class HtmlVideoEngine implements PlayerEngine {
     }
     params.set("headers", JSON.stringify(this.currentHeaders));
 
-    this.isPreparingRemuxPreroll = startTime > 0.05;
+    this.isPreparingRemuxPreroll = false;
     this.captureFreezeFrame();
     const streamUrl = `http://127.0.0.1:${port}/remux?${params.toString()}`;
 
-    const originalMuted = this.video.muted;
     if (!resumeAfterPrepare) this.video.muted = true;
 
     const useMse = typeof window !== "undefined" && Boolean(window.MediaSource);
@@ -1740,7 +1769,7 @@ export class HtmlVideoEngine implements PlayerEngine {
 
     try {
       await this.waitForVerifiedStreamTiming(port, streamSessionId, gen);
-      this.video.muted = originalMuted;
+      this.video.muted = this.isUserMuted;
       void this.refreshEmbeddedSubtitleWindow(this.requestedStartTime, gen);
       if (this.isPreparingRemuxPreroll && this.targetMediaTime > 0.05) {
         await this.finishRemuxPreroll(gen, resumeAfterPrepare);
@@ -1750,7 +1779,7 @@ export class HtmlVideoEngine implements PlayerEngine {
         this.releaseFreezeFrame();
       }
     } catch (error) {
-      this.video.muted = originalMuted;
+      this.video.muted = this.isUserMuted;
       this.isPreparingRemuxPreroll = false;
       this.releaseFreezeFrame();
       throw error;
@@ -1776,30 +1805,39 @@ export class HtmlVideoEngine implements PlayerEngine {
 
   public async seek(time: number): Promise<void> {
     const clamped = Math.max(0, Math.min(time, this.state.duration || time));
+    const currentSeekGen = ++this.seekGeneration;
 
     this.isSeeking = true;
     if (this.seekSafetyTimer) {
       clearTimeout(this.seekSafetyTimer);
     }
     this.seekSafetyTimer = setTimeout(() => {
-      this.isSeeking = false;
-      this.seekSafetyTimer = null;
-      this.updateState({ isBuffering: false });
+      if (this.seekGeneration === currentSeekGen) {
+        this.isSeeking = false;
+        this.seekSafetyTimer = null;
+        this.updateState({ isBuffering: false });
+      }
     }, this.usesRemuxClock ? 8000 : 1500);
 
     if (this.hlsInstance || (this.playbackMode === "direct" && !this.usesRemuxClock)) {
       this.video.currentTime = clamped;
-      this.updateState({ currentTime: clamped, isBuffering: true });
+      this.updateState({ currentTime: clamped });
       return;
     }
 
     const wasPlaying = !this.video.paused && !this.state.isPaused;
-    this.updateState({ currentTime: clamped, isBuffering: true });
+    this.updateState({ currentTime: clamped });
 
     try {
       await this.startStream(clamped, wasPlaying);
-    } catch (e) {
-      console.error("[HtmlVideoEngine] Seek startStream error:", e);
+    } catch (e: any) {
+      if (!String(e?.message || e).includes("superseded")) {
+        console.error("[HtmlVideoEngine] Seek startStream error:", e);
+      }
+    }
+
+    if (this.seekGeneration !== currentSeekGen || this.isDestroyed) {
+      return;
     }
 
     if (this.seekSafetyTimer) {
@@ -1818,6 +1856,17 @@ export class HtmlVideoEngine implements PlayerEngine {
   public setVolume(volume: number): void {
     const clamped = Math.max(0, Math.min(volume, 100));
     this.video.volume = clamped / 100;
+    this.isUserMuted = clamped === 0;
+    if (!this.isPreparingRemuxPreroll) {
+      this.video.muted = this.isUserMuted;
+    }
+  }
+
+  public setMuted(muted: boolean): void {
+    this.isUserMuted = muted;
+    if (!this.isPreparingRemuxPreroll) {
+      this.video.muted = muted;
+    }
   }
 
   public setSpeed(speed: number): void {
@@ -2334,6 +2383,8 @@ export class HtmlVideoEngine implements PlayerEngine {
 
     this.cleanupMse();
     this.video.pause();
+    this.video.muted = false;
+    this.isUserMuted = false;
     this.video.removeAttribute("src");
     this.video.load();
 

@@ -1543,7 +1543,7 @@ async fn handle_remux(
     let mut chunk = [0u8; 8192];
     let mut output_reference_pts = None;
 
-    while initial_bytes.len() < 4 * 1024 * 1024 {
+    while initial_bytes.len() < 64 * 1024 {
         if cancel_rx.try_recv().is_ok() {
             let _ = child.start_kill();
             if let Some(pid) = child_pid {
@@ -1551,7 +1551,7 @@ async fn handle_remux(
             }
             return Err(StatusCode::NO_CONTENT);
         }
-        match tokio::time::timeout(std::time::Duration::from_secs(3), stdout.read(&mut chunk)).await
+        match tokio::time::timeout(std::time::Duration::from_millis(600), stdout.read(&mut chunk)).await
         {
             Ok(Ok(n)) if n > 0 => {
                 initial_bytes.extend_from_slice(&chunk[..n]);
@@ -1579,7 +1579,7 @@ async fn handle_remux(
         // represents the requested source position.
         Some(requested_start)
     } else {
-        tokio::time::timeout(std::time::Duration::from_secs(5), source_pts_receiver)
+        tokio::time::timeout(std::time::Duration::from_millis(80), source_pts_receiver)
             .await
             .ok()
             .and_then(Result::ok)
@@ -1593,10 +1593,10 @@ async fn handle_remux(
         return Err(StatusCode::NO_CONTENT);
     }
 
-    if source_reference_pts.is_none() && requested_start <= 0.05 {
-        source_reference_pts = Some(0.0);
+    if source_reference_pts.is_none() {
+        source_reference_pts = Some(requested_start);
     }
-    if output_reference_pts.is_none() && requested_start <= 0.05 {
+    if output_reference_pts.is_none() {
         output_reference_pts = Some(0.0);
     }
     let remux_infos = state.remux_infos.clone();
