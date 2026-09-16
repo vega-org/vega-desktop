@@ -122,9 +122,23 @@ lazy_static! {
     static ref CLIENT_CACHE: RwLock<HashMap<String, Client>> = RwLock::new(HashMap::new());
 }
 
+pub async fn clear_client_cache() {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let mut cache = CLIENT_CACHE.write().await;
+        cache.clear();
+    }
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn get_client(provider: &str, custom_url: Option<String>) -> Result<Client, String> {
-    let key = format!("{}_{}", provider, custom_url.clone().unwrap_or_default());
+    let active_proxy = crate::proxy_manager::get_active_proxy_url().await;
+    let key = format!(
+        "{}_{}_{}",
+        provider,
+        custom_url.clone().unwrap_or_default(),
+        active_proxy.as_deref().unwrap_or_default()
+    );
 
     {
         let cache = CLIENT_CACHE.read().await;
@@ -137,6 +151,17 @@ async fn get_client(provider: &str, custom_url: Option<String>) -> Result<Client
         .emulation(Emulation::Chrome137)
         .cookie_store(true)
         .redirect(Policy::limited(10));
+
+    if let Some(ref proxy_url) = active_proxy {
+        match wreq::Proxy::all(proxy_url) {
+            Ok(proxy) => {
+                builder = builder.proxy(proxy);
+            }
+            Err(e) => {
+                eprintln!("[doh_client] Failed to configure proxy {}: {:?}", proxy_url, e);
+            }
+        }
+    }
 
     if !provider.eq_ignore_ascii_case("system") && !provider.eq_ignore_ascii_case("none") {
         let resolver = CustomDnsResolver::new(provider, custom_url);

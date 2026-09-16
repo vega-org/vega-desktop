@@ -37,6 +37,7 @@ import { ToastContainer } from "./components/ui/ToastContainer";
 import { useGamepadNavigation } from "./lib/hooks/useGamepadNavigation";
 import { ModalFocusProvider } from "./lib/context/ModalFocusContext";
 import { cleanupAllStreamTorrents } from "./lib/services/torrentStreamService";
+import { syncProxySettings } from "./lib/services/proxyService";
 
 let isNavInitialized = false;
 
@@ -49,6 +50,7 @@ export default function App() {
 
   useEffect(() => {
     settingsStorage.syncStreamDoh();
+    syncProxySettings();
     initializeSyncService().catch((error) =>
       console.warn("[VegaSync] Startup sync failed:", error),
     );

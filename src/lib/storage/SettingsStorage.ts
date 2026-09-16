@@ -61,6 +61,9 @@ export enum SettingsKeys {
   VLC_ENABLED = "vlcEnabled",
   VLC_PATH = "vlcPath",
   PLAYER_ZOOM = "playerZoom",
+  WARP_ENABLED = "warpEnabled",
+  BYEDPI_ENABLED = "byedpiEnabled",
+  BYEDPI_CMD_ARGS = "byedpiCmdArgs",
 }
 
 /**
@@ -505,6 +508,34 @@ export class SettingsStorage {
 
   setPlayerZoom(zoom: number): void {
     mainStorage.setNumber(SettingsKeys.PLAYER_ZOOM, zoom);
+  }
+
+  // Anti-DPI & Proxy settings
+  isWarpEnabled(): boolean {
+    return mainStorage.getBool(SettingsKeys.WARP_ENABLED, false);
+  }
+
+  setWarpEnabled(enabled: boolean): void {
+    mainStorage.setBool(SettingsKeys.WARP_ENABLED, enabled);
+  }
+
+  isByeDpiEnabled(): boolean {
+    return mainStorage.getBool(SettingsKeys.BYEDPI_ENABLED, false);
+  }
+
+  setByeDpiEnabled(enabled: boolean): void {
+    mainStorage.setBool(SettingsKeys.BYEDPI_ENABLED, enabled);
+  }
+
+  getByeDpiCmdArgs(): string {
+    return (
+      mainStorage.getString(SettingsKeys.BYEDPI_CMD_ARGS) ||
+      "--split 1 --disorder 1 --auto=torst"
+    );
+  }
+
+  setByeDpiCmdArgs(args: string): void {
+    mainStorage.setString(SettingsKeys.BYEDPI_CMD_ARGS, args);
   }
 }
 

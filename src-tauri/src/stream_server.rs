@@ -133,6 +133,44 @@ impl Resolve for StreamDnsResolver {
 
 lazy_static::lazy_static! {
     pub static ref GLOBAL_STREAM_RESOLVER: Arc<StreamDnsResolver> = Arc::new(StreamDnsResolver::new());
+    pub static ref GLOBAL_STREAM_CLIENT: Arc<tokio::sync::RwLock<Client>> = Arc::new(tokio::sync::RwLock::new(
+        build_stream_client(None).expect("Failed to build initial stream client")
+    ));
+}
+
+pub fn build_stream_client(proxy_url: Option<&str>) -> Result<Client, String> {
+    let mut builder = Client::builder()
+        .dns_resolver(GLOBAL_STREAM_RESOLVER.clone())
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .pool_idle_timeout(std::time::Duration::from_secs(20))
+        .pool_max_idle_per_host(4);
+
+    if let Some(proxy_str) = proxy_url {
+        match reqwest::Proxy::all(proxy_str) {
+            Ok(proxy) => {
+                builder = builder.proxy(proxy);
+            }
+            Err(e) => {
+                eprintln!("[stream_proxy] Failed to configure proxy {}: {:?}", proxy_str, e);
+            }
+        }
+    }
+
+    builder.build().map_err(|e| e.to_string())
+}
+
+pub async fn update_stream_proxy(proxy_url: Option<String>) {
+    match build_stream_client(proxy_url.as_deref()) {
+        Ok(new_client) => {
+            let mut client_lock = GLOBAL_STREAM_CLIENT.write().await;
+            *client_lock = new_client;
+            println!("[stream_proxy] Stream client updated with proxy: {:?}", proxy_url);
+        }
+        Err(e) => {
+            eprintln!("[stream_proxy] Failed to update stream proxy: {}", e);
+        }
+    }
 }
 
 #[tauri::command]
@@ -183,7 +221,7 @@ pub type RemuxInfoRegistry = Arc<tokio::sync::Mutex<HashMap<String, RemuxStreamI
 
 #[derive(Clone)]
 pub struct ProxyState {
-    pub client: Client,
+    pub client: Arc<tokio::sync::RwLock<Client>>,
     pub port: u16,
     pub local_files: LocalFileRegistry,
     pub sessions: SessionRegistry,
@@ -309,14 +347,6 @@ pub async fn start_server(
     local_files: LocalFileRegistry,
     app_handle: Option<tauri::AppHandle>,
 ) -> Result<u16, String> {
-    let client = Client::builder()
-        .dns_resolver(GLOBAL_STREAM_RESOLVER.clone())
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .pool_idle_timeout(std::time::Duration::from_secs(20))
-        .pool_max_idle_per_host(4)
-        .build()
-        .map_err(|e| e.to_string())?;
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .map_err(|e| e.to_string())?;
@@ -324,7 +354,7 @@ pub async fn start_server(
     println!("[stream_proxy] Starting on port {}", port);
 
     let state = ProxyState {
-        client,
+        client: GLOBAL_STREAM_CLIENT.clone(),
         port,
         local_files,
         sessions: GLOBAL_ACTIVE_SESSIONS.clone(),
@@ -670,8 +700,9 @@ async fn handle_proxy(
         &query.headers,
     );
 
+    let client = state.client.read().await;
     let response = fetch_with_retry(
-        &state.client,
+        &client,
         &query.url,
         &headers_map,
         "playlist",
@@ -712,7 +743,7 @@ async fn handle_proxy(
         let parent_master_url = resolve_url(&query.url, "../master.m3u8");
         if parent_master_url != query.url && !query.url.ends_with("master.m3u8") {
             if let Ok(master_res) = fetch_with_retry(
-                &state.client,
+                &client,
                 &parent_master_url,
                 &headers_map,
                 "parent_master",
@@ -857,8 +888,9 @@ async fn handle_segment(
         &query.headers,
     );
 
+    let client = state.client.read().await;
     let response = fetch_with_retry(
-        &state.client,
+        &client,
         &query.url,
         &headers_map,
         "segment",
@@ -1308,7 +1340,8 @@ async fn handle_remux(
                 let path = PathBuf::from(&source);
                 return serve_local_file(&path, headers.get(header::RANGE)).await;
             }
-            let mut req = state.client.get(&source);
+            let client = state.client.read().await;
+            let mut req = client.get(&source);
             if let Some(ref r) = query.referer {
                 req = req.header("Referer", r);
             }

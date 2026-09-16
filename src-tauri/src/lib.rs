@@ -3,6 +3,7 @@ mod doh_client;
 mod download_manager;
 mod ffmpeg_resolver;
 mod media_probe;
+pub mod proxy_manager;
 mod stream_server;
 mod sync_manifest;
 mod torrent;
@@ -648,6 +649,7 @@ pub fn run() {
             if let tauri::WindowEvent::Destroyed = event {
                 stream_server::kill_all_active_sessions();
                 media_probe::cancel_all_active_extractions();
+                tauri::async_runtime::block_on(proxy_manager::stop_all_proxies());
             }
         })
         .setup(|app| {
@@ -723,7 +725,14 @@ pub fn run() {
             extract_subtitles,
             extract_subtitle_window,
             cancel_subtitle_extractions,
-            get_seek_keyframe
+            get_seek_keyframe,
+            proxy_manager::start_byedpi,
+            proxy_manager::stop_byedpi,
+            proxy_manager::get_byedpi_status,
+            proxy_manager::start_warp,
+            proxy_manager::stop_warp,
+            proxy_manager::get_warp_status,
+            proxy_manager::get_active_proxy_status
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -731,6 +740,7 @@ pub fn run() {
             if let tauri::RunEvent::Exit = event {
                 stream_server::kill_all_active_sessions();
                 media_probe::cancel_all_active_extractions();
+                tauri::async_runtime::block_on(proxy_manager::stop_all_proxies());
             }
         });
 }

@@ -13,6 +13,7 @@ import { Input } from "../ui/input";
 import { CustomSelect } from "../CustomSelect";
 import { syncFromSharedFolder } from "../../lib/sync/syncService";
 import { clearAppCache } from "../../lib/clearAppCache";
+import { ProxyPreferenceSection } from "./ProxyPreferenceSection";
 
 const QUALITIES = ["360p", "480p", "720p", "1080p", "4k"];
 
@@ -388,6 +389,11 @@ export const PreferencesSettings: React.FC = () => {
           )}
         </div>
       </div>
+
+      <div className="settings-divider" />
+
+      {/* Anti-DPI & Proxy Section (WARP & ByeDPI) */}
+      <ProxyPreferenceSection />
 
       <div className="settings-divider" />
 
