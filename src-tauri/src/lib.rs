@@ -11,12 +11,13 @@ pub mod process_guard;
 
 use std::{
     collections::HashMap,
-    hash::{Hash, Hasher},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex,
     },
 };
+#[cfg(not(target_os = "android"))]
+use std::hash::{Hash, Hasher};
 use tauri::Manager;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_window_state::StateFlags;

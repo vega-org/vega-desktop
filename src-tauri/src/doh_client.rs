@@ -2,9 +2,11 @@ use hickory_resolver::{
     config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts},
     TokioAsyncResolver,
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, net::SocketAddr, str::FromStr, sync::Arc};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tokio::sync::RwLock;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use wreq::{dns::Resolve, redirect::Policy, Client, Method};

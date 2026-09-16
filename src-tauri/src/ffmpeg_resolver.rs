@@ -90,6 +90,7 @@ pub fn prepend_to_path_tokio(cmd: &mut tokio::process::Command, dir: &Path) {
 
 /// Returns candidate file names including potential Tauri target triple suffixes.
 fn get_candidate_names(base_name: &str) -> Vec<String> {
+    #[allow(unused_mut)]
     let mut names = vec![base_name.to_string()];
 
     #[cfg(target_os = "windows")]
