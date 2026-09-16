@@ -7,6 +7,7 @@ import {
   rmSync,
   copyFileSync,
   readdirSync,
+  writeFileSync,
 } from 'node:fs';
 import { arch, platform, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,6 +21,28 @@ const warpDir = join(resourcesDir, 'warp');
 const BYEDPI_VERSION = '0.17.3';
 const USQUE_VERSION = '4.2.1';
 
+function findBinary(dir, prefix) {
+  const entries = readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const found = findBinary(fullPath, prefix);
+      if (found) return found;
+    } else if (entry.isFile()) {
+      if (
+        entry.name.startsWith(prefix) &&
+        !entry.name.endsWith('.zip') &&
+        !entry.name.endsWith('.tar.gz') &&
+        !entry.name.endsWith('.md') &&
+        !entry.name.endsWith('.txt')
+      ) {
+        return fullPath;
+      }
+    }
+  }
+  return null;
+}
+
 async function downloadFile(url, dest) {
   console.log(`Downloading ${url}...`);
   const res = await fetch(url, { redirect: 'follow' });
@@ -27,8 +50,7 @@ async function downloadFile(url, dest) {
     throw new Error(`Failed to download ${url}: ${res.status} ${res.statusText}`);
   }
   const buffer = Buffer.from(await res.arrayBuffer());
-  const fs = await import('node:fs');
-  fs.writeFileSync(dest, buffer);
+  writeFileSync(dest, buffer);
   console.log(`Saved ${buffer.length} bytes to ${dest}`);
 }
 
@@ -42,6 +64,11 @@ async function setupByeDpi() {
     return;
   }
 
+  if (platform() === 'darwin') {
+    console.log('[setup-proxies] ByeDPI prebuilt release not available for macOS, skipping.');
+    return;
+  }
+
   const tmpDir = mkdtempSync(join(tmpdir(), 'byedpi-'));
   try {
     if (isWin) {
@@ -49,13 +76,6 @@ async function setupByeDpi() {
       const zipPath = join(tmpDir, 'byedpi.zip');
       await downloadFile(url, zipPath);
       execSync(`powershell -NoProfile -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${tmpDir}' -Force"`, { stdio: 'inherit' });
-      const found = join(tmpDir, 'ciadpi.exe');
-      if (existsSync(found)) {
-        copyFileSync(found, targetBinary);
-        console.log(`Extracted ByeDPI to ${targetBinary}`);
-      } else {
-        throw new Error(`ciadpi.exe not found in ${tmpDir}`);
-      }
     } else {
       const isArm = arch() === 'arm64';
       const archName = isArm ? 'aarch64' : 'x86_64';
@@ -63,14 +83,16 @@ async function setupByeDpi() {
       const tarPath = join(tmpDir, 'byedpi.tar.gz');
       await downloadFile(url, tarPath);
       execSync(`tar -xzf "${tarPath}" -C "${tmpDir}"`, { stdio: 'inherit' });
-      const found = join(tmpDir, 'ciadpi');
-      if (existsSync(found)) {
-        copyFileSync(found, targetBinary);
-        chmodSync(targetBinary, 0o755);
-        console.log(`Extracted ByeDPI to ${targetBinary}`);
-      } else {
-        throw new Error(`ciadpi not found in ${tmpDir}`);
-      }
+    }
+
+    const found = findBinary(tmpDir, 'ciadpi');
+    if (found) {
+      copyFileSync(found, targetBinary);
+      if (!isWin) chmodSync(targetBinary, 0o755);
+      console.log(`Extracted ByeDPI to ${targetBinary}`);
+    } else {
+      const files = readdirSync(tmpDir);
+      throw new Error(`ciadpi binary not found in ${tmpDir} (files: ${files.join(', ')})`);
     }
   } finally {
     try {
@@ -108,17 +130,14 @@ async function setupUsque() {
       execSync(`unzip -o "${zipPath}" -d "${tmpDir}"`, { stdio: 'inherit' });
     }
 
-    const binName = isWin ? 'usque.exe' : 'usque';
-    const found = join(tmpDir, binName);
-    if (existsSync(found)) {
+    const found = findBinary(tmpDir, 'usque');
+    if (found) {
       copyFileSync(found, targetBinary);
       if (!isWin) chmodSync(targetBinary, 0o755);
       console.log(`Extracted Usque (WARP) to ${targetBinary}`);
     } else {
-      // Look recursively or in directory
       const files = readdirSync(tmpDir);
-      console.log(`Files in ${tmpDir}:`, files);
-      throw new Error(`${binName} not found in ${tmpDir}`);
+      throw new Error(`usque binary not found in ${tmpDir} (files: ${files.join(', ')})`);
     }
   } finally {
     try {
@@ -129,8 +148,17 @@ async function setupUsque() {
 
 async function main() {
   console.log('--- Setting up proxy binaries for vega-desktop ---');
-  await setupByeDpi();
-  await setupUsque();
+  try {
+    await setupByeDpi();
+  } catch (err) {
+    console.warn('[setup-proxies] Warning: Failed to setup ByeDPI:', err.message);
+  }
+
+  try {
+    await setupUsque();
+  } catch (err) {
+    console.warn('[setup-proxies] Warning: Failed to setup Usque (WARP):', err.message);
+  }
   console.log('--- Proxy binaries setup complete! ---');
 }
 
