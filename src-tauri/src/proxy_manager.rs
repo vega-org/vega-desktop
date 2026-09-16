@@ -7,6 +7,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use tauri::Manager;
 use tokio::sync::RwLock;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,61 +73,62 @@ pub async fn wait_for_port_ready(port: u16, max_duration: Duration) -> bool {
     false
 }
 
-pub fn resolve_proxy_binary(folder_name: &str, base_name: &str) -> Result<PathBuf, String> {
-    #[cfg(target_os = "windows")]
-    let exe_name = format!("{}.exe", base_name);
-    #[cfg(not(target_os = "windows"))]
-    let exe_name = base_name.to_string();
-
-    let mut candidate_dirs: Vec<PathBuf> = Vec::new();
-
-    if let Ok(current_exe) = std::env::current_exe() {
-        if let Some(parent) = current_exe.parent() {
-            candidate_dirs.push(parent.join("resources").join(folder_name));
-            candidate_dirs.push(parent.join("resources").join("resources").join(folder_name));
-            candidate_dirs.push(parent.join(folder_name));
-            candidate_dirs.push(parent.to_path_buf());
-
-            if let Some(contents) = parent.parent() {
-                candidate_dirs.push(contents.join("Resources").join(folder_name));
-                candidate_dirs.push(contents.join("Resources").join("resources").join(folder_name));
-                candidate_dirs.push(contents.join("resources").join(folder_name));
-            }
-            if let Some(target_dir) = parent.parent() {
-                if let Some(src_tauri_dir) = target_dir.parent() {
-                    candidate_dirs.push(src_tauri_dir.join("resources").join(folder_name));
+fn find_file_recursive(dir: &Path, target_name: &str, max_depth: usize) -> Option<PathBuf> {
+    if max_depth == 0 || !dir.is_dir() {
+        return None;
+    }
+    let entries = std::fs::read_dir(dir).ok()?;
+    let mut subdirs = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() {
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if name.eq_ignore_ascii_case(target_name) {
+                    return Some(path);
                 }
             }
+        } else if path.is_dir() {
+            subdirs.push(path);
         }
     }
-
-    if let Ok(cwd) = std::env::current_dir() {
-        candidate_dirs.push(cwd.join("src-tauri").join("resources").join(folder_name));
-        candidate_dirs.push(cwd.join("resources").join(folder_name));
-        candidate_dirs.push(cwd.join(folder_name));
-        candidate_dirs.push(cwd);
-    }
-
-    for dir in &candidate_dirs {
-        let candidate = dir.join(&exe_name);
-        if candidate.is_file() {
-            return Ok(candidate);
+    for subdir in subdirs {
+        if let Some(found) = find_file_recursive(&subdir, target_name, max_depth - 1) {
+            return Some(found);
         }
     }
+    None
+}
 
-    if let Ok(path_var) = std::env::var("PATH") {
-        for dir in std::env::split_paths(&path_var) {
-            let candidate = dir.join(&exe_name);
-            if candidate.is_file() {
-                return Ok(candidate);
+fn find_file_prefix_recursive(dir: &Path, prefix: &str, max_depth: usize) -> Option<PathBuf> {
+    if max_depth == 0 || !dir.is_dir() {
+        return None;
+    }
+    let entries = std::fs::read_dir(dir).ok()?;
+    let mut subdirs = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() {
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                let name_lower = name.to_lowercase();
+                if name_lower.starts_with(&prefix.to_lowercase())
+                    && !name_lower.ends_with(".zip")
+                    && !name_lower.ends_with(".tar.gz")
+                    && !name_lower.ends_with(".md")
+                    && !name_lower.ends_with(".txt")
+                {
+                    return Some(path);
+                }
             }
+        } else if path.is_dir() {
+            subdirs.push(path);
         }
     }
-
-    Err(format!(
-        "Could not find {} executable in candidate locations",
-        exe_name
-    ))
+    for subdir in subdirs {
+        if let Some(found) = find_file_prefix_recursive(&subdir, prefix, max_depth - 1) {
+            return Some(found);
+        }
+    }
+    None
 }
 
 fn get_proxy_data_dir() -> PathBuf {
@@ -143,6 +145,322 @@ fn get_proxy_data_dir() -> PathBuf {
     let dir = std::env::temp_dir().join("vega-proxies");
     let _ = std::fs::create_dir_all(&dir);
     dir
+}
+
+pub fn resolve_proxy_binary(
+    app: Option<&tauri::AppHandle>,
+    folder_name: &str,
+    base_name: &str,
+) -> Result<PathBuf, String> {
+    #[cfg(target_os = "windows")]
+    let exe_name = format!("{}.exe", base_name);
+    #[cfg(not(target_os = "windows"))]
+    let exe_name = base_name.to_string();
+
+    let mut candidate_dirs: Vec<PathBuf> = Vec::new();
+
+    // Check user's app data proxy directory first
+    let data_dir = get_proxy_data_dir();
+    candidate_dirs.push(data_dir.join(folder_name));
+    candidate_dirs.push(data_dir.clone());
+
+    // Check official Tauri resource directory
+    if let Some(handle) = app {
+        if let Ok(res_dir) = handle.path().resource_dir() {
+            candidate_dirs.push(res_dir.join(folder_name));
+            candidate_dirs.push(res_dir.join("resources").join(folder_name));
+            candidate_dirs.push(res_dir.join("resources").join("resources").join(folder_name));
+            candidate_dirs.push(res_dir.join("src-tauri").join("resources").join(folder_name));
+            candidate_dirs.push(res_dir.clone());
+        }
+        if let Ok(app_data) = handle.path().app_data_dir() {
+            candidate_dirs.push(app_data.join("proxies").join(folder_name));
+            candidate_dirs.push(app_data.join("proxies"));
+        }
+    }
+
+    // Check current_exe parent hierarchies
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(parent) = current_exe.parent() {
+            candidate_dirs.push(parent.join("resources").join(folder_name));
+            candidate_dirs.push(parent.join("resources").join("resources").join(folder_name));
+            candidate_dirs.push(parent.join("resources").join("src-tauri").join("resources").join(folder_name));
+            candidate_dirs.push(parent.join(folder_name));
+            candidate_dirs.push(parent.to_path_buf());
+
+            if let Some(contents) = parent.parent() {
+                candidate_dirs.push(contents.join("Resources").join(folder_name));
+                candidate_dirs.push(contents.join("Resources").join("resources").join(folder_name));
+                candidate_dirs.push(contents.join("resources").join(folder_name));
+                candidate_dirs.push(contents.join("resources").join("resources").join(folder_name));
+                candidate_dirs.push(contents.join(folder_name));
+                candidate_dirs.push(contents.to_path_buf());
+            }
+            if let Some(target_dir) = parent.parent() {
+                if let Some(src_tauri_dir) = target_dir.parent() {
+                    candidate_dirs.push(src_tauri_dir.join("resources").join(folder_name));
+                }
+            }
+        }
+    }
+
+    // Check current working directory
+    if let Ok(cwd) = std::env::current_dir() {
+        candidate_dirs.push(cwd.join("src-tauri").join("resources").join(folder_name));
+        candidate_dirs.push(cwd.join("resources").join(folder_name));
+        candidate_dirs.push(cwd.join(folder_name));
+        candidate_dirs.push(cwd);
+    }
+
+    // Direct check in candidate dirs
+    for dir in &candidate_dirs {
+        let candidate = dir.join(&exe_name);
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+
+    // Recursive search up to 4 levels in candidate dirs
+    for dir in &candidate_dirs {
+        if let Some(found) = find_file_recursive(dir, &exe_name, 4) {
+            return Ok(found);
+        }
+    }
+
+    // System PATH
+    if let Ok(path_var) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            let candidate = dir.join(&exe_name);
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
+        }
+    }
+
+    Err(format!(
+        "Could not find {} executable in candidate locations",
+        exe_name
+    ))
+}
+
+pub async fn download_proxy_binary(folder_name: &str, base_name: &str) -> Result<PathBuf, String> {
+    #[cfg(target_os = "windows")]
+    let exe_name = format!("{}.exe", base_name);
+    #[cfg(not(target_os = "windows"))]
+    let exe_name = base_name.to_string();
+
+    let target_dir = get_proxy_data_dir().join(folder_name);
+    let _ = std::fs::create_dir_all(&target_dir);
+    let target_file = target_dir.join(&exe_name);
+
+    if target_file.is_file() {
+        return Ok(target_file);
+    }
+
+    println!(
+        "[proxy_manager] Binary {} not found locally. Auto-downloading...",
+        exe_name
+    );
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("Failed to build download client: {}", e))?;
+
+    let (download_url, is_zip) = if base_name == "ciadpi" {
+        #[cfg(target_os = "windows")]
+        {
+            (
+                "https://github.com/hufrea/byedpi/releases/download/v0.17.3/byedpi-17.3-x86_64-w64.zip",
+                true,
+            )
+        }
+        #[cfg(target_os = "linux")]
+        {
+            #[cfg(target_arch = "aarch64")]
+            {
+                (
+                    "https://github.com/hufrea/byedpi/releases/download/v0.17.3/byedpi-17.3-aarch64.tar.gz",
+                    false,
+                )
+            }
+            #[cfg(not(target_arch = "aarch64"))]
+            {
+                (
+                    "https://github.com/hufrea/byedpi/releases/download/v0.17.3/byedpi-17.3-x86_64.tar.gz",
+                    false,
+                )
+            }
+        }
+        #[cfg(target_os = "macos")]
+        {
+            return Err("ByeDPI prebuilt binary is not available for macOS".to_string());
+        }
+    } else {
+        #[cfg(target_os = "windows")]
+        {
+            (
+                "https://github.com/Diniboy1123/usque/releases/download/v4.2.1/usque_4.2.1_windows_amd64.zip",
+                true,
+            )
+        }
+        #[cfg(target_os = "linux")]
+        {
+            #[cfg(target_arch = "aarch64")]
+            {
+                (
+                    "https://github.com/Diniboy1123/usque/releases/download/v4.2.1/usque_4.2.1_linux_arm64.zip",
+                    true,
+                )
+            }
+            #[cfg(not(target_arch = "aarch64"))]
+            {
+                (
+                    "https://github.com/Diniboy1123/usque/releases/download/v4.2.1/usque_4.2.1_linux_amd64.zip",
+                    true,
+                )
+            }
+        }
+        #[cfg(target_os = "macos")]
+        {
+            #[cfg(target_arch = "aarch64")]
+            {
+                (
+                    "https://github.com/Diniboy1123/usque/releases/download/v4.2.1/usque_4.2.1_darwin_arm64.zip",
+                    true,
+                )
+            }
+            #[cfg(not(target_arch = "aarch64"))]
+            {
+                (
+                    "https://github.com/Diniboy1123/usque/releases/download/v4.2.1/usque_4.2.1_darwin_amd64.zip",
+                    true,
+                )
+            }
+        }
+    };
+
+    println!("[proxy_manager] Fetching from {}", download_url);
+    let response = client
+        .get(download_url)
+        .send()
+        .await
+        .map_err(|e| format!("Download request failed for {}: {}", download_url, e))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "Download failed with HTTP status: {}",
+            response.status()
+        ));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read download stream: {}", e))?;
+
+    let temp_dir = std::env::temp_dir().join(format!("vega-dl-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&temp_dir);
+
+    let archive_path = temp_dir.join(if is_zip { "pkg.zip" } else { "pkg.tar.gz" });
+    tokio::fs::write(&archive_path, &bytes)
+        .await
+        .map_err(|e| format!("Failed to write downloaded archive: {}", e))?;
+
+    let extract_dir = temp_dir.join("extracted");
+    let _ = std::fs::create_dir_all(&extract_dir);
+
+    #[cfg(target_os = "windows")]
+    {
+        let ps_cmd = format!(
+            "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
+            archive_path.display(),
+            extract_dir.display()
+        );
+        let status = tokio::process::Command::new("powershell")
+            .arg("-NoProfile")
+            .arg("-Command")
+            .arg(&ps_cmd)
+            .creation_flags(0x08000000)
+            .status()
+            .await
+            .map_err(|e| format!("Failed to run Expand-Archive: {}", e))?;
+
+        if !status.success() {
+            return Err("Failed to extract downloaded archive via PowerShell".to_string());
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let status = if is_zip {
+            tokio::process::Command::new("unzip")
+                .arg("-o")
+                .arg(&archive_path)
+                .arg("-d")
+                .arg(&extract_dir)
+                .status()
+                .await
+        } else {
+            tokio::process::Command::new("tar")
+                .arg("-xzf")
+                .arg(&archive_path)
+                .arg("-C")
+                .arg(&extract_dir)
+                .status()
+                .await
+        }
+        .map_err(|e| format!("Failed to extract downloaded archive: {}", e))?;
+
+        if !status.success() {
+            return Err("Extraction tool exited with error".to_string());
+        }
+    }
+
+    let found_binary = find_file_recursive(&extract_dir, &exe_name, 5)
+        .or_else(|| find_file_prefix_recursive(&extract_dir, base_name, 5));
+
+    if let Some(src_bin) = found_binary {
+        std::fs::copy(&src_bin, &target_file)
+            .map_err(|e| format!("Failed to copy extracted binary: {}", e))?;
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ =
+                std::fs::set_permissions(&target_file, std::fs::Permissions::from_mode(0o755));
+        }
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        println!(
+            "[proxy_manager] Successfully downloaded and installed {}",
+            target_file.display()
+        );
+        Ok(target_file)
+    } else {
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        Err(format!(
+            "Could not locate {} inside downloaded archive",
+            exe_name
+        ))
+    }
+}
+
+pub async fn resolve_or_download_proxy_binary(
+    app: Option<&tauri::AppHandle>,
+    folder_name: &str,
+    base_name: &str,
+) -> Result<PathBuf, String> {
+    match resolve_proxy_binary(app, folder_name, base_name) {
+        Ok(p) => Ok(p),
+        Err(err) => {
+            println!(
+                "[proxy_manager] {} not found in local paths ({}), trying auto-download...",
+                base_name, err
+            );
+            download_proxy_binary(folder_name, base_name).await
+        }
+    }
 }
 
 pub async fn stop_current_proxy_internal(state: &mut ActiveProxyState) {
@@ -166,8 +484,11 @@ pub async fn stop_all_proxies() {
 }
 
 #[tauri::command]
-pub async fn start_byedpi(custom_args: Option<String>) -> Result<ProxyStatus, String> {
-    let bin_path = resolve_proxy_binary("byedpi", "ciadpi")?;
+pub async fn start_byedpi(
+    app: tauri::AppHandle,
+    custom_args: Option<String>,
+) -> Result<ProxyStatus, String> {
+    let bin_path = resolve_or_download_proxy_binary(Some(&app), "byedpi", "ciadpi").await?;
     let port = find_available_port()?;
 
     let args_str = custom_args
@@ -264,8 +585,8 @@ pub async fn get_byedpi_status() -> ProxyStatus {
 }
 
 #[tauri::command]
-pub async fn start_warp() -> Result<ProxyStatus, String> {
-    let bin_path = resolve_proxy_binary("warp", "usque")?;
+pub async fn start_warp(app: tauri::AppHandle) -> Result<ProxyStatus, String> {
+    let bin_path = resolve_or_download_proxy_binary(Some(&app), "warp", "usque").await?;
     let config_dir = get_proxy_data_dir();
     let config_path = config_dir.join("warp_config.json");
 
