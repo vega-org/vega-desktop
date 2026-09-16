@@ -3,10 +3,11 @@ use serde::{Deserialize, Serialize};
 use std::{
     net::TcpListener,
     path::{Path, PathBuf},
-    process::Stdio,
     sync::Arc,
     time::Duration,
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::process::Stdio;
 use tauri::Manager;
 use tokio::sync::RwLock;
 
@@ -73,6 +74,7 @@ pub async fn wait_for_port_ready(port: u16, max_duration: Duration) -> bool {
     false
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn find_file_recursive(dir: &Path, target_name: &str, max_depth: usize) -> Option<PathBuf> {
     if max_depth == 0 || !dir.is_dir() {
         return None;
@@ -99,6 +101,7 @@ fn find_file_recursive(dir: &Path, target_name: &str, max_depth: usize) -> Optio
     None
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn find_file_prefix_recursive(dir: &Path, prefix: &str, max_depth: usize) -> Option<PathBuf> {
     if max_depth == 0 || !dir.is_dir() {
         return None;
@@ -147,6 +150,7 @@ fn get_proxy_data_dir() -> PathBuf {
     dir
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn resolve_proxy_binary(
     app: Option<&tauri::AppHandle>,
     folder_name: &str,
@@ -243,6 +247,21 @@ pub fn resolve_proxy_binary(
     ))
 }
 
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn resolve_proxy_binary(
+    _app: Option<&tauri::AppHandle>,
+    _folder_name: &str,
+    _base_name: &str,
+) -> Result<PathBuf, String> {
+    Err("Proxy manager is not supported on mobile platforms".to_string())
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub async fn download_proxy_binary(_folder_name: &str, _base_name: &str) -> Result<PathBuf, String> {
+    Err("Proxy manager is not supported on mobile platforms".to_string())
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub async fn download_proxy_binary(folder_name: &str, base_name: &str) -> Result<PathBuf, String> {
     #[cfg(target_os = "windows")]
     let exe_name = format!("{}.exe", base_name);
@@ -267,12 +286,6 @@ pub async fn download_proxy_binary(folder_name: &str, base_name: &str) -> Result
         .build()
         .map_err(|e| format!("Failed to build download client: {}", e))?;
 
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    {
-        return Err("Proxy binaries are not supported on mobile platforms".to_string());
-    }
-
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let (download_url, is_zip) = if base_name == "ciadpi" {
         #[cfg(target_os = "windows")]
         {
@@ -460,6 +473,16 @@ pub async fn download_proxy_binary(folder_name: &str, base_name: &str) -> Result
     }
 }
 
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub async fn resolve_or_download_proxy_binary(
+    _app: Option<&tauri::AppHandle>,
+    _folder_name: &str,
+    _base_name: &str,
+) -> Result<PathBuf, String> {
+    Err("Proxy manager is not supported on mobile platforms".to_string())
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub async fn resolve_or_download_proxy_binary(
     app: Option<&tauri::AppHandle>,
     folder_name: &str,
@@ -497,20 +520,23 @@ pub async fn stop_all_proxies() {
     stop_current_proxy_internal(&mut state).await;
 }
 
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+pub async fn start_byedpi(
+    _app: tauri::AppHandle,
+    _custom_args: Option<String>,
+) -> Result<ProxyStatus, String> {
+    Err("Proxy manager is not supported on mobile platforms".to_string())
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 pub async fn start_byedpi(
     app: tauri::AppHandle,
     custom_args: Option<String>,
 ) -> Result<ProxyStatus, String> {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    {
-        return Err("Proxy manager is not supported on mobile platforms".to_string());
-    }
-
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        let bin_path = resolve_or_download_proxy_binary(Some(&app), "byedpi", "ciadpi").await?;
-        let port = find_available_port()?;
+    let bin_path = resolve_or_download_proxy_binary(Some(&app), "byedpi", "ciadpi").await?;
+    let port = find_available_port()?;
 
     let args_str = custom_args
         .filter(|s| !s.trim().is_empty())
@@ -562,14 +588,13 @@ pub async fn start_byedpi(
     crate::doh_client::clear_client_cache().await;
     crate::stream_server::update_stream_proxy(Some(proxy_url)).await;
 
-        println!("[proxy_manager] ByeDPI active on port {}", port);
-        Ok(ProxyStatus {
-            proxy_type: ProxyType::ByeDpi,
-            is_running: true,
-            port: Some(port),
-            error: None,
-        })
-    }
+    println!("[proxy_manager] ByeDPI active on port {}", port);
+    Ok(ProxyStatus {
+        proxy_type: ProxyType::ByeDpi,
+        is_running: true,
+        port: Some(port),
+        error: None,
+    })
 }
 
 #[tauri::command]
@@ -606,17 +631,17 @@ pub async fn get_byedpi_status() -> ProxyStatus {
     }
 }
 
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+pub async fn start_warp(_app: tauri::AppHandle) -> Result<ProxyStatus, String> {
+    Err("Proxy manager is not supported on mobile platforms".to_string())
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 pub async fn start_warp(app: tauri::AppHandle) -> Result<ProxyStatus, String> {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    {
-        return Err("Proxy manager is not supported on mobile platforms".to_string());
-    }
-
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        let bin_path = resolve_or_download_proxy_binary(Some(&app), "warp", "usque").await?;
-        let config_dir = get_proxy_data_dir();
+    let bin_path = resolve_or_download_proxy_binary(Some(&app), "warp", "usque").await?;
+    let config_dir = get_proxy_data_dir();
     let config_path = config_dir.join("warp_config.json");
 
     if !config_path.exists() {
@@ -692,14 +717,13 @@ pub async fn start_warp(app: tauri::AppHandle) -> Result<ProxyStatus, String> {
     crate::doh_client::clear_client_cache().await;
     crate::stream_server::update_stream_proxy(Some(proxy_url)).await;
 
-        println!("[proxy_manager] WARP active on port {}", port);
-        Ok(ProxyStatus {
-            proxy_type: ProxyType::Warp,
-            is_running: true,
-            port: Some(port),
-            error: None,
-        })
-    }
+    println!("[proxy_manager] WARP active on port {}", port);
+    Ok(ProxyStatus {
+        proxy_type: ProxyType::Warp,
+        is_running: true,
+        port: Some(port),
+        error: None,
+    })
 }
 
 #[tauri::command]
