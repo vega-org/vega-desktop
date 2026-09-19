@@ -769,7 +769,14 @@ const DesktopPlayer: React.FC<any> = ({
   const { provider } = useContentStore();
 
   const [showControls, setShowControls] = useState(true);
-  const [playbackRate, setPlaybackRate] = useState(1.0);
+  const [playbackRate, setPlaybackRate] = useState<number>(() => {
+    const historyKey =
+      activeEpisode?.sourceLink || activeEpisode?.id || activeEpisode?.link;
+    const saved = historyKey
+      ? history.find((item) => item.id === historyKey)?.playbackRate
+      : undefined;
+    return typeof saved === "number" && saved > 0 ? saved : 1.0;
+  });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPip, setIsPip] = useState(false);
   const [isCropped, setIsCropped] = useState(false);
@@ -1154,6 +1161,9 @@ const DesktopPlayer: React.FC<any> = ({
   const mpv = usePlayerEngine(videoRef, {
     onError: handlePlaybackError,
     onFileLoaded: () => {
+      if (playbackRateRef.current && playbackRateRef.current !== 1.0) {
+        mpv.setPlaybackSpeed(playbackRateRef.current);
+      }
       const historyKey =
         activeEpisode?.sourceLink || activeEpisode?.id || activeEpisode?.link;
       const syncedProgress = history.find(
@@ -1175,6 +1185,18 @@ const DesktopPlayer: React.FC<any> = ({
       }
     },
   });
+
+  useEffect(() => {
+    if (mpv.speed && Math.abs(mpv.speed - playbackRate) > 0.01) {
+      setPlaybackRate(mpv.speed);
+    }
+  }, [mpv.speed]);
+
+  useEffect(() => {
+    if (playbackRate !== 1.0) {
+      mpv.setPlaybackSpeed(playbackRate);
+    }
+  }, []);
 
   const { handleProgress } = usePlayerProgress({
     activeEpisode,
@@ -1456,7 +1478,7 @@ const DesktopPlayer: React.FC<any> = ({
       link: state.infoUrl || "",
       provider: state.providerValue || provider?.value || "",
       lastPlayed: Date.now(),
-      playbackRate: 1,
+      playbackRate: playbackRateRef.current || 1,
       episodeTitle: activeEpisode?.title || state.secondaryTitle,
       episode: activeEpisode,
       type: state.type,

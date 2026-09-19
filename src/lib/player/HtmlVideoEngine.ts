@@ -260,6 +260,7 @@ export class HtmlVideoEngine implements PlayerEngine {
   private currentTorrentInfoHash: string | null = null;
   private hasTriedCodecFallback: boolean = false;
   private isCodecFallbackInProgress: boolean = false;
+  private playbackSpeed: number = 1.0;
   private mseSession: {
     mediaSource: MediaSource;
     sourceBuffer: SourceBuffer | null;
@@ -267,6 +268,23 @@ export class HtmlVideoEngine implements PlayerEngine {
     objectUrl: string;
     generation: number;
   } | null = null;
+
+  private applyPlaybackSpeed(): void {
+    if (!this.video || this.isDestroyed) return;
+    const targetSpeed = this.playbackSpeed;
+    if (Number.isFinite(targetSpeed) && targetSpeed > 0) {
+      try {
+        if (this.video.defaultPlaybackRate !== targetSpeed) {
+          this.video.defaultPlaybackRate = targetSpeed;
+        }
+        if (this.video.playbackRate !== targetSpeed) {
+          this.video.playbackRate = targetSpeed;
+        }
+      } catch (e) {
+        console.warn("[HtmlVideoEngine] Failed to apply playback rate:", e);
+      }
+    }
+  }
 
   private captureFreezeFrame(): void {
     const v = this.video;
@@ -620,6 +638,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("playing", () => {
+      this.applyPlaybackSpeed();
       if (this.isPreparingRemuxPreroll) {
         this.updateState({ isBuffering: true, isPaused: false });
         if (this.jassub) this.jassub.setBuffering(true);
@@ -635,6 +654,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("canplay", () => {
+      this.applyPlaybackSpeed();
       if (this.isPreparingRemuxPreroll) return;
       this.releaseFreezeFrame();
       if (v.paused) {
@@ -648,6 +668,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("canplaythrough", () => {
+      this.applyPlaybackSpeed();
       if (this.isPreparingRemuxPreroll) return;
       if (v.paused) {
         this.updateState({ isBuffering: false });
@@ -658,6 +679,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("loadeddata", () => {
+      this.applyPlaybackSpeed();
       if (this.isPreparingRemuxPreroll) return;
       this.releaseFreezeFrame();
       this.updateState({ isBuffering: false });
@@ -671,6 +693,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("seeked", () => {
+      this.applyPlaybackSpeed();
       finishSeeking();
       this.updateState({ isBuffering: false });
       if (this.jassub) {
@@ -692,10 +715,20 @@ export class HtmlVideoEngine implements PlayerEngine {
     });
 
     v.addEventListener("ratechange", () => {
+      if (
+        !this.isDestroyed &&
+        this.playbackSpeed > 0 &&
+        Math.abs(v.playbackRate - this.playbackSpeed) > 0.01
+      ) {
+        v.playbackRate = this.playbackSpeed;
+        return;
+      }
+      this.playbackSpeed = v.playbackRate;
       this.updateState({ speed: v.playbackRate });
     });
 
     v.addEventListener("loadedmetadata", () => {
+      this.applyPlaybackSpeed();
       this.updateState({
         videoHeight: v.videoHeight,
         duration: this.probedDuration || v.duration || 0,
@@ -855,15 +888,19 @@ export class HtmlVideoEngine implements PlayerEngine {
 
     this.video.src = objectUrl;
     this.video.preload = "auto";
+    this.applyPlaybackSpeed();
     this.video.load();
+    this.applyPlaybackSpeed();
 
     await new Promise<void>((resolve, reject) => {
       if (mediaSource.readyState === "open") {
+        this.applyPlaybackSpeed();
         resolve();
         return;
       }
       const onOpen = () => {
         cleanup();
+        this.applyPlaybackSpeed();
         resolve();
       };
       const onError = () => {
@@ -1094,6 +1131,10 @@ export class HtmlVideoEngine implements PlayerEngine {
     this.virtualTimeOffset = options?.startTime || 0;
     this.audioDelay = 0;
     this.subtitleDelay = 0;
+    if (typeof options?.speed === "number" && options.speed > 0) {
+      this.playbackSpeed = options.speed;
+    }
+    this.applyPlaybackSpeed();
     if (this.audioDelayDebounceTimer) {
       clearTimeout(this.audioDelayDebounceTimer);
       this.audioDelayDebounceTimer = null;
@@ -1120,6 +1161,7 @@ export class HtmlVideoEngine implements PlayerEngine {
       duration: 0,
       audioDelay: 0,
       subtitleDelay: 0,
+      speed: this.playbackSpeed,
     });
 
     const isHls =
@@ -1361,7 +1403,9 @@ export class HtmlVideoEngine implements PlayerEngine {
       }
       this.cleanupMse();
       this.video.src = source;
+      this.applyPlaybackSpeed();
       this.video.load();
+      this.applyPlaybackSpeed();
       if (options?.autoPlay !== false) {
         await this.play().catch(() => {
           this.updateState({ isPaused: true, isBuffering: false });
@@ -1402,8 +1446,10 @@ export class HtmlVideoEngine implements PlayerEngine {
 
     hls.loadSource(hlsUrl);
     hls.attachMedia(this.video);
+    this.applyPlaybackSpeed();
 
     hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+      this.applyPlaybackSpeed();
       this.updateState({
         isInitialized: true,
         isBuffering: false,
@@ -1674,7 +1720,9 @@ export class HtmlVideoEngine implements PlayerEngine {
         if (startTime > 0) {
           this.video.currentTime = startTime;
         }
+        this.applyPlaybackSpeed();
         this.video.load();
+        this.applyPlaybackSpeed();
         return;
       } else if (!hasHeaders) {
         this.cleanupMse();
@@ -1684,7 +1732,9 @@ export class HtmlVideoEngine implements PlayerEngine {
         if (startTime > 0) {
           this.video.currentTime = startTime;
         }
+        this.applyPlaybackSpeed();
         this.video.load();
+        this.applyPlaybackSpeed();
         return;
       }
       // If direct mode has custom headers, route through remux proxy which injects headers!
@@ -1757,11 +1807,14 @@ export class HtmlVideoEngine implements PlayerEngine {
     const useMse = typeof window !== "undefined" && Boolean(window.MediaSource);
     if (useMse) {
       await this.startMseStream(streamUrl, gen);
+      this.applyPlaybackSpeed();
     } else {
       this.cleanupMse();
       this.video.src = streamUrl;
       this.video.preload = "auto";
+      this.applyPlaybackSpeed();
       this.video.load();
+      this.applyPlaybackSpeed();
       void this.video.play().catch((error) => {
         console.debug("[HtmlVideoEngine] Initial media request is pending:", error);
       });
@@ -1769,14 +1822,17 @@ export class HtmlVideoEngine implements PlayerEngine {
 
     try {
       await this.waitForVerifiedStreamTiming(port, streamSessionId, gen);
+      this.applyPlaybackSpeed();
       this.video.muted = this.isUserMuted;
       void this.refreshEmbeddedSubtitleWindow(this.requestedStartTime, gen);
       if (this.isPreparingRemuxPreroll && this.targetMediaTime > 0.05) {
         await this.finishRemuxPreroll(gen, resumeAfterPrepare);
+        this.applyPlaybackSpeed();
       } else {
         this.isPreparingRemuxPreroll = false;
         if (!resumeAfterPrepare) this.video.pause();
         this.releaseFreezeFrame();
+        this.applyPlaybackSpeed();
       }
     } catch (error) {
       this.video.muted = this.isUserMuted;
@@ -1787,9 +1843,11 @@ export class HtmlVideoEngine implements PlayerEngine {
   }
 
   public async play(): Promise<void> {
+    this.applyPlaybackSpeed();
     this.updateState({ isPaused: false });
     try {
       await this.video.play();
+      this.applyPlaybackSpeed();
     } catch (err: any) {
       if (err?.name !== "AbortError") {
         console.warn("[HtmlVideoEngine] video.play() rejected:", err);
@@ -1821,6 +1879,7 @@ export class HtmlVideoEngine implements PlayerEngine {
 
     if (this.hlsInstance || (this.playbackMode === "direct" && !this.usesRemuxClock)) {
       this.video.currentTime = clamped;
+      this.applyPlaybackSpeed();
       this.updateState({ currentTime: clamped });
       return;
     }
@@ -1845,12 +1904,14 @@ export class HtmlVideoEngine implements PlayerEngine {
       this.seekSafetyTimer = null;
     }
     this.isSeeking = false;
+    this.applyPlaybackSpeed();
 
     if (wasPlaying) {
       await this.play().catch(() => { });
     } else {
       this.updateState({ isBuffering: false, isPaused: true, currentTime: clamped });
     }
+    this.applyPlaybackSpeed();
   }
 
   public setVolume(volume: number): void {
@@ -1870,7 +1931,10 @@ export class HtmlVideoEngine implements PlayerEngine {
   }
 
   public setSpeed(speed: number): void {
-    this.video.playbackRate = speed;
+    const clamped = Math.min(4, Math.max(0.25, Math.round(speed * 100) / 100));
+    this.playbackSpeed = clamped;
+    this.applyPlaybackSpeed();
+    this.updateState({ speed: clamped });
   }
 
   public async selectTrack(

@@ -48,12 +48,15 @@ export function usePlayerEngine(
   const optsRef = useRef(opts);
   optsRef.current = opts;
 
+  const currentSpeedRef = useRef<number>(1.0);
+
   const pendingLoadRef = useRef<{
     source: string;
     headers?: Record<string, string>;
     subtitles?: { url?: string; uri?: string; language?: string; title?: string }[];
     streamType?: string;
     localBaseDir?: string;
+    speed?: number;
   } | null>(null);
 
   const thumbnailSourceRef = useRef<{
@@ -96,6 +99,9 @@ export function usePlayerEngine(
       const engine = new HtmlVideoEngine(el);
       engineRef.current = engine;
       setInitError(null);
+      if (currentSpeedRef.current !== 1.0) {
+        engine.setSpeed(currentSpeedRef.current);
+      }
 
       engine.subscribe((next) => {
         setEngineState(next);
@@ -128,6 +134,7 @@ export function usePlayerEngine(
             headers: pending.headers,
             subtitles: pending.subtitles,
             autoPlay: true,
+            speed: pending.speed || currentSpeedRef.current,
           })
           .then(() => {
             optsRef.current?.onFileLoaded?.();
@@ -188,7 +195,14 @@ export function usePlayerEngine(
 
       if (!engine) {
         console.log("[usePlayerEngine] Video element not yet mounted, queueing stream:", source);
-        pendingLoadRef.current = { source, headers, subtitles, streamType, localBaseDir };
+        pendingLoadRef.current = {
+          source,
+          headers,
+          subtitles,
+          streamType,
+          localBaseDir,
+          speed: currentSpeedRef.current,
+        };
         return;
       }
 
@@ -198,6 +212,7 @@ export function usePlayerEngine(
           headers,
           subtitles,
           autoPlay: true,
+          speed: currentSpeedRef.current,
         });
         optsRef.current?.onFileLoaded?.();
       } catch (e: any) {
@@ -268,6 +283,8 @@ export function usePlayerEngine(
   }, []);
 
   const setPlaybackSpeed = useCallback(async (speed: number) => {
+    currentSpeedRef.current = speed;
+    setEngineState((prev) => ({ ...prev, speed }));
     if (!engineRef.current) return;
     engineRef.current.setSpeed(speed);
   }, []);

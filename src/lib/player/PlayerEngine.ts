@@ -47,6 +47,7 @@ export interface PlayerEngineOptions {
   audioIndex?: number;
   subtitleIndex?: number | "off";
   subtitles?: { url?: string; uri?: string; language?: string; title?: string }[];
+  speed?: number;
 }
 
 export interface PlayerEngine {
