@@ -4,8 +4,10 @@ import android.net.Uri
 import android.os.Bundle
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -36,7 +38,19 @@ class NativePlayerActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_native_player)
         playerView = findViewById(R.id.player_view)
+        updateKeepScreenOn(true)
         initializePlayer(videoUrl)
+    }
+
+    private fun updateKeepScreenOn(keepOn: Boolean) {
+        if (::playerView.isInitialized) {
+            playerView.keepScreenOn = keepOn
+        }
+        if (keepOn) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
 
     private fun openExternalPlayer(url: String) {
@@ -83,9 +97,22 @@ class NativePlayerActivity : AppCompatActivity() {
             .setMediaSourceFactory(mediaSourceFactory)
             .build()
 
-        player?.addListener(object : androidx.media3.common.Player.Listener {
+        player?.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                super.onIsPlayingChanged(isPlaying)
+                val shouldKeepOn = isPlaying || (player?.playWhenReady == true && player?.playbackState == Player.STATE_BUFFERING)
+                updateKeepScreenOn(shouldKeepOn)
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                super.onPlaybackStateChanged(playbackState)
+                val shouldKeepOn = (playbackState == Player.STATE_BUFFERING || playbackState == Player.STATE_READY) && (player?.playWhenReady == true)
+                updateKeepScreenOn(shouldKeepOn)
+            }
+
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 super.onPlayerError(error)
+                updateKeepScreenOn(false)
                 val msg = "ExoPlayer Error: ${error.errorCodeName} - ${error.message}"
                 android.widget.Toast.makeText(this@NativePlayerActivity, msg, android.widget.Toast.LENGTH_LONG).show()
                 android.util.Log.e("VegaNativePlayer", msg, error)
@@ -102,6 +129,7 @@ class NativePlayerActivity : AppCompatActivity() {
         player?.setMediaItem(mediaItem)
         player?.prepare()
         player?.playWhenReady = true
+        updateKeepScreenOn(true)
     }
 
     override fun onStart() {
@@ -124,6 +152,8 @@ class NativePlayerActivity : AppCompatActivity() {
                 initializePlayer(videoUrl)
             }
         }
+        val shouldKeepOn = player?.isPlaying == true || (player?.playWhenReady == true && player?.playbackState == Player.STATE_BUFFERING)
+        updateKeepScreenOn(shouldKeepOn)
     }
 
     override fun onPause() {
@@ -135,12 +165,20 @@ class NativePlayerActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        updateKeepScreenOn(false)
         if (androidx.media3.common.util.Util.SDK_INT > 23) {
             releasePlayer()
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        updateKeepScreenOn(false)
+        releasePlayer()
+    }
+
     private fun releasePlayer() {
+        updateKeepScreenOn(false)
         player?.let {
             it.release()
             player = null

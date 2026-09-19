@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  LuArrowDownNarrowWide as ArrowDownNarrowWide,
+  LuArrowDownWideNarrow as ArrowDownWideNarrow,
   LuArrowLeft as ArrowLeft,
   LuDownload as Download,
+  LuSearch as Search,
   LuTrash2 as Trash2,
+  LuX as X,
 } from "react-icons/lu";
 import { useNavigate, useParams } from "react-router-dom";
 import { CustomSelect } from "../components/CustomSelect";
@@ -53,6 +57,8 @@ export const DownloadsSeriesPage = () => {
   }, [showDownloads]);
 
   const [activeSeason, setActiveSeason] = useState("Extras");
+  const [episodeSearch, setEpisodeSearch] = useState("");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
     if (seasons.length && !seasons.includes(activeSeason)) {
@@ -65,8 +71,6 @@ export const DownloadsSeriesPage = () => {
       navigate("/downloads", { replace: true });
     }
   }, [navigate, showDownloads.length]);
-
-  if (!showDownloads.length) return null;
 
   const poster = showDownloads[0]?.poster;
   const [extractedThumb, setExtractedThumb] = useState<string | null>(null);
@@ -82,11 +86,25 @@ export const DownloadsSeriesPage = () => {
 
   const displayPoster = poster || extractedThumb;
 
-  const currentSeasonDownloads = sortDownloadedEpisodes(
-    showDownloads.filter(
-      (item) => (item.seasonTitle || "Extras") === activeSeason,
-    ),
-  );
+  const currentSeasonDownloads = useMemo(() => {
+    let list = sortDownloadedEpisodes(
+      showDownloads.filter(
+        (item) => (item.seasonTitle || "Extras") === activeSeason,
+      ),
+    );
+    if (episodeSearch.trim()) {
+      const query = episodeSearch.trim().toLowerCase();
+      list = list.filter((item) =>
+        (item.episodeName || item.title || "").toLowerCase().includes(query),
+      );
+    }
+    if (sortOrder === "desc") {
+      list = [...list].reverse();
+    }
+    return list;
+  }, [showDownloads, activeSeason, episodeSearch, sortOrder]);
+
+  if (!showDownloads.length) return null;
 
   const handlePlay = (item: DownloadItem, index: number) => {
     const episodeList = currentSeasonDownloads.map((episode) => ({
@@ -177,38 +195,90 @@ export const DownloadsSeriesPage = () => {
                 className="season-selector-custom"
               />
             )}
+            <div className="episode-tools">
+              <div className="episode-search-field">
+                <Search size={21} />
+                <input
+                  aria-label="Find episode"
+                  placeholder="Find episode"
+                  value={episodeSearch}
+                  onChange={(e) => setEpisodeSearch(e.target.value)}
+                />
+                {episodeSearch && (
+                  <button
+                    type="button"
+                    className="episode-search-clear"
+                    onClick={() => setEpisodeSearch("")}
+                    aria-label="Clear episode search"
+                  >
+                    <X size={18} />
+                  </button>
+                )}
+              </div>
+              <FocusableButton
+                className="episode-sort-button"
+                aria-label={
+                  sortOrder === "asc"
+                    ? "Sort episodes descending"
+                    : "Sort episodes ascending"
+                }
+                title={
+                  sortOrder === "asc"
+                    ? "Sort episodes descending"
+                    : "Sort episodes ascending"
+                }
+                onClick={() =>
+                  setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+                }
+              >
+                {sortOrder === "asc" ? (
+                  <ArrowDownNarrowWide size={22} />
+                ) : (
+                  <ArrowDownWideNarrow size={22} />
+                )}
+              </FocusableButton>
+            </div>
           </div>
 
           <div className="downloaded-episodes-list">
-            {currentSeasonDownloads.map((item, index) => (
-              <article className="downloaded-episode-row" key={item.id}>
-                <FocusableButton
-                  className="downloaded-episode-main"
-                  onClick={() => handlePlay(item, index)}
-                >
-                  <DownloadedVideoThumbnail
-                    filePath={item.filePath}
-                    title={item.episodeName || item.title}
-                  />
-                  <span className="downloaded-episode-copy">
-                    <strong>{item.episodeName || item.title}</strong>
-                    <small>{formatBytes(item.totalBytes)}</small>
-                  </span>
-                </FocusableButton>
-                <div className="downloaded-episode-actions">
+            {currentSeasonDownloads.length === 0 ? (
+              <div className="downloaded-episodes-empty">
+                <p>
+                  No downloaded episodes found
+                  {episodeSearch ? ` for "${episodeSearch}"` : ""}.
+                </p>
+              </div>
+            ) : (
+              currentSeasonDownloads.map((item, index) => (
+                <article className="downloaded-episode-row" key={item.id}>
                   <FocusableButton
-                    className="episode-download-action is-danger"
-                    onClick={(event: React.MouseEvent) => {
-                      event.stopPropagation();
-                      void cancelDownload(item.id);
-                    }}
-                    title="Delete download"
+                    className="downloaded-episode-main"
+                    onClick={() => handlePlay(item, index)}
                   >
-                    <Trash2 size={18} />
+                    <DownloadedVideoThumbnail
+                      filePath={item.filePath}
+                      title={item.episodeName || item.title}
+                    />
+                    <span className="downloaded-episode-copy">
+                      <strong>{item.episodeName || item.title}</strong>
+                      <small>{formatBytes(item.totalBytes)}</small>
+                    </span>
                   </FocusableButton>
-                </div>
-              </article>
-            ))}
+                  <div className="downloaded-episode-actions">
+                    <FocusableButton
+                      className="episode-download-action is-danger"
+                      onClick={(event: React.MouseEvent) => {
+                        event.stopPropagation();
+                        void cancelDownload(item.id);
+                      }}
+                      title="Delete download"
+                    >
+                      <Trash2 size={18} />
+                    </FocusableButton>
+                  </div>
+                </article>
+              ))
+            )}
           </div>
         </section>
       </div>

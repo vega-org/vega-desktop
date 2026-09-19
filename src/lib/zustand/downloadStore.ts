@@ -12,6 +12,7 @@ export interface DownloadItem {
   showName?: string; // The clean Series/Movie name (e.g. House of the Dragon)
   episodeName?: string; // The original episode title
   seasonTitle?: string; // e.g. "Season 3"
+  episodeIndex?: number;
   type: "movie" | "series";
   imdbId?: string;
   url: string;

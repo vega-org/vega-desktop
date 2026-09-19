@@ -176,6 +176,52 @@ export function usePlayerEngine(
     };
   }, [resolveVideoElement, setupEngine]);
 
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("wakeLock" in navigator)) return;
+    let wakeLock: any = null;
+    let isReleased = false;
+
+    const requestLock = async () => {
+      try {
+        if (!engineState.isPaused && !wakeLock && !isReleased) {
+          wakeLock = await (navigator as any).wakeLock.request("screen");
+          wakeLock.addEventListener?.("release", () => {
+            wakeLock = null;
+          });
+        }
+      } catch {}
+    };
+
+    const releaseLock = async () => {
+      try {
+        if (wakeLock) {
+          await wakeLock.release();
+          wakeLock = null;
+        }
+      } catch {}
+    };
+
+    if (!engineState.isPaused) {
+      requestLock();
+    } else {
+      releaseLock();
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && !engineState.isPaused) {
+        requestLock();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      isReleased = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      releaseLock();
+    };
+  }, [engineState.isPaused]);
+
   const loadFile = useCallback(
     async (
       source: string,

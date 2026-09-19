@@ -14,6 +14,9 @@ export const sortDownloadedEpisodes = (
   items: DownloadItem[],
 ): DownloadItem[] =>
   [...items].sort((a, b) => {
+    if (a.episodeIndex !== undefined && b.episodeIndex !== undefined) {
+      return a.episodeIndex - b.episodeIndex;
+    }
     const episodeDifference = getEpisodeNumber(a) - getEpisodeNumber(b);
     if (episodeDifference !== 0) {
       return episodeDifference;

@@ -36,6 +36,7 @@ interface DialogContext {
   showName?: string;
   episodeName?: string;
   seasonTitle?: string;
+  episodeIndex?: number;
   type: "movie" | "series";
   imdbId?: string;
   sourceLink: string;
@@ -337,6 +338,7 @@ export const MetaPage: React.FC = () => {
       showName: title,
       episodeName: episode.title,
       seasonTitle: groupTitle,
+      episodeIndex: index,
       type: type as "movie" | "series",
       imdbId: info.imdbId || meta?.imdbId,
       sourceLink: episode.link,
@@ -429,6 +431,7 @@ export const MetaPage: React.FC = () => {
       showName: targetContext.showName,
       episodeName: targetContext.episodeName,
       seasonTitle: targetContext.seasonTitle,
+      episodeIndex: targetContext.episodeIndex,
       type: targetContext.type,
       imdbId: targetContext.imdbId,
       headers: stream.headers,
@@ -455,6 +458,7 @@ export const MetaPage: React.FC = () => {
         showName: targetContext.showName,
         episodeName: targetContext.episodeName,
         seasonTitle: targetContext.seasonTitle,
+        episodeIndex: targetContext.episodeIndex,
         type: targetContext.type,
         imdbId: targetContext.imdbId,
         isSubtitle: true,
