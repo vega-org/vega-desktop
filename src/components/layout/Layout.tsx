@@ -28,12 +28,35 @@ export const Layout: React.FC = () => {
   });
 
   useEffect(() => {
-    if (tvMode && isHomePage) {
-      setTimeout(() => {
-        focusSelf();
-      }, 50);
-    }
-  }, [tvMode, focusSelf, isHomePage]);
+    if (!tvMode) return;
+
+    const hasFocus = () =>
+      document.activeElement != null && document.activeElement !== document.body;
+
+    // The 50ms one-shot this replaces could fire before any child registered as focusable,
+    // which on slow TV hardware left nothing focused and the D-pad dead with no retry.
+    let attempts = 0;
+    const interval = window.setInterval(() => {
+      if (hasFocus() || attempts++ > 40) {
+        window.clearInterval(interval);
+        return;
+      }
+      focusSelf();
+    }, 100);
+
+    // Last resort, so a dead remote recovers on the next press instead of staying stuck.
+    const recoverFocus = (event: KeyboardEvent) => {
+      if (!event.isTrusted || hasFocus()) return;
+      if (!event.key.startsWith("Arrow") && event.key !== "Enter") return;
+      focusSelf();
+    };
+    window.addEventListener("keydown", recoverFocus, true);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("keydown", recoverFocus, true);
+    };
+  }, [tvMode, focusSelf]);
 
   const needsTopPadding = !isHomePage && !isContentPage;
 

@@ -6,6 +6,7 @@ interface DirectionState {
   isHeld: boolean;
   firstPressTime: number;
   lastRepeatTime: number;
+  latchedOff: boolean;
 }
 
 // Match Android's default key repeat timeout so a normal press on a Bluetooth remote
@@ -14,20 +15,49 @@ const INITIAL_DELAY_MS = 400;
 const REPEAT_INTERVAL_MS = 90;
 const STICK_DEADZONE = 0.45;
 
+// An axis is ignored until it has reported a value at rest at least once. Sony Bravia and
+// several other Android TV remotes enumerate as KEYBOARD|DPAD|JOYSTICK and expose phantom
+// axes pinned at -1.0, which otherwise reads as a D-pad direction held down forever.
+const AXIS_NEUTRAL_EPSILON = 0.2;
+
+// Remotes that deliver real keydown events already drive spatial navigation, so the gamepad
+// fallback must stand down or every press moves focus twice.
+const REAL_KEY_SUPPRESS_MS = 2000;
+
+// No one holds a direction this long. Treat it as a stuck axis/button and latch it off until
+// the device reports the direction released.
+const STUCK_DIRECTION_MS = 6000;
+
+const makeDirectionState = (): DirectionState => ({
+  isHeld: false,
+  firstPressTime: 0,
+  lastRepeatTime: 0,
+  latchedOff: false,
+});
+
 export function useGamepadNavigation() {
   const rafRef = useRef<number | null>(null);
   const prevButtonsRef = useRef<boolean[]>([]);
+  const lastRealKeyTimeRef = useRef(Number.NEGATIVE_INFINITY);
+  const axisTrustedRef = useRef<boolean[]>([]);
+  const gamepadIndexRef = useRef<number | null>(null);
   const dirStatesRef = useRef<Record<Direction, DirectionState>>({
-    up: { isHeld: false, firstPressTime: 0, lastRepeatTime: 0 },
-    down: { isHeld: false, firstPressTime: 0, lastRepeatTime: 0 },
-    left: { isHeld: false, firstPressTime: 0, lastRepeatTime: 0 },
-    right: { isHeld: false, firstPressTime: 0, lastRepeatTime: 0 },
+    up: makeDirectionState(),
+    down: makeDirectionState(),
+    left: makeDirectionState(),
+    right: makeDirectionState(),
   });
 
   useEffect(() => {
     const notifyActivity = () => {
       window.dispatchEvent(new CustomEvent("vega:remote-activity"));
     };
+
+    // Synthetic events are untrusted, so this only records presses the platform really sent.
+    const handleRealKey = (event: KeyboardEvent) => {
+      if (event.isTrusted) lastRealKeyTimeRef.current = performance.now();
+    };
+    window.addEventListener("keydown", handleRealKey, true);
 
     // Emulate exactly one real key press: dispatch once on the focused element and let it
     // bubble to window, where spatial navigation and other listeners handle it.
@@ -63,22 +93,43 @@ export function useGamepadNavigation() {
 
     const processDirection = (dir: Direction, isPressed: boolean, now: number) => {
       const state = dirStatesRef.current[dir];
-      if (isPressed) {
-        if (!state.isHeld) {
-          state.isHeld = true;
-          state.firstPressTime = now;
-          state.lastRepeatTime = now;
-          triggerDirection(dir);
-        } else if (
-          now - state.firstPressTime > INITIAL_DELAY_MS &&
-          now - state.lastRepeatTime > REPEAT_INTERVAL_MS
-        ) {
-          state.lastRepeatTime = now;
-          triggerDirection(dir);
-        }
-      } else {
+      if (!isPressed) {
         state.isHeld = false;
+        state.latchedOff = false;
+        return;
       }
+      if (state.latchedOff) return;
+
+      if (!state.isHeld) {
+        state.isHeld = true;
+        state.firstPressTime = now;
+        state.lastRepeatTime = now;
+        triggerDirection(dir);
+      } else if (now - state.firstPressTime > STUCK_DIRECTION_MS) {
+        state.latchedOff = true;
+      } else if (
+        now - state.firstPressTime > INITIAL_DELAY_MS &&
+        now - state.lastRepeatTime > REPEAT_INTERVAL_MS
+      ) {
+        state.lastRepeatTime = now;
+        triggerDirection(dir);
+      }
+    };
+
+    const resetDirectionStates = () => {
+      dirStatesRef.current.up = makeDirectionState();
+      dirStatesRef.current.down = makeDirectionState();
+      dirStatesRef.current.left = makeDirectionState();
+      dirStatesRef.current.right = makeDirectionState();
+    };
+
+    const readAxis = (axes: readonly number[], index: number) => {
+      const raw = axes[index] ?? 0;
+      if (!axisTrustedRef.current[index]) {
+        if (Math.abs(raw) <= AXIS_NEUTRAL_EPSILON) axisTrustedRef.current[index] = true;
+        return 0;
+      }
+      return raw;
     };
 
     const pollGamepads = () => {
@@ -102,9 +153,23 @@ export function useGamepadNavigation() {
       const buttons = activeGamepad.buttons;
       const axes = activeGamepad.axes;
 
+      if (activeGamepad.index !== gamepadIndexRef.current) {
+        gamepadIndexRef.current = activeGamepad.index;
+        axisTrustedRef.current = [];
+        resetDirectionStates();
+      }
+
+      // The device is sending real key events, so spatial navigation is already handling it.
+      if (now - lastRealKeyTimeRef.current < REAL_KEY_SUPPRESS_MS) {
+        resetDirectionStates();
+        prevButtonsRef.current = buttons.map((b) => Boolean(b.pressed));
+        rafRef.current = requestAnimationFrame(pollGamepads);
+        return;
+      }
+
       // D-Pad and Left Analog Stick
-      const stickX = axes[0] ?? 0;
-      const stickY = axes[1] ?? 0;
+      const stickX = readAxis(axes, 0);
+      const stickY = readAxis(axes, 1);
 
       const dpadUp = Boolean(buttons[12]?.pressed) || stickY < -STICK_DEADZONE;
       const dpadDown = Boolean(buttons[13]?.pressed) || stickY > STICK_DEADZONE;
@@ -191,6 +256,7 @@ export function useGamepadNavigation() {
     rafRef.current = requestAnimationFrame(pollGamepads);
 
     return () => {
+      window.removeEventListener("keydown", handleRealKey, true);
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
       }

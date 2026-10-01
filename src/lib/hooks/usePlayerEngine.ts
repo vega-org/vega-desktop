@@ -177,13 +177,25 @@ export function usePlayerEngine(
   }, [resolveVideoElement, setupEngine]);
 
   useEffect(() => {
-    if (typeof navigator === "undefined" || !("wakeLock" in navigator)) return;
+    // Android's WebView has no Screen Wake Lock API, so fall back to the native bridge there.
+    const bridge =
+      typeof window === "undefined"
+        ? null
+        : ((window as unknown as {
+            VegaScreen?: { setKeepScreenOn: (keepOn: boolean) => void };
+          }).VegaScreen ?? null);
+    const supportsWakeLock =
+      typeof navigator !== "undefined" && "wakeLock" in navigator;
+    if (!bridge && !supportsWakeLock) return;
+
     let wakeLock: any = null;
     let isReleased = false;
 
     const requestLock = async () => {
+      if (isReleased || engineState.isPaused) return;
       try {
-        if (!engineState.isPaused && !wakeLock && !isReleased) {
+        bridge?.setKeepScreenOn(true);
+        if (supportsWakeLock && !wakeLock) {
           wakeLock = await (navigator as any).wakeLock.request("screen");
           wakeLock.addEventListener?.("release", () => {
             wakeLock = null;
@@ -194,6 +206,7 @@ export function usePlayerEngine(
 
     const releaseLock = async () => {
       try {
+        bridge?.setKeepScreenOn(false);
         if (wakeLock) {
           await wakeLock.release();
           wakeLock = null;
