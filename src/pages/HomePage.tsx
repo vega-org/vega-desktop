@@ -10,6 +10,7 @@ import { Hero } from "../components/home/Hero";
 import { ContentSlider } from "../components/home/ContentSlider";
 import { LuRefreshCw as RefreshCw } from "react-icons/lu";
 import useWatchHistoryStore from "../lib/zustand/watchHistrory";
+import { settingsStorage } from "../lib/storage";
 import { FocusableButton } from "../components/layout/FocusableButton";
 import { PostCardItem } from "../components/home/PostCardItem";
 import { Spinner } from "../components/ui/spinner";
@@ -41,6 +42,10 @@ export const HomePage: React.FC = () => {
   } = useSearch(query, provider?.value, !!query);
 
   const history = useWatchHistoryStore((state) => state.history);
+  // Read on mount: Settings is a separate route, so Home remounts after a change.
+  const [showContinueWatching] = React.useState(() =>
+    settingsStorage.showContinueWatching(),
+  );
 
   const heroPost = useMemo(() => {
     if (!homeData || homeData.length === 0) {
@@ -209,7 +214,7 @@ export const HomePage: React.FC = () => {
         className="sliders-section"
         style={!heroPost ? { marginTop: "100px" } : undefined}
       >
-        {continueWatchingPosts.length > 0 && (
+        {showContinueWatching && continueWatchingPosts.length > 0 && (
           <ContentSlider
             title="Continue Watching"
             posts={continueWatchingPosts}

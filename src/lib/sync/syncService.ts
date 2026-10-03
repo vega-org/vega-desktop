@@ -1,7 +1,11 @@
 import { cacheStorage, mainStorage, watchHistoryStorage, watchListStorage } from "../storage";
 import type { WatchHistoryItem } from "../storage/WatchHistoryStorage";
 import { WatchHistoryKeys } from "../storage/WatchHistoryStorage";
-import { WatchListKeys, type WatchListItem } from "../storage/WatchListStorage";
+import {
+  WatchListKeys,
+  type LibraryCollection,
+  type WatchListItem,
+} from "../storage/WatchListStorage";
 import { useDownloadStore, type DownloadItem } from "../zustand/downloadStore";
 import useWatchHistoryStore from "../zustand/watchHistrory";
 import useWatchListStore from "../zustand/watchListStore";
@@ -14,6 +18,7 @@ import {
   type SyncTombstone,
   type SyncedDownload,
   type SyncedHistory,
+  type SyncedLibraryCollection,
   type SyncedWatchListItem,
   type VegaSyncManifest,
 } from "./manifest";
@@ -37,6 +42,7 @@ let syncRequest: Promise<void> | undefined;
 let previousDownloads: Record<string, DownloadItem> = {};
 let previousHistory: WatchHistoryItem[] = [];
 let previousWatchList: WatchListItem[] = [];
+let previousCollections: LibraryCollection[] = [];
 
 const getDeviceId = () => {
   const existing = mainStorage.getString(DEVICE_ID_KEY);
@@ -146,6 +152,11 @@ const buildManifest = async (): Promise<VegaSyncManifest> => {
       .getWatchList()
       .map((item) => [item.link, toSyncedWatchListItem(item)]),
   );
+  const collections = Object.fromEntries(
+    watchListStorage
+      .getCollections()
+      .map((collection) => [collection.id, collection]),
+  );
   return {
     schemaVersion: VEGA_SYNC_SCHEMA_VERSION,
     deviceId: getDeviceId(),
@@ -154,6 +165,7 @@ const buildManifest = async (): Promise<VegaSyncManifest> => {
     downloads,
     history,
     watchlist,
+    collections,
     tombstones: getTombstones(),
   };
 };
@@ -296,6 +308,21 @@ const applyRemoteWatchList = (
   useWatchListStore.setState({ watchList: items });
 };
 
+const applyRemoteCollections = (
+  collections: Record<string, SyncedLibraryCollection>,
+) => {
+  const items = Object.values(collections).sort(
+    (a, b) => a.createdAt - b.createdAt,
+  );
+  const serialized = JSON.stringify(items);
+  if (JSON.stringify(watchListStorage.getCollections()) !== serialized) {
+    watchListStorage.saveCollections(items);
+  }
+  if (JSON.stringify(useWatchListStore.getState().collections) !== serialized) {
+    useWatchListStore.setState({ collections: items });
+  }
+};
+
 const applyTombstones = (tombstones: Record<string, SyncTombstone>) => {
   const downloads = { ...useDownloadStore.getState().downloads };
   let history = watchHistoryStorage.getWatchHistory();
@@ -341,6 +368,7 @@ const runSharedFolderSync = async (): Promise<void> => {
     applyTombstones(merged.tombstones);
     await applyRemoteDownloads(baseDir, merged.downloads);
     applyRemoteHistory(merged.history);
+    applyRemoteCollections(merged.collections);
     applyRemoteWatchList(merged.watchlist);
   } finally {
     applyingRemoteState = false;
@@ -348,6 +376,7 @@ const runSharedFolderSync = async (): Promise<void> => {
   previousDownloads = useDownloadStore.getState().downloads;
   previousHistory = watchHistoryStorage.getWatchHistory();
   previousWatchList = watchListStorage.getWatchList();
+  previousCollections = watchListStorage.getCollections();
   await publishSyncManifest();
 };
 
@@ -366,6 +395,7 @@ export const initializeSyncService = async (): Promise<void> => {
     previousDownloads = useDownloadStore.getState().downloads;
     previousHistory = watchHistoryStorage.getWatchHistory();
     previousWatchList = watchListStorage.getWatchList();
+    previousCollections = watchListStorage.getCollections();
     useDownloadStore.subscribe((state) => {
       if (applyingRemoteState) {
         previousDownloads = state.downloads;
@@ -403,6 +433,7 @@ export const initializeSyncService = async (): Promise<void> => {
     useWatchListStore.subscribe((state) => {
       if (applyingRemoteState) {
         previousWatchList = watchListStorage.getWatchList();
+        previousCollections = state.collections;
         return;
       }
       const currentLinks = new Set(state.watchList.map((item) => item.link));
@@ -411,7 +442,16 @@ export const initializeSyncService = async (): Promise<void> => {
           addTombstone("watchlist", item.link);
         }
       }
+      const currentCollectionIds = new Set(
+        state.collections.map((collection) => collection.id),
+      );
+      for (const collection of previousCollections) {
+        if (!currentCollectionIds.has(collection.id)) {
+          addTombstone("collection", collection.id);
+        }
+      }
       previousWatchList = watchListStorage.getWatchList();
+      previousCollections = state.collections;
       schedulePublish();
     });
   }

@@ -51,6 +51,8 @@ interface PostCardItemProps {
   post: Post;
   onClick: (post: Post) => void;
   onRemove?: (post: Post, e: React.MouseEvent) => void;
+  /** Tooltip of the remove button. */
+  removeLabel?: string;
   focusKey?: string;
   onFocus?: () => void;
 }
@@ -59,6 +61,7 @@ export const PostCardItem: React.FC<PostCardItemProps> = ({
   post,
   onClick,
   onRemove,
+  removeLabel = "Remove from history",
   focusKey: customFocusKey,
   onFocus: customOnFocus,
 }) => {
@@ -212,8 +215,8 @@ export const PostCardItem: React.FC<PostCardItemProps> = ({
               e.stopPropagation();
               onRemove(post, e);
             }}
-            title="Remove from history"
-            aria-label={`Remove ${post.title} from history`}
+            title={removeLabel}
+            aria-label={`${removeLabel}: ${post.title}`}
             tabIndex={tvMode ? -1 : 0}
           >
             <X size={20} />

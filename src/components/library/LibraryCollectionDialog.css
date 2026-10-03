@@ -1,0 +1,224 @@
+.library-icon,
+.library-icon-tile {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.library-icon-tile {
+  color: var(--on-primary-container);
+  background: var(--primary-container);
+}
+
+.library-icon-emoji {
+  display: block;
+  font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji",
+    sans-serif;
+}
+
+.extensions-dialog-content.library-dialog {
+  width: min(calc(100vw - 36px), 520px);
+  max-height: min(88vh, 760px);
+}
+
+.library-dialog .extensions-dialog-header h2 {
+  margin: 0;
+}
+
+.library-dialog-subtitle {
+  overflow: hidden;
+  max-width: 380px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-dialog-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.library-dialog .extensions-dialog-close {
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: var(--on-surface-variant);
+  background: var(--surface-container-highest);
+}
+
+.library-pick-list {
+  display: grid;
+  gap: 8px;
+}
+
+.library-pick-row {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px 0 10px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 18px;
+  color: var(--on-surface);
+  background: var(--surface-container-highest);
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.library-pick-row:hover {
+  border-color: var(--outline);
+}
+
+.library-pick-row.selected {
+  border-color: var(--outline);
+  color: var(--on-secondary-container);
+  background: var(--secondary-container);
+}
+
+.library-pick-row.tv-focus {
+  border-radius: 18px;
+  transform: none;
+}
+
+.library-pick-name {
+  overflow: hidden;
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-pick-check {
+  flex: 0 0 auto;
+  color: var(--on-surface-variant);
+}
+
+.library-pick-row.selected .library-pick-check {
+  color: var(--primary);
+}
+
+.library-pick-new {
+  border-style: dashed;
+  color: var(--primary);
+  background: transparent;
+}
+
+.library-pick-new-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+}
+
+.library-editor-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.library-name-input {
+  flex: 1;
+}
+
+.library-icon-tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.library-icon-tab {
+  display: grid;
+  flex: 1;
+  min-height: 38px;
+  place-items: center;
+  border-radius: 13px;
+  color: var(--on-surface-variant);
+  background: var(--surface-container-highest);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.library-icon-tab.selected {
+  color: var(--on-secondary-container);
+  background: var(--secondary-container);
+}
+
+.library-icon-tab.tv-focus {
+  border-radius: 13px;
+  transform: none;
+}
+
+.library-icon-grid {
+  display: grid;
+  max-height: 236px;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 6px;
+  margin-top: 12px;
+  padding: 4px;
+  overflow-y: auto;
+}
+
+.library-icon-choice {
+  display: grid;
+  height: 44px;
+  place-items: center;
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  color: var(--on-surface-variant);
+  cursor: pointer;
+}
+
+.library-icon-choice:hover {
+  background: var(--surface-container-highest);
+}
+
+.library-icon-choice.selected {
+  border-color: var(--primary);
+  background: var(--secondary-container);
+}
+
+.library-icon-choice.tv-focus {
+  border-radius: 12px;
+  transform: scale(1.08);
+}
+
+.library-color-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.library-color-swatch {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+}
+
+.library-color-swatch.selected {
+  border-color: var(--on-surface);
+}
+
+.library-color-swatch.tv-focus {
+  border-radius: 50%;
+  transform: scale(1.15);
+}
+
+.library-delete-hint {
+  margin: 14px 0 0;
+  color: var(--on-surface-variant);
+  font-size: 13px;
+  text-align: center;
+}
+
+.library-dialog .extensions-dialog-actions {
+  margin-top: 20px;
+}

@@ -14,6 +14,7 @@ export enum SettingsKeys {
   CUSTOM_COLOR = "customColor",
   TV_MODE_ENABLED = "tvModeEnabled",
   INFO_PAGE_DYNAMIC_THEME = "infoPageDynamicTheme",
+  SHOW_CONTINUE_WATCHING = "showContinueWatching",
   // Feedback settings
   HAPTIC_FEEDBACK = "hapticFeedback",
   NOTIFICATIONS_ENABLED = "notificationsEnabled",
@@ -129,6 +130,15 @@ export class SettingsStorage {
 
   setInfoPageDynamicThemeEnabled(enabled: boolean): void {
     mainStorage.setBool(SettingsKeys.INFO_PAGE_DYNAMIC_THEME, enabled);
+  }
+
+  /** Continue Watching row on Home. Playback positions are saved either way. */
+  showContinueWatching(): boolean {
+    return mainStorage.getBool(SettingsKeys.SHOW_CONTINUE_WATCHING, true);
+  }
+
+  setShowContinueWatching(show: boolean): void {
+    mainStorage.setBool(SettingsKeys.SHOW_CONTINUE_WATCHING, show);
   }
 
   areDevtoolsShortcutsEnabled(): boolean {

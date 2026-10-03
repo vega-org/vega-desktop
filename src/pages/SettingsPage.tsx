@@ -32,6 +32,9 @@ export const SettingsPage: React.FC = () => {
   const [infoPageDynamicTheme, setInfoPageDynamicTheme] = React.useState(() =>
     settingsStorage.isInfoPageDynamicThemeEnabled(),
   );
+  const [showContinueWatching, setShowContinueWatching] = React.useState(() =>
+    settingsStorage.showContinueWatching(),
+  );
   const [detailedLogging, setDetailedLoggingState] = React.useState(
     isDetailedLoggingEnabled,
   );
@@ -120,6 +123,26 @@ export const SettingsPage: React.FC = () => {
                   settingsStorage.setInfoPageDynamicThemeEnabled(enabled);
                 }}
                 aria-label="Use artwork colors on info pages"
+              />
+            </div>
+
+            <div className="settings-divider" />
+
+            <div className="settings-row">
+              <div className="settings-info">
+                <h3 className="label-lg">Continue Watching</h3>
+                <p className="body-md text-muted">
+                  Show the Continue Watching row on Home. Playback positions
+                  are still saved.
+                </p>
+              </div>
+              <Switch
+                checked={showContinueWatching}
+                onCheckedChange={(enabled) => {
+                  setShowContinueWatching(enabled);
+                  settingsStorage.setShowContinueWatching(enabled);
+                }}
+                aria-label="Show Continue Watching on Home"
               />
             </div>
           </div>

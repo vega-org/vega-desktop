@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
-  LuBookmark as Bookmark,
   LuBookmarkCheck as BookmarkCheck,
+  LuBookmarkPlus as BookmarkPlus,
   LuBookOpen as BookOpen,
   LuClapperboard as Clapperboard,
   LuGlobe as Globe,
@@ -83,8 +83,8 @@ export const ContentOverview: React.FC<ContentOverviewProps> = ({
           onClick={onToggleSaved}
           focusKey="CONTENT_WATCHLIST"
         >
-          {isSaved ? <BookmarkCheck size={27} /> : <Bookmark size={27} />}
-          <span>{isSaved ? "In watchlist" : "Watchlist"}</span>
+          {isSaved ? <BookmarkCheck size={27} /> : <BookmarkPlus size={27} />}
+          <span>{isSaved ? "Saved" : "Save"}</span>
         </FocusableButton>
       </div>
     </section>

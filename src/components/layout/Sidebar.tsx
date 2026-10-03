@@ -32,7 +32,7 @@ const getNavigationRoot = (pathname: string): NavigationRoot => {
 const primaryDestinations: NavigationDestinationConfig[] = [
   { to: "/", label: "Home", icon: "home", focusKey: "SIDEBAR_HOME" },
   { to: "/search", label: "Search", icon: "search" },
-  { to: "/watchlist", label: "Watchlist", icon: "watchlist" },
+  { to: "/watchlist", label: "Library", icon: "watchlist" },
   { to: "/downloads", label: "Downloads", icon: "download" },
 ];
 

@@ -10,6 +10,7 @@ import { ContentOverview } from "../components/content/ContentOverview";
 import { EpisodeDetailsDialog, type EpisodeDetails } from "../components/content/EpisodeDetailsDialog";
 import { EpisodeRow } from "../components/content/EpisodeRow";
 import { InfoStoryDialog } from "../components/content/InfoStoryDialog";
+import { LibraryCollectionDialog } from "../components/library/LibraryCollectionDialog";
 import { SeasonSelector } from "../components/content/SeasonSelector";
 import { DownloadServerDialog } from "../components/DownloadServerDialog";
 import { FocusableButton } from "../components/layout/FocusableButton";
@@ -135,7 +136,11 @@ export const MetaPage: React.FC = () => {
   const navigate = useNavigate();
   const { provider, installedProviders } = useContentStore();
   const { addDownload, downloads, cancelDownload } = useDownloadStore();
-  const { watchList, addItem, removeItem } = useWatchListStore();
+  const watchList = useWatchListStore((state) => state.watchList);
+  const addItem = useWatchListStore((state) => state.addItem);
+  const removeItem = useWatchListStore((state) => state.removeItem);
+  const hasCustomCollections = useWatchListStore((state) => state.collections.length > 0);
+  const [collectionPickerOpen, setCollectionPickerOpen] = useState(false);
   const isAndroid = navigator.userAgent.toLowerCase().includes("android");
   const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
   const { ref: focusRef, focusKey } = useFocusable({ focusable: tvMode, trackChildren: true });
@@ -292,7 +297,9 @@ export const MetaPage: React.FC = () => {
 
   const isInWatchList = watchList.some((item) => item.link === link);
   const toggleWatchList = () => {
-    if (isInWatchList) removeItem(link);
+    // With categories, ask where to save. With only the default one, toggle.
+    if (hasCustomCollections) setCollectionPickerOpen(true);
+    else if (isInWatchList) removeItem(link);
     else addItem({ title, poster: posterImage, link, provider: activeProviderValue });
   };
 
@@ -726,6 +733,12 @@ export const MetaPage: React.FC = () => {
           imdbId={info.imdbId}
           tmdbId={info.tmdbId}
           type={info.type}
+        />
+        <LibraryCollectionDialog
+          open={collectionPickerOpen}
+          onOpenChange={setCollectionPickerOpen}
+          item={{ title, poster: posterImage, link, provider: activeProviderValue }}
+          restoreFocusKey="CONTENT_WATCHLIST"
         />
       </main>
     </FocusContext.Provider>

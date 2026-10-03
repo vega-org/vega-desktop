@@ -22,7 +22,7 @@ import { useAppUpdater } from "./lib/hooks/useAppUpdater";
 import { initDownloadListeners } from "./lib/zustand/downloadStore";
 import { DownloadsPage } from "./pages/DownloadsPage";
 import { DownloadsSeriesPage } from "./pages/DownloadsSeriesPage";
-import { WatchlistPage } from "./pages/WatchlistPage";
+import { LibraryPage } from "./pages/LibraryPage";
 import { CatalogPage } from "./pages/CatalogPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { updateProvidersService } from "./lib/services/UpdateProviders";
@@ -181,7 +181,7 @@ export default function App() {
               <Route path="content/:url" element={<MetaPage />} />
               <Route path="/catalog" element={<CatalogPage />} />
               <Route path="/search" element={<SearchPage />} />
-              <Route path="/watchlist" element={<WatchlistPage />} />
+              <Route path="/watchlist" element={<LibraryPage />} />
               <Route path="/watchlist/content/:url" element={<MetaPage />} />
               <Route path="/downloads" element={<DownloadsPage />} />
               <Route
