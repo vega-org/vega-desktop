@@ -69,7 +69,7 @@ impl StreamDnsResolver {
         let mut key_guard = self.config_key.write().await;
         *key_guard = key;
 
-        println!(
+        vlog_debug!(
             "[stream_proxy] DNS resolver updated: enabled={}, provider={}, custom={:?}",
             effective_enabled, provider, custom_url
         );
@@ -106,7 +106,7 @@ impl Resolve for StreamDnsResolver {
                         return Ok(Box::new(addrs.into_iter()) as Addrs);
                     }
                     Err(e) => {
-                        eprintln!(
+                        vlog_warn!(
                             "[stream_proxy] DoH resolution failed for {}: {:?}. Falling back to system DNS...",
                             name_str, e
                         );
@@ -120,7 +120,7 @@ impl Resolve for StreamDnsResolver {
                     Ok(Box::new(addrs.into_iter()) as Addrs)
                 }
                 Err(sys_err) => {
-                    eprintln!(
+                    vlog_warn!(
                         "[stream_proxy] System DNS also failed for {}: {:?}",
                         name_str, sys_err
                     );
@@ -152,7 +152,7 @@ pub fn build_stream_client(proxy_url: Option<&str>) -> Result<Client, String> {
                 builder = builder.proxy(proxy);
             }
             Err(e) => {
-                eprintln!("[stream_proxy] Failed to configure proxy {}: {:?}", proxy_str, e);
+                vlog_warn!("[stream_proxy] Failed to configure proxy {}: {:?}", proxy_str, e);
             }
         }
     }
@@ -165,10 +165,10 @@ pub async fn update_stream_proxy(proxy_url: Option<String>) {
         Ok(new_client) => {
             let mut client_lock = GLOBAL_STREAM_CLIENT.write().await;
             *client_lock = new_client;
-            println!("[stream_proxy] Stream client updated with proxy: {:?}", proxy_url);
+            vlog_debug!("[stream_proxy] Stream client updated with proxy: {:?}", proxy_url);
         }
         Err(e) => {
-            eprintln!("[stream_proxy] Failed to update stream proxy: {}", e);
+            vlog_warn!("[stream_proxy] Failed to update stream proxy: {}", e);
         }
     }
 }
@@ -374,7 +374,7 @@ pub async fn start_server(
         .await
         .map_err(|e| e.to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-    println!("[stream_proxy] Starting on port {}", port);
+    vlog_debug!("[stream_proxy] Starting on port {}", port);
     let _ = PROXY_PORT.set(port);
 
     let state = ProxyState {
@@ -402,7 +402,7 @@ pub async fn start_server(
 
     tokio::spawn(async move {
         if let Err(e) = axum::serve(listener, app).await {
-            eprintln!("[stream_proxy] Server error: {}", e);
+            vlog_warn!("[stream_proxy] Server error: {}", e);
         }
     });
 
@@ -451,7 +451,7 @@ async fn serve_local_file(
     range_header: Option<&HeaderValue>,
 ) -> Result<Response, StatusCode> {
     if !path.is_file() {
-        eprintln!("[stream_server] serve_local_file: not found: {:?}", path);
+        vlog_warn!("[stream_server] serve_local_file: not found: {:?}", path);
         return Err(StatusCode::NOT_FOUND);
     }
     let mut file = tokio::fs::File::open(path)
@@ -686,7 +686,7 @@ async fn fetch_with_retry(
                 if status.is_success() {
                     return Ok(res);
                 }
-                eprintln!(
+                vlog_warn!(
                     "[stream_proxy] {} upstream returned {} for {} (attempt {}/{})",
                     label, status, url, attempt, max_attempts
                 );
@@ -700,7 +700,7 @@ async fn fetch_with_retry(
                 return Err(StatusCode::BAD_GATEWAY);
             }
             Err(e) => {
-                eprintln!(
+                vlog_warn!(
                     "[stream_proxy] {} network error for {} (attempt {}/{}): {}",
                     label, url, attempt, max_attempts, e
                 );
@@ -720,7 +720,7 @@ async fn handle_proxy(
     State(state): State<ProxyState>,
     Query(query): Query<ProxyQuery>,
 ) -> Result<Response, StatusCode> {
-    println!(
+    vlog_debug!(
         "[stream_proxy] Received playlist request for: {}",
         query.url
     );
@@ -762,7 +762,7 @@ async fn handle_proxy(
     }
 
     let text = response.text().await.map_err(|e| {
-        eprintln!("[stream_proxy] Failed to read playlist body: {}", e);
+        vlog_warn!("[stream_proxy] Failed to read playlist body: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
@@ -837,7 +837,7 @@ async fn handle_proxy(
                                 synth.push_str(&video_variant_url);
                                 synth.push('\n');
 
-                                println!(
+                                vlog_debug!(
                                     "[stream_proxy] Synthesized master playlist for single quality track: {}",
                                     query.url
                                 );
@@ -988,7 +988,7 @@ async fn handle_segment(
         match upstream.next().await {
             Some(Ok(chunk)) => prefix.extend_from_slice(&chunk),
             Some(Err(e)) => {
-                eprintln!("[stream_proxy] Failed to read segment body: {}", e);
+                vlog_warn!("[stream_proxy] Failed to read segment body: {}", e);
                 return Err(StatusCode::BAD_GATEWAY);
             }
             None => break,
@@ -1108,7 +1108,7 @@ async fn handle_probe(
                 .into_response()
         }
         Err(err) => {
-            eprintln!("[probe] Error: {}", err);
+            vlog_warn!("[probe] Error: {}", err);
             (
                 StatusCode::BAD_REQUEST,
                 [(header::CONTENT_TYPE, "text/plain")],
@@ -1146,7 +1146,7 @@ async fn handle_subs(
         )
             .into_response(),
         Err(err) => {
-            eprintln!("[subs] Error: {}", err);
+            vlog_warn!("[subs] Error: {}", err);
             (
                 StatusCode::BAD_REQUEST,
                 [(header::CONTENT_TYPE, "text/plain")],
@@ -1467,11 +1467,11 @@ async fn hw_h264_encoder(ffmpeg_path: &Path) -> Option<&'static str> {
                     Ok(Ok(status)) if status.success()
                 );
                 if works {
-                    eprintln!("[remux] Hardware encoder: {}", encoder);
+                    vlog_warn!("[remux] Hardware encoder: {}", encoder);
                     return Some(encoder);
                 }
             }
-            eprintln!("[remux] No hardware encoder, using libx264");
+            vlog_warn!("[remux] No hardware encoder, using libx264");
             None
         })
         .await
@@ -1509,7 +1509,7 @@ async fn handle_remux(
     let ffmpeg_path = match ffmpeg_resolver::get_ffmpeg_path() {
         Ok(p) => p,
         Err(e) => {
-            eprintln!(
+            vlog_warn!(
                 "[remux] FFmpeg not found ({}), streaming directly via proxy",
                 e
             );
@@ -1530,7 +1530,7 @@ async fn handle_remux(
                 req = req.header(header::RANGE, range);
             }
             let resp = req.send().await.map_err(|err| {
-                eprintln!("[remux] Direct stream error: {}", err);
+                vlog_warn!("[remux] Direct stream error: {}", err);
                 StatusCode::BAD_GATEWAY
             })?;
             let status = resp.status();
@@ -1728,7 +1728,7 @@ async fn handle_remux(
         .kill_on_drop(true);
 
     let mut child = cmd.spawn().map_err(|e| {
-        eprintln!("[remux] Failed to spawn FFmpeg: {}", e);
+        vlog_warn!("[remux] Failed to spawn FFmpeg: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     let child_pid = child.id();
@@ -1860,7 +1860,7 @@ async fn handle_remux(
         if let Some(ref app) = app_opt {
             let _ = app.emit("remux_stream_info", &info);
         }
-        eprintln!(
+        vlog_warn!(
             "[remux] Stream started: gen={}, req={:.3}s, src_pts={:?}, out_pts={:?}, offset={:?}",
             generation,
             requested_start,

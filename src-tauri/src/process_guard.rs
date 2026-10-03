@@ -49,18 +49,18 @@ pub fn init_process_guard() {
                         if assign_res.is_ok() {
                             // Retain the job handle open for the entire process lifetime
                             JOB_HANDLE.store(job_handle.0 as isize, Ordering::SeqCst);
-                            eprintln!("[process_guard] Windows Job Object initialized with KILL_ON_JOB_CLOSE");
+                            vlog_warn!("[process_guard] Windows Job Object initialized with KILL_ON_JOB_CLOSE");
                             return;
                         } else {
-                            eprintln!("[process_guard] Failed to assign process to Job Object: {:?}", assign_res);
+                            vlog_warn!("[process_guard] Failed to assign process to Job Object: {:?}", assign_res);
                         }
                     } else {
-                        eprintln!("[process_guard] Failed to set Job Object info: {:?}", set_res);
+                        vlog_warn!("[process_guard] Failed to set Job Object info: {:?}", set_res);
                     }
                     let _ = windows::Win32::Foundation::CloseHandle(job_handle);
                 }
                 Err(e) => {
-                    eprintln!("[process_guard] Failed to create Job Object: {:?}", e);
+                    vlog_warn!("[process_guard] Failed to create Job Object: {:?}", e);
                 }
             }
         }
@@ -83,7 +83,7 @@ pub fn kill_pid(pid: u32) {
         if let Ok(handle) = OpenProcess(PROCESS_TERMINATE, false, pid) {
             let _ = TerminateProcess(handle, 1);
             let _ = CloseHandle(handle);
-            eprintln!("[process_guard] Forcefully killed process PID {}", pid);
+            vlog_warn!("[process_guard] Forcefully killed process PID {}", pid);
         }
     }
 
@@ -93,6 +93,6 @@ pub fn kill_pid(pid: u32) {
             .arg("-9")
             .arg(pid.to_string())
             .output();
-        eprintln!("[process_guard] Forcefully killed process PID {}", pid);
+        vlog_warn!("[process_guard] Forcefully killed process PID {}", pid);
     }
 }

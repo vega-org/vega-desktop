@@ -538,7 +538,7 @@ pub async fn extract_subtitles_to_string(
     let app_opt = app.clone();
 
     let spawn_time = std::time::Instant::now();
-    eprintln!("[subs] Starting extraction for track {} from {}", sub_index, &clean_source[..clean_source.len().min(80)]);
+    vlog_warn!("[subs] Starting extraction for track {} from {}", sub_index, &clean_source[..clean_source.len().min(80)]);
 
     tokio::spawn(async move {
         let mut reader = stdout;
@@ -549,7 +549,7 @@ pub async fn extract_subtitles_to_string(
         loop {
             tokio::select! {
                 _ = &mut cancel_rx => {
-                    eprintln!("[subs] Extraction cancelled for track {} after {}ms", sub_index, spawn_time.elapsed().as_millis());
+                    vlog_warn!("[subs] Extraction cancelled for track {} after {}ms", sub_index, spawn_time.elapsed().as_millis());
                     let _ = child.kill().await;
                     if let Some(p) = pid {
                         crate::process_guard::kill_pid(p);
@@ -569,7 +569,7 @@ pub async fn extract_subtitles_to_string(
                                 is_first_cue = !had_cues && lock.contains("-->");
                                 if is_first_cue {
                                     had_cues = true;
-                                    eprintln!("[subs] First cue arrived for track {} after {}ms, buffer={}bytes", sub_index, spawn_time.elapsed().as_millis(), lock.len());
+                                    vlog_warn!("[subs] First cue arrived for track {} after {}ms, buffer={}bytes", sub_index, spawn_time.elapsed().as_millis(), lock.len());
                                     notify_clone.notify_waiters();
                                 }
                                 current = lock.clone();
@@ -579,7 +579,7 @@ pub async fn extract_subtitles_to_string(
                                 last_progress_emit = std::time::Instant::now();
                                 let _ = tokio::fs::write(&srt_path_clone, &current).await;
                                 if let Some(ref app) = app_opt {
-                                    eprintln!("[subs] Emitting progressive update for track {}, len={}", sub_index, current.len());
+                                    vlog_warn!("[subs] Emitting progressive update for track {}, len={}", sub_index, current.len());
                                     use tauri::Emitter;
                                     let _ = app.emit(
                                         "subtitles_updated",
@@ -594,7 +594,7 @@ pub async fn extract_subtitles_to_string(
                             }
                         }
                         Err(e) => {
-                            eprintln!("[subs] Error reading ffmpeg stdout: {}", e);
+                            vlog_warn!("[subs] Error reading ffmpeg stdout: {}", e);
                             break;
                         }
                     }

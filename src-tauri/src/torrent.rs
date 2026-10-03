@@ -39,7 +39,7 @@ impl TorrentState {
         // Spawn HTTP server in the background
         tokio::spawn(async move {
             if let Err(e) = http_api.make_http_api_and_run(dual_listener, None).await {
-                eprintln!("librqbit http api error: {}", e);
+                vlog_warn!("librqbit http api error: {}", e);
             }
         });
 

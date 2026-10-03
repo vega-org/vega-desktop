@@ -84,29 +84,29 @@ impl Resolve for CustomDnsResolver {
                 return Ok(Box::new(local_addrs.into_iter()) as wreq::dns::Addrs);
             }
 
-            println!("[DoH] Resolving: {}", name_str);
+            vlog_debug!("[DoH] Resolving: {}", name_str);
             match resolver.lookup_ip(name_str.as_str()).await {
                 Ok(response) => {
                     let addrs: Vec<SocketAddr> = response
                         .into_iter()
                         .map(|ip| SocketAddr::new(ip, 0))
                         .collect();
-                    println!("[DoH] Resolved {} to {:?}", name_str, addrs);
+                    vlog_debug!("[DoH] Resolved {} to {:?}", name_str, addrs);
                     Ok(Box::new(addrs.into_iter()) as wreq::dns::Addrs)
                 }
                 Err(e) => {
-                    eprintln!(
+                    vlog_warn!(
                         "[DoH] DoH resolution failed for {}: {:?}. Falling back to system DNS...",
                         name_str, e
                     );
                     match tokio::net::lookup_host(format!("{}:0", name_str)).await {
                         Ok(std_addrs) => {
                             let addrs: Vec<SocketAddr> = std_addrs.collect();
-                            println!("[DoH] System DNS resolved {} to {:?}", name_str, addrs);
+                            vlog_debug!("[DoH] System DNS resolved {} to {:?}", name_str, addrs);
                             Ok(Box::new(addrs.into_iter()) as wreq::dns::Addrs)
                         }
                         Err(sys_err) => {
-                            eprintln!(
+                            vlog_warn!(
                                 "[DoH] System DNS also failed for {}: {:?}",
                                 name_str, sys_err
                             );
@@ -160,7 +160,7 @@ async fn get_client(provider: &str, custom_url: Option<String>) -> Result<Client
                 builder = builder.proxy(proxy);
             }
             Err(e) => {
-                eprintln!("[doh_client] Failed to configure proxy {}: {:?}", proxy_url, e);
+                vlog_warn!("[doh_client] Failed to configure proxy {}: {:?}", proxy_url, e);
             }
         }
     }
@@ -228,7 +228,7 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
         .headers
         .keys()
         .any(|k| k.eq_ignore_ascii_case("cookie"));
-    println!(
+    vlog_debug!(
         "[doh_fetch] {} {} | has_cookie: {}",
         args.method, args.url, has_cookie
     );
@@ -262,7 +262,7 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
     }
 
     let response = request.send().await.map_err(|e| {
-        eprintln!("[doh_fetch] request error for {}: {:#?}", args.url, e);
+        vlog_warn!("[doh_fetch] request error for {}: {:#?}", args.url, e);
         format!("{:#?}", e)
     })?;
 
@@ -273,7 +273,7 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
         .unwrap_or("")
         .to_string();
     let response_url = response.url().to_string();
-    println!(
+    vlog_debug!(
         "[doh_fetch] response: {} {} for {}",
         status, status_text, args.url
     );
@@ -303,7 +303,7 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
         .headers
         .keys()
         .any(|k| k.eq_ignore_ascii_case("cookie"));
-    println!(
+    vlog_debug!(
         "[doh_fetch] (mobile) {} {} | has_cookie: {}",
         args.method, args.url, has_cookie
     );
@@ -363,7 +363,7 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
     }
 
     let response = request.send().await.map_err(|e| {
-        eprintln!("[doh_fetch] (mobile) request error for {}: {:#?}", args.url, e);
+        vlog_warn!("[doh_fetch] (mobile) request error for {}: {:#?}", args.url, e);
         format!("{:#?}", e)
     })?;
 
@@ -374,7 +374,7 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
         .unwrap_or("")
         .to_string();
     let response_url = response.url().to_string();
-    println!(
+    vlog_debug!(
         "[doh_fetch] (mobile) response: {} {} for {}",
         status, status_text, args.url
     );

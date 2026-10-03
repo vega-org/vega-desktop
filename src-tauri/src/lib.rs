@@ -1,3 +1,5 @@
+#[macro_use]
+mod app_log;
 mod cookie_manager;
 mod doh_client;
 mod download_manager;
@@ -642,7 +644,7 @@ fn configure_bundled_dll_search_path() {
         .collect();
 
     if let Err(error) = unsafe { SetDllDirectoryW(PCWSTR(wide_path.as_ptr())) } {
-        eprintln!(
+        vlog_warn!(
             "[libmpv] Failed to add bundled library directory '{}': {}",
             lib_dir.display(),
             error
@@ -706,6 +708,14 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            if let Ok(dir) = app.path().app_log_dir() {
+                app_log::init(dir);
+            }
+            app_log::record(
+                app_log::Level::Info,
+                "Vega",
+                &format!("Started Vega {}", app.package_info().version),
+            );
             process_guard::init_process_guard();
 
             // Installers register vega:// on Windows and Linux. This also
@@ -714,7 +724,7 @@ pub fn run() {
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 if let Err(e) = app.deep_link().register_all() {
-                    eprintln!("[deep_link] Failed to register vega:// scheme: {}", e);
+                    vlog_warn!("[deep_link] Failed to register vega:// scheme: {}", e);
                 }
             }
 
@@ -731,15 +741,15 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let app_handle_for_server = app_handle.clone();
             tauri::async_runtime::spawn(async move {
-                println!("[stream_proxy] Starting proxy server...");
+                vlog_debug!("[stream_proxy] Starting proxy server...");
                 match stream_server::start_server(local_files, Some(app_handle_for_server)).await {
                     Ok(port) => {
-                        println!("[stream_proxy] Server started on port {}", port);
+                        vlog_debug!("[stream_proxy] Server started on port {}", port);
                         let state: tauri::State<ProxyState> = app_handle.state();
                         *state.port.lock().unwrap() = Some(port);
                     }
                     Err(e) => {
-                        eprintln!("[stream_proxy] Failed to start server: {}", e);
+                        vlog_warn!("[stream_proxy] Failed to start server: {}", e);
                     }
                 }
             });
@@ -753,7 +763,7 @@ pub fn run() {
                 match torrent::TorrentState::new(torrent_cache_dir).await {
                     Ok(state) => Some(state),
                     Err(e) => {
-                        eprintln!("[torrent] Failed to initialize torrent engine: {}", e);
+                        vlog_warn!("[torrent] Failed to initialize torrent engine: {}", e);
                         None
                     }
                 }
@@ -764,6 +774,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet,
+            app_log::log_write_batch,
+            app_log::log_set_detailed,
+            app_log::log_clear,
+            app_log::log_export,
             get_stream_proxy_port,
             get_local_stream_url,
             generate_video_thumbnail,

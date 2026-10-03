@@ -17,6 +17,12 @@ import { checkAppUpdates } from "../lib/hooks/useAppUpdater";
 import { FocusableButton } from "../components/layout/FocusableButton";
 import { Switch } from "../components/ui/switch";
 import { settingsStorage } from "../lib/storage";
+import {
+  exportLogs,
+  isDetailedLoggingEnabled,
+  setDetailedLogging,
+} from "../lib/logging/vegaLog";
+import { toast } from "../lib/zustand/toastStore";
 
 import "./SettingsPage.css";
 
@@ -26,6 +32,21 @@ export const SettingsPage: React.FC = () => {
   const [infoPageDynamicTheme, setInfoPageDynamicTheme] = React.useState(() =>
     settingsStorage.isInfoPageDynamicThemeEnabled(),
   );
+  const [detailedLogging, setDetailedLoggingState] = React.useState(
+    isDetailedLoggingEnabled,
+  );
+  const [exportingLogs, setExportingLogs] = React.useState(false);
+
+  const handleExportLogs = async () => {
+    setExportingLogs(true);
+    try {
+      if (await exportLogs()) toast("Logs exported");
+    } catch (error: any) {
+      toast(String(error?.message || error || "Could not export logs"));
+    } finally {
+      setExportingLogs(false);
+    }
+  };
 
   React.useEffect(() => {
     import("@tauri-apps/api/app")
@@ -168,6 +189,41 @@ export const SettingsPage: React.FC = () => {
                   Check for Updates
                 </FocusableButton>
               </div>
+            </div>
+            <div className="settings-divider" />
+            <div className="settings-row">
+              <div className="settings-info">
+                <h3 className="label-lg">Detailed Logging</h3>
+                <p className="body-md text-muted">
+                  Records more detail for bug reports. Keeps up to 4 MB of
+                  logs. Turns off after 24 hours.
+                </p>
+              </div>
+              <Switch
+                checked={detailedLogging}
+                onCheckedChange={(next) => {
+                  setDetailedLoggingState(next);
+                  setDetailedLogging(next);
+                }}
+                aria-label="Enable detailed logging"
+              />
+            </div>
+            <div className="settings-divider" />
+            <div className="settings-row">
+              <div className="settings-info">
+                <h3 className="label-lg">Export Logs</h3>
+                <p className="body-md text-muted">
+                  Save recent app logs to a file to attach to a bug report.
+                  Links and sign-in data are removed.
+                </p>
+              </div>
+              <FocusableButton
+                className="theme-toggle-btn active"
+                onClick={exportingLogs ? undefined : handleExportLogs}
+                disabled={exportingLogs}
+              >
+                {exportingLogs ? "Exporting..." : "Export"}
+              </FocusableButton>
             </div>
             <div className="settings-divider" />
             <div className="github-star-row">

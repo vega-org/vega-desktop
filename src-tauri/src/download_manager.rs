@@ -267,7 +267,7 @@ pub async fn start_download(
     while let Some(chunk) = stream.next().await {
         // Check for cancellation
         if cancel_rx.try_recv().is_ok() {
-            println!("Download paused: {}", id);
+            vlog_debug!("Download paused: {}", id);
             return Ok(());
         }
 
@@ -440,7 +440,7 @@ fn sanitize_first_segment(data: &[u8]) -> (&[u8], bool) {
     // Otherwise, scan for the first valid MPEG-TS packet
     for i in 0..data.len() {
         if data[i] == 0x47 && i + 188 < data.len() && data[i + 188] == 0x47 {
-            println!("Stripped {} bytes of fake header from first segment", i);
+            vlog_debug!("Stripped {} bytes of fake header from first segment", i);
             return (&data[i..], false);
         }
     }
@@ -449,7 +449,7 @@ fn sanitize_first_segment(data: &[u8]) -> (&[u8], bool) {
     for i in 0..data.len().saturating_sub(8) {
         let sig = &data[i + 4..i + 8];
         if sig == b"ftyp" || sig == b"moov" {
-            println!(
+            vlog_debug!(
                 "Stripped {} bytes of fake header from first segment (found MP4)",
                 i
             );
@@ -543,7 +543,7 @@ pub async fn download_m3u8(
     #[allow(clippy::explicit_counter_loop)]
     for (i, segment) in media_playlist.segments.iter().enumerate() {
         if cancel_rx.try_recv().is_ok() {
-            println!("M3U8 Download paused/cancelled: {}", id);
+            vlog_debug!("M3U8 Download paused/cancelled: {}", id);
             return Ok(());
         }
 
@@ -568,7 +568,7 @@ pub async fn download_m3u8(
                     total_downloaded_bytes += init_data.len() as u64;
                     is_fmp4 = true;
                 } else {
-                    println!(
+                    vlog_debug!(
                         "Discarding invalid/fake EXT-X-MAP segment of {} bytes",
                         init_data.len()
                     );

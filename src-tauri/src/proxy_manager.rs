@@ -276,7 +276,7 @@ pub async fn download_proxy_binary(folder_name: &str, base_name: &str) -> Result
         return Ok(target_file);
     }
 
-    println!(
+    vlog_debug!(
         "[proxy_manager] Binary {} not found locally. Auto-downloading...",
         exe_name
     );
@@ -367,7 +367,7 @@ pub async fn download_proxy_binary(folder_name: &str, base_name: &str) -> Result
         }
     };
 
-    println!("[proxy_manager] Fetching from {}", download_url);
+    vlog_debug!("[proxy_manager] Fetching from {}", download_url);
     let response = client
         .get(download_url)
         .send()
@@ -459,7 +459,7 @@ pub async fn download_proxy_binary(folder_name: &str, base_name: &str) -> Result
         }
 
         let _ = std::fs::remove_dir_all(&temp_dir);
-        println!(
+        vlog_debug!(
             "[proxy_manager] Successfully downloaded and installed {}",
             target_file.display()
         );
@@ -491,7 +491,7 @@ pub async fn resolve_or_download_proxy_binary(
     match resolve_proxy_binary(app, folder_name, base_name) {
         Ok(p) => Ok(p),
         Err(err) => {
-            println!(
+            vlog_debug!(
                 "[proxy_manager] {} not found in local paths ({}), trying auto-download...",
                 base_name, err
             );
@@ -561,7 +561,7 @@ pub async fn start_byedpi(
     cmd.stdout(Stdio::null());
     cmd.stderr(Stdio::null());
 
-    println!(
+    vlog_debug!(
         "[proxy_manager] Launching ByeDPI: {:?} on port {}",
         bin_path, port
     );
@@ -588,7 +588,7 @@ pub async fn start_byedpi(
     crate::doh_client::clear_client_cache().await;
     crate::stream_server::update_stream_proxy(Some(proxy_url)).await;
 
-    println!("[proxy_manager] ByeDPI active on port {}", port);
+    vlog_debug!("[proxy_manager] ByeDPI active on port {}", port);
     Ok(ProxyStatus {
         proxy_type: ProxyType::ByeDpi,
         is_running: true,
@@ -645,7 +645,7 @@ pub async fn start_warp(app: tauri::AppHandle) -> Result<ProxyStatus, String> {
     let config_path = config_dir.join("warp_config.json");
 
     if !config_path.exists() {
-        println!(
+        vlog_debug!(
             "[proxy_manager] WARP config not found, registering new client at {:?}",
             config_path
         );
@@ -690,7 +690,7 @@ pub async fn start_warp(app: tauri::AppHandle) -> Result<ProxyStatus, String> {
     cmd.stdout(Stdio::null());
     cmd.stderr(Stdio::null());
 
-    println!(
+    vlog_debug!(
         "[proxy_manager] Launching WARP: {:?} on port {}",
         bin_path, port
     );
@@ -717,7 +717,7 @@ pub async fn start_warp(app: tauri::AppHandle) -> Result<ProxyStatus, String> {
     crate::doh_client::clear_client_cache().await;
     crate::stream_server::update_stream_proxy(Some(proxy_url)).await;
 
-    println!("[proxy_manager] WARP active on port {}", port);
+    vlog_debug!("[proxy_manager] WARP active on port {}", port);
     Ok(ProxyStatus {
         proxy_type: ProxyType::Warp,
         is_running: true,
