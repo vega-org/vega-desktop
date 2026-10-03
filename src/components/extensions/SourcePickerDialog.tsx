@@ -1,9 +1,10 @@
 import React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { LuBlocks as Blocks, LuCheck as Check, LuTrash2 as Trash2, LuX as X } from "react-icons/lu";
+import { LuBlocks as Blocks, LuCheck as Check, LuLock as Lock, LuTrash2 as Trash2, LuX as X } from "react-icons/lu";
 import { FocusableButton } from "../layout/FocusableButton";
 import { useDialogFocusBoundary } from "../../lib/hooks/useDialogFocusBoundary";
 import { ProviderSource } from "../../lib/storage/extensionStorage";
+import { sourceTokenStorage } from "../../lib/storage/sourceTokenStorage";
 
 interface SourcePickerDialogProps {
   open: boolean;
@@ -82,7 +83,16 @@ export const SourcePickerDialog: React.FC<SourcePickerDialogProps> = ({
                         <Blocks size={19} />
                       </span>
                       <div className="source-picker-copy">
-                        <strong>{source.author}</strong>
+                        <strong>
+                          {source.author}
+                          {sourceTokenStorage.has(source.author) && (
+                            <Lock
+                              size={13}
+                              className="source-picker-lock"
+                              aria-label="Private source"
+                            />
+                          )}
+                        </strong>
                         <small>{source.url}</small>
                       </div>
                       {selected && <Check size={20} />}

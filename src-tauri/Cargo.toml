@@ -57,10 +57,15 @@ strip = true
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-window-state = "2"
 tauri-plugin-updater = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 wreq = { version = "5", features = ["gzip", "brotli", "deflate", "zstd", "cookies"] }
 wreq-util = "2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
+# Optional mpv player engine (Settings > Player). Windows only: on macOS and
+# Linux mpv cannot draw under the webview in the same window.
+tauri-plugin-libmpv = "0.3.2"
 windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_UI_WindowsAndMessaging", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security"] }
 
 

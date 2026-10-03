@@ -40,7 +40,7 @@ export const ServerSelectMenu: React.FC<ServerSelectMenuProps> = ({
 
   return (
     <FocusContext.Provider value={focusKey}>
-      <div ref={menuRef} className="inline-menu right wide" onClick={stop}>
+      <div ref={menuRef} className="inline-menu right wide server-menu" onClick={stop}>
         {(!streamData || streamData.length === 0) && (
           <div className="inline-menu-item">No alternative servers</div>
         )}
@@ -69,8 +69,8 @@ export const ServerSelectMenu: React.FC<ServerSelectMenuProps> = ({
                 onClose();
               }}
             >
-              <div className="track-details">
-                <span className="track-name">
+              <div className="track-details server-track-details">
+                <span className="track-name" title={s.server || `Server ${idx + 1}`}>
                   {s.server || `Server ${idx + 1}`}
                 </span>
                 <div

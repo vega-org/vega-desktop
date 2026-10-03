@@ -1,10 +1,11 @@
 import axios from "axios";
-import { providerFetch } from "../providers/tauriAxiosAdapter";
+import { providerFetch, tauriAxiosAdapter } from "../providers/tauriAxiosAdapter";
 import { Catalog, EpisodeLink, Info, Post, SettingsField, Stream } from "../providers/types";
 import { getBaseUrl } from "../providers/getBaseUrl";
 import { openWebView } from "../../platform/waf";
 import { extensionManager } from "./ExtensionManager";
 import { extensionStorage } from "../storage/extensionStorage";
+import { getSourceAuthHeaders } from "../storage/sourceTokenStorage";
 import { getErrorMessage } from "./providerErrors";
 
 const MAX_PROVIDER_STATE_SIZE = 1_000_000;
@@ -570,7 +571,12 @@ export class ProviderManager {
           res = await axios.get(testUrl, { timeout: 2000 });
         } catch {
           if (sourceUrl) {
-            res = await axios.get(sourceUrl, { timeout: 8000 });
+            res = await axios.get(sourceUrl, {
+              timeout: 8000,
+              // Native fetch: no CORS preflight for the auth header.
+              adapter: tauriAxiosAdapter,
+              headers: getSourceAuthHeaders(source?.author, sourceUrl),
+            });
           }
         }
 

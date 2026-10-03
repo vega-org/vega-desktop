@@ -4,6 +4,8 @@ import { mainStorage } from "./StorageService";
 /**
  * Storage keys for settings
  */
+export type PlayerEngineKind = "builtin" | "mpv";
+
 export enum SettingsKeys {
   // UI preferences
   PRIMARY_COLOR = "primaryColor",
@@ -61,6 +63,7 @@ export enum SettingsKeys {
   VLC_ENABLED = "vlcEnabled",
   VLC_PATH = "vlcPath",
   PLAYER_ZOOM = "playerZoom",
+  PLAYER_ENGINE = "playerEngine",
   WARP_ENABLED = "warpEnabled",
   BYEDPI_ENABLED = "byedpiEnabled",
   BYEDPI_CMD_ARGS = "byedpiCmdArgs",
@@ -442,12 +445,34 @@ export class SettingsStorage {
   }
 
   // Advanced Settings
+  // Hardware decoding for the mpv player engine.
   isHardwareAccelerationEnabled(): boolean {
-    return mainStorage.getBool(SettingsKeys.HARDWARE_ACCELERATION, false);
+    return mainStorage.getBool(SettingsKeys.HARDWARE_ACCELERATION, true);
   }
 
   setHardwareAccelerationEnabled(enabled: boolean): void {
     mainStorage.setBool(SettingsKeys.HARDWARE_ACCELERATION, enabled);
+  }
+
+  /** True where the mpv player engine is available (Windows desktop). */
+  isMpvEngineSupported(): boolean {
+    const ua = navigator.userAgent.toLowerCase();
+    return ua.includes("windows") && !ua.includes("android");
+  }
+
+  /**
+   * "builtin": HTML5 video + FFmpeg remux/transcode (all platforms).
+   * "mpv": libmpv rendered under the transparent webview (Windows only).
+   */
+  getPlayerEngine(): PlayerEngineKind {
+    if (!this.isMpvEngineSupported()) return "builtin";
+    return mainStorage.getString(SettingsKeys.PLAYER_ENGINE) === "mpv"
+      ? "mpv"
+      : "builtin";
+  }
+
+  setPlayerEngine(engine: PlayerEngineKind): void {
+    mainStorage.setString(SettingsKeys.PLAYER_ENGINE, engine);
   }
 
   // Generic get/set methods for settings not covered by specific methods

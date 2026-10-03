@@ -1,0 +1,7 @@
+{
+  "identifier": "mpv-capability",
+  "description": "mpv player engine (Windows only)",
+  "platforms": ["windows"],
+  "windows": ["main"],
+  "permissions": ["libmpv:default"]
+}

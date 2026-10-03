@@ -898,6 +898,32 @@ canvas.JASSUB {
   flex-shrink: 0;
 }
 
+/* Long labels (for example server names) stay one line and end in "...". */
+.action-btn-label {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inline-menu.server-menu {
+  max-width: min(320px, 80vw);
+}
+
+.inline-menu.server-menu .inline-menu-item {
+  min-width: 0;
+}
+
+.server-track-details {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.server-track-details .track-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .action-btn.text-btn:hover {
   color: #fff;
 }

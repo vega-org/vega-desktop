@@ -33,6 +33,53 @@ async function getCookiesForUrl(url: string): Promise<Record<string, string>> {
   }
 }
 
+/**
+ * Runs JavaScript in the solver window (Rust command waf_eval) and returns
+ * the parsed result. Undefined if the window is gone or the script fails.
+ */
+async function wafEval<T>(script: string): Promise<T | undefined> {
+  try {
+    const raw = await invoke<string>('waf_eval', { script });
+    return JSON.parse(raw) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+const GRAB_HTML_JS = '(function(){try{return document.documentElement.outerHTML;}catch(e){return "";}})()';
+
+/**
+ * Script for OpenWebViewOptions.injectedJavaScript, same contract as mobile.
+ * Runs once per document: a navigation drops the marker, so the next poll
+ * injects again. The page posts through window.ReactNativeWebView.postMessage;
+ * messages are queued and drained by each poll.
+ */
+function buildInjectPollScript(userScript: string): string {
+  return `(function(){
+  try {
+    if (!window.__vegaWaf) {
+      var state = { queue: [] };
+      window.__vegaWaf = state;
+      window.ReactNativeWebView = {
+        postMessage: function (message) {
+          state.queue.push(typeof message === 'string' ? message : JSON.stringify(message));
+        }
+      };
+      try {
+        (function(){
+${userScript}
+        })();
+      } catch (e) {
+        console.warn('[WAF] injected script failed', e);
+      }
+    }
+    return JSON.stringify(window.__vegaWaf.queue.splice(0));
+  } catch (e) {
+    return '[]';
+  }
+})()`;
+}
+
 function buildCookieString(map: Record<string, string>): string {
   return Object.entries(map)
     .map(([name, value]) => `${name}=${value}`)
@@ -82,9 +129,12 @@ export const WafDialog: React.FC = () => {
   }, []);
 
   const finalizeResolve = useCallback(
-    async (req: WafRequest) => {
+    async (req: WafRequest, data?: string) => {
       cleanup();
       try {
+        // Page response like mobile: the injected script's payload, else the
+        // rendered HTML of the page.
+        const pageData = data ?? (await wafEval<string>(GRAB_HTML_JS)) ?? '';
         const cookiesRaw = await invoke<CookieInfo[]>('get_cookies_for_url', {
           webviewLabel: WAF_WEBVIEW_LABEL,
           url: req.url,
@@ -106,7 +156,7 @@ export const WafDialog: React.FC = () => {
         console.log('[WAF] finalizeResolve cookie string:', cookies);
 
         const result: OpenWebViewResult = {
-          data: '',
+          data: typeof pageData === 'string' ? pageData : '',
           cookies,
           cookieMap,
           url: req.url,
@@ -203,6 +253,51 @@ export const WafDialog: React.FC = () => {
       cleanup();
     };
   }, [request?.id]);
+
+  // Injected script (OpenWebViewOptions.injectedJavaScript), like mobile.
+  // A message {__waf: true, data} or {__waf: true, token} resolves the
+  // request with that payload.
+  useEffect(() => {
+    const userScript = request?.injectedJavaScript;
+    if (!request || !userScript) return;
+
+    const req = request;
+    const script = buildInjectPollScript(userScript);
+    let cancelled = false;
+    let running = false;
+
+    const poll = async () => {
+      if (cancelled || running || settledRef.current || !webviewReadyRef.current) return;
+      running = true;
+      try {
+        const queued = JSON.parse((await wafEval<string>(script)) || '[]') as string[];
+        for (const raw of queued) {
+          let msg: any;
+          try {
+            msg = JSON.parse(raw);
+          } catch {
+            continue;
+          }
+          if (!msg?.__waf || (msg.data === undefined && msg.token === undefined)) continue;
+          if (cancelled || settledRef.current) return;
+          settledRef.current = true;
+          const payload = msg.data !== undefined ? msg.data : msg.token;
+          finalizeResolve(req, typeof payload === 'string' ? payload : JSON.stringify(payload));
+          return;
+        }
+      } catch {
+        // Page still loading or mid-navigation; retry on the next tick.
+      } finally {
+        running = false;
+      }
+    };
+
+    const interval = setInterval(poll, 700);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [request?.id, request?.injectedJavaScript, finalizeResolve]);
 
   // Poll for the waitForCookie - exactly like mobile
   useEffect(() => {

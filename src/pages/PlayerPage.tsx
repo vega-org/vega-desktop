@@ -8,6 +8,7 @@ import React, {
 import { useLocation, useNavigate } from "react-router-dom";
 import type { MpvTrack } from "../lib/player/PlayerEngine";
 import { usePlayerEngine } from "../lib/hooks/usePlayerEngine";
+import { useMpvPlayer } from "../lib/hooks/useMpvPlayer";
 import { useStream } from "../lib/hooks/useStream";
 import { usePlayerProgress } from "../lib/hooks/usePlayerSettings";
 import { useMediaSession } from "../lib/hooks/useMediaSession";
@@ -1158,7 +1159,13 @@ const DesktopPlayer: React.FC<any> = ({
   );
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const mpv = usePlayerEngine(videoRef, {
+  // Engine is chosen once per player session (Settings > Player). Both hooks
+  // are always called; the unused one stays idle (no <video> to bind, no
+  // initPlayer call).
+  const [useMpvEngine, setUseMpvEngine] = useState(
+    () => settingsStorage.getPlayerEngine() === "mpv",
+  );
+  const engineOptions: Parameters<typeof usePlayerEngine>[1] = {
     onError: handlePlaybackError,
     onFileLoaded: () => {
       if (playbackRateRef.current && playbackRateRef.current !== 1.0) {
@@ -1184,7 +1191,22 @@ const DesktopPlayer: React.FC<any> = ({
         } catch { }
       }
     },
-  });
+  };
+  const builtinPlayer = usePlayerEngine(
+    useMpvEngine ? undefined : videoRef,
+    engineOptions,
+  );
+  const mpvPlayer = useMpvPlayer(engineOptions);
+  const mpv = useMpvEngine ? mpvPlayer : builtinPlayer;
+
+  // libmpv could not load (missing DLL, no Vulkan driver, ...): fall back to
+  // the built-in engine for this session instead of a dead player.
+  useEffect(() => {
+    if (!useMpvEngine || !mpvPlayer.initializationError) return;
+    console.warn("[PlayerPage] mpv unavailable:", mpvPlayer.initializationError);
+    toast("mpv player could not start. Using the built-in player.", 3500);
+    setUseMpvEngine(false);
+  }, [useMpvEngine, mpvPlayer.initializationError, toast]);
 
   useEffect(() => {
     if (mpv.speed && Math.abs(mpv.speed - playbackRate) > 0.01) {
@@ -2137,19 +2159,25 @@ const DesktopPlayer: React.FC<any> = ({
     <div
       className={`player-page ${showControls ? "controls-visible" : ""}`}
       onMouseMove={handleMouseMove}
-      style={{ backgroundColor: "#000" }}
+      style={{
+        // mpv draws under the webview: let it show through once playing.
+        backgroundColor:
+          useMpvEngine && mpv.currentTime > 0 ? "transparent" : "#000",
+      }}
       {...(isPip ? { "data-tauri-drag-region": true } : {})}
     >
-      <div className="player-video-wrapper">
-        <video
-          ref={mpv.bindVideo}
-          className={`player-video-element ${isCropped ? "cropped" : ""}`}
-          style={{
-            transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : undefined,
-          }}
-          playsInline
-        />
-      </div>
+      {!useMpvEngine && (
+        <div className="player-video-wrapper">
+          <video
+            ref={mpv.bindVideo}
+            className={`player-video-element ${isCropped ? "cropped" : ""}`}
+            style={{
+              transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : undefined,
+            }}
+            playsInline
+          />
+        </div>
+      )}
 
       {streamLoading && (
         <div

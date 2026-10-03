@@ -30,6 +30,15 @@ import {
   type ProviderSource,
 } from "../lib/storage/extensionStorage";
 import { createProviderSource } from "../lib/utils/helpers";
+import {
+  normalizeSourceToken,
+  sourceTokenStorage,
+} from "../lib/storage/sourceTokenStorage";
+import {
+  clearPendingSourceToken,
+  getPendingSourceToken,
+} from "../lib/services/sourceIntent";
+import { useLocation, useNavigate } from "react-router-dom";
 import useContentStore from "../lib/zustand/contentStore";
 import "./ExtensionsPage.css";
 
@@ -92,6 +101,13 @@ export const ExtensionsPage: React.FC = () => {
   const [sources, setSources] = useState<ProviderSource[]>([]);
   const [activeSource, setActiveSource] = useState<ProviderSource | null>(null);
   const [inputValue, setInputValue] = useState("");
+  const [isPrivateSource, setIsPrivateSource] = useState(false);
+  const [sourceToken, setSourceToken] = useState("");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const intentState = location.state as
+    | { addSource?: string; requestId?: number }
+    | null;
   const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [showAddSource, setShowAddSource] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -215,6 +231,28 @@ export const ExtensionsPage: React.FC = () => {
     loadSources();
   }, []);
 
+  // Add source intent (Android): open the dialog prefilled. The user confirms.
+  useEffect(() => {
+    if (!intentState?.addSource) {
+      return;
+    }
+    const token = getPendingSourceToken(intentState.requestId);
+    setShowSourcePicker(false);
+    setInputValue(intentState.addSource);
+    setIsPrivateSource(Boolean(token));
+    setSourceToken(token ?? "");
+    setShowAddSource(true);
+    // Drop the state so going back to this page does not reopen the dialog.
+    navigate(location.pathname, { replace: true, state: null });
+  }, [intentState?.addSource, intentState?.requestId]);
+
+  const resetAddSourceForm = () => {
+    setInputValue("");
+    setIsPrivateSource(false);
+    setSourceToken("");
+    clearPendingSourceToken();
+  };
+
   const providers = useMemo(() => {
     const combined = new Map<
       string,
@@ -257,11 +295,25 @@ export const ExtensionsPage: React.FC = () => {
 
     try {
       const source = createProviderSource(inputValue);
+      if (isPrivateSource) {
+        const normalizedToken = normalizeSourceToken(sourceToken);
+        if (!normalizedToken) {
+          setError("Enter a valid GitHub token.");
+          return;
+        }
+        if (!source.url.startsWith("https://raw.githubusercontent.com/")) {
+          setError("Private sources are supported only on GitHub.");
+          return;
+        }
+        sourceTokenStorage.set(source.author, normalizedToken);
+      } else {
+        sourceTokenStorage.delete(source.author);
+      }
       extensionStorage.addProviderSources(source.author, source.url);
       extensionStorage.setDefaultProviderSource(source.author);
       const nextSources = extensionStorage.getProviderSources();
       setSources(nextSources);
-      setInputValue("");
+      resetAddSourceForm();
       setError("");
       setShowAddSource(false);
       applySource(extensionStorage.getProviderSource() ?? source);
@@ -290,6 +342,8 @@ export const ExtensionsPage: React.FC = () => {
 
   const handleCloseAddSource = () => {
     setShowAddSource(false);
+    resetAddSourceForm();
+    setError("");
     if (tvMode) {
       let attempts = 0;
       const restoreFocus = () => {
@@ -719,6 +773,11 @@ export const ExtensionsPage: React.FC = () => {
         }}
         inputValue={inputValue}
         setInputValue={setInputValue}
+        isPrivate={isPrivateSource}
+        setIsPrivate={setIsPrivateSource}
+        token={sourceToken}
+        setToken={setSourceToken}
+        error={showAddSource ? error : ""}
         onAddSource={handleAddSource}
         canCancel={sources.length > 0}
       />

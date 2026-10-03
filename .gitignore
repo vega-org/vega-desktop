@@ -46,3 +46,4 @@ src-tauri/resources/ffmpeg-sidecar/*
 !src-tauri/resources/ffmpeg-sidecar/.gitkeep
 .build_ffmpeg_android/
 scratch/
+src-tauri/lib/*.dll

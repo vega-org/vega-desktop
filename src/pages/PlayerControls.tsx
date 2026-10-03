@@ -845,9 +845,10 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                   focusKey="PLAYER_SERVER"
                   className={`action-btn text-btn ${openMenu === "server" ? "active" : ""}`}
                   onClick={(e) => toggleMenu(e, "server")}
+                  title={selectedStream?.server || selectedStream?.quality || "Server"}
                 >
                   <ServerIcon size={20} />
-                  <span>
+                  <span className="action-btn-label">
                     {selectedStream?.server ||
                       selectedStream?.quality ||
                       "Server"}

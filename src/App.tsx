@@ -1,5 +1,11 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+} from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { client } from "./lib/client";
 import { Layout } from "./components/layout/Layout";
@@ -38,8 +44,33 @@ import { useGamepadNavigation } from "./lib/hooks/useGamepadNavigation";
 import { ModalFocusProvider } from "./lib/context/ModalFocusContext";
 import { cleanupAllStreamTorrents } from "./lib/services/torrentStreamService";
 import { syncProxySettings } from "./lib/services/proxyService";
+import {
+  setPendingSourceToken,
+  subscribeSourceIntent,
+} from "./lib/services/sourceIntent";
 
 let isNavInitialized = false;
+
+// Opens Extensions with the add source dialog prefilled from the Android add
+// source intent. The user still confirms there, so another app or web page
+// cannot add a source silently.
+function SourceIntentHandler() {
+  const navigate = useNavigate();
+
+  useEffect(
+    () =>
+      subscribeSourceIntent((payload) => {
+        const requestId = Date.now();
+        setPendingSourceToken(requestId, payload.token);
+        navigate("/extensions", {
+          state: { addSource: payload.url, requestId },
+        });
+      }),
+    [navigate],
+  );
+
+  return null;
+}
 
 export default function App() {
   initDownloadListeners();
@@ -140,6 +171,7 @@ export default function App() {
         <WafDialog />
         <ToastContainer />
         <BrowserRouter>
+          <SourceIntentHandler />
           {isWindows && <WindowControls />}
           <Routes>
             {/* Player is outside Layout since it needs fullscreen without sidebar */}

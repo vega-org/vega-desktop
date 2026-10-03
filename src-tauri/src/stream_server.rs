@@ -6,7 +6,7 @@ use axum::{
     routing::get,
     Router,
 };
-use futures_util::stream;
+use futures_util::{stream, StreamExt};
 use hickory_resolver::TokioAsyncResolver;
 use reqwest::{
     dns::{Addrs, Name, Resolve, Resolving},
@@ -343,6 +343,29 @@ async fn handle_remux_info(
     StatusCode::NO_CONTENT.into_response()
 }
 
+/// Port of the running proxy, for building FFmpeg input URLs.
+static PROXY_PORT: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
+
+/// FFmpeg input for a source. Network sources go through the local /source
+/// route, so the upstream connection is made by reqwest: it retries failed
+/// connects (servers that allow only one or two connections per IP refuse
+/// the rest) and uses the app's DoH and proxy settings, which FFmpeg ignores.
+pub fn ffmpeg_input_url(source: &str, headers: Option<&HashMap<String, String>>) -> String {
+    let is_network = source.starts_with("http://") || source.starts_with("https://");
+    let Some(port) = PROXY_PORT.get().filter(|_| is_network) else {
+        return source.to_string();
+    };
+    let mut url = format!("http://127.0.0.1:{}/source?url={}", port, encode_url(source));
+    if let Some(json) = headers
+        .filter(|h| !h.is_empty())
+        .and_then(|h| serde_json::to_string(h).ok())
+    {
+        url.push_str("&headers=");
+        url.push_str(&encode_url(&json));
+    }
+    url
+}
+
 pub async fn start_server(
     local_files: LocalFileRegistry,
     app_handle: Option<tauri::AppHandle>,
@@ -352,6 +375,7 @@ pub async fn start_server(
         .map_err(|e| e.to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     println!("[stream_proxy] Starting on port {}", port);
+    let _ = PROXY_PORT.set(port);
 
     let state = ProxyState {
         client: GLOBAL_STREAM_CLIENT.clone(),
@@ -365,6 +389,7 @@ pub async fn start_server(
     let app = Router::new()
         .route("/playlist.m3u8", get(handle_proxy))
         .route("/segment.ts", get(handle_segment))
+        .route("/source", get(handle_source))
         .route("/local/{token}/{file_name}", get(handle_local_file))
         .route("/file", get(handle_direct_file))
         .route("/remux", get(handle_remux))
@@ -644,11 +669,17 @@ async fn fetch_with_retry(
     client: &Client,
     url: &str,
     headers_map: &HashMap<String, String>,
+    range: Option<&str>,
     label: &str,
 ) -> Result<reqwest::Response, StatusCode> {
-    let max_attempts = 3;
+    // FFmpeg input waits on this request, and a busy server frees a
+    // connection within seconds, so retry source requests longer.
+    let max_attempts = if label == "source" { 6 } else { 3 };
     for attempt in 1..=max_attempts {
-        let req = build_request(client, url, headers_map);
+        let mut req = build_request(client, url, headers_map);
+        if let Some(range) = range {
+            req = req.header(header::RANGE, range);
+        }
         match req.send().await {
             Ok(res) => {
                 let status = res.status();
@@ -705,6 +736,7 @@ async fn handle_proxy(
         &client,
         &query.url,
         &headers_map,
+        None,
         "playlist",
     )
     .await?;
@@ -742,13 +774,12 @@ async fn handle_proxy(
     if !is_master && query.sub != Some(true) {
         let parent_master_url = resolve_url(&query.url, "../master.m3u8");
         if parent_master_url != query.url && !query.url.ends_with("master.m3u8") {
-            if let Ok(master_res) = fetch_with_retry(
-                &client,
-                &parent_master_url,
-                &headers_map,
-                "parent_master",
-            )
-            .await
+            // Best-effort probe: one short attempt, so a missing master
+            // playlist never delays startup with retries.
+            if let Ok(master_res) = build_request(&client, &parent_master_url, &headers_map)
+                .timeout(std::time::Duration::from_secs(4))
+                .send()
+                .await
             {
                 if master_res.status().is_success() {
                     if let Ok(master_text) = master_res.text().await {
@@ -877,9 +908,23 @@ async fn handle_proxy(
         .into_response())
 }
 
+/// Offset of the first MPEG-TS packet: a 0x47 sync byte repeated at 188 byte
+/// steps. Some CDNs prepend junk (for example a fake image header).
+fn find_ts_sync_offset(data: &[u8]) -> Option<usize> {
+    (0..data.len().saturating_sub(188)).find(|&i| {
+        data[i] == 0x47
+            && data[i + 188] == 0x47
+            && (i + 376 >= data.len() || data[i + 376] == 0x47)
+    })
+}
+
+/// Bytes buffered to look for junk before the first TS packet.
+const TS_SYNC_SCAN_BYTES: usize = 64 * 1024;
+
 async fn handle_segment(
     State(state): State<ProxyState>,
     Query(query): Query<SegmentQuery>,
+    request_headers: HeaderMap,
 ) -> Result<Response, StatusCode> {
     let headers_map = collect_request_headers(
         &query.referer,
@@ -887,19 +932,28 @@ async fn handle_segment(
         &query.origin,
         &query.headers,
     );
+    // hls.js sends Range for #EXT-X-BYTERANGE playlists, where every segment
+    // is a slice of one large file. Without it the whole file is downloaded
+    // for each segment.
+    let range = request_headers
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
 
-    let client = state.client.read().await;
+    let client = state.client.read().await.clone();
     let response = fetch_with_retry(
         &client,
         &query.url,
         &headers_map,
+        range.as_deref(),
         "segment",
     )
     .await?;
 
+    let status = response.status();
     let content_type = response
         .headers()
-        .get(axum::http::header::CONTENT_TYPE)
+        .get(header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("video/MP2T")
         .to_string();
@@ -910,40 +964,94 @@ async fn handle_segment(
         || url_lower.contains(".m4v")
         || url_lower.contains(".m4a");
 
-    if is_fmp4 {
-        let stream = response.bytes_stream();
-        let body = axum::body::Body::from_stream(stream);
-        return Ok(Response::builder()
-            .header(axum::http::header::CONTENT_TYPE, content_type)
-            .body(body)
-            .unwrap());
+    if is_fmp4 || range.is_some() {
+        // Pass through untouched: byte ranges must keep their exact length.
+        let mut builder = Response::builder().status(status).header(
+            header::CONTENT_TYPE,
+            if is_fmp4 { content_type.as_str() } else { "video/MP2T" },
+        );
+        for name in [header::CONTENT_LENGTH, header::CONTENT_RANGE, header::ACCEPT_RANGES] {
+            if let Some(value) = response.headers().get(&name) {
+                builder = builder.header(name, value);
+            }
+        }
+        return builder
+            .body(Body::from_stream(response.bytes_stream()))
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    let bytes = response.bytes().await.map_err(|e| {
-        eprintln!("[stream_proxy] Failed to read segment body: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-    let mut data = bytes.to_vec();
-
-    for i in 0..data.len().saturating_sub(188) {
-        if data[i] == 0x47 && data[i + 188] == 0x47 {
-            if i + 376 < data.len() && data[i + 376] != 0x47 {
-                continue;
+    // Full TS segment: buffer only the start to strip junk before the first
+    // packet, then stream the rest instead of holding the whole segment.
+    let mut upstream = response.bytes_stream();
+    let mut prefix = Vec::new();
+    while prefix.len() < TS_SYNC_SCAN_BYTES {
+        match upstream.next().await {
+            Some(Ok(chunk)) => prefix.extend_from_slice(&chunk),
+            Some(Err(e)) => {
+                eprintln!("[stream_proxy] Failed to read segment body: {}", e);
+                return Err(StatusCode::BAD_GATEWAY);
             }
-            if i > 0 {
-                data = data[i..].to_vec();
-            }
-            break;
+            None => break,
         }
     }
-
-    let response_content_type = if data.starts_with(b"\x47") {
+    let offset = find_ts_sync_offset(&prefix).unwrap_or(0);
+    let first = Bytes::from(prefix).slice(offset..);
+    let response_content_type = if first.starts_with(b"\x47") {
         "video/MP2T".to_string()
     } else {
         content_type
     };
 
-    Ok(([(axum::http::header::CONTENT_TYPE, response_content_type)], data).into_response())
+    let body = stream::once(async move { Ok::<_, reqwest::Error>(first) }).chain(upstream);
+    Response::builder()
+        .header(header::CONTENT_TYPE, response_content_type)
+        .body(Body::from_stream(body))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+/// Byte-range pass-through for FFmpeg network input (see ffmpeg_input_url).
+async fn handle_source(
+    State(state): State<ProxyState>,
+    Query(query): Query<SegmentQuery>,
+    request_headers: HeaderMap,
+) -> Result<Response, StatusCode> {
+    let headers_map = collect_request_headers(
+        &query.referer,
+        &query.ua,
+        &query.origin,
+        &query.headers,
+    );
+    let range = request_headers
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+
+    let client = state.client.read().await.clone();
+    let response = fetch_with_retry(
+        &client,
+        &query.url,
+        &headers_map,
+        range.as_deref(),
+        "source",
+    )
+    .await?;
+
+    let mut builder = Response::builder().status(response.status());
+    for name in [
+        header::CONTENT_TYPE,
+        header::CONTENT_LENGTH,
+        header::CONTENT_RANGE,
+        header::ACCEPT_RANGES,
+        header::LAST_MODIFIED,
+        header::ETAG,
+    ] {
+        if let Some(value) = response.headers().get(&name) {
+            builder = builder.header(name, value);
+        }
+    }
+    builder
+        .body(Body::from_stream(response.bytes_stream()))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 fn resolve_source_url(state: &ProxyState, raw_url: &str) -> String {
@@ -1322,6 +1430,75 @@ mod remux_timing_tests {
     }
 }
 
+#[cfg(target_os = "windows")]
+// Integrated GPU encoders first: on hybrid laptops decoding runs on the iGPU
+// (default adapter), so encoding there avoids copying frames between GPUs and
+// keeps the discrete GPU asleep. Encoders whose GPU is missing fail the test.
+const HW_H264_ENCODERS: &[&str] = &["h264_amf", "h264_qsv", "h264_nvenc"];
+#[cfg(target_os = "macos")]
+const HW_H264_ENCODERS: &[&str] = &["h264_videotoolbox"];
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+const HW_H264_ENCODERS: &[&str] = &["h264_nvenc"];
+
+static HW_H264_ENCODER: tokio::sync::OnceCell<Option<&'static str>> =
+    tokio::sync::OnceCell::const_new();
+
+/// First hardware H.264 encoder that works on this machine, tested once per
+/// app run with a tiny encode. A build can list an encoder whose GPU or
+/// driver is missing, so listing alone is not enough.
+async fn hw_h264_encoder(ffmpeg_path: &Path) -> Option<&'static str> {
+    *HW_H264_ENCODER
+        .get_or_init(|| async {
+            for &encoder in HW_H264_ENCODERS {
+                let mut cmd = tokio::process::Command::new(ffmpeg_path);
+                #[cfg(target_os = "windows")]
+                cmd.creation_flags(0x08000000);
+                cmd.args([
+                    "-hide_banner", "-v", "error", "-f", "lavfi", "-i",
+                    "color=black:s=1280x720:r=24:d=0.5", "-c:v", encoder,
+                    "-f", "null", "-",
+                ])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .kill_on_drop(true);
+                let works = matches!(
+                    tokio::time::timeout(std::time::Duration::from_secs(10), cmd.status()).await,
+                    Ok(Ok(status)) if status.success()
+                );
+                if works {
+                    eprintln!("[remux] Hardware encoder: {}", encoder);
+                    return Some(encoder);
+                }
+            }
+            eprintln!("[remux] No hardware encoder, using libx264");
+            None
+        })
+        .await
+}
+
+fn push_hw_encoder_args(cmd: &mut tokio::process::Command, encoder: &str) {
+    cmd.arg("-c:v").arg(encoder);
+    match encoder {
+        "h264_nvenc" => {
+            cmd.args(["-preset", "p2", "-tune", "ll"]);
+        }
+        "h264_amf" => {
+            cmd.args(["-usage", "lowlatency", "-quality", "speed", "-rc", "vbr_latency"]);
+        }
+        "h264_qsv" => {
+            cmd.args(["-preset", "veryfast"]);
+        }
+        "h264_videotoolbox" => {
+            cmd.args(["-realtime", "1"]);
+        }
+        _ => {}
+    }
+    // Output goes over a local pipe, so a high bitrate costs nothing and
+    // keeps 4K sharp. nv12 is 8-bit 4:2:0, which every H.264 decoder takes.
+    cmd.args(["-b:v", "20M", "-maxrate", "40M", "-bufsize", "40M", "-pix_fmt", "nv12"]);
+}
+
 async fn handle_remux(
     State(state): State<ProxyState>,
     Query(query): Query<RemuxQuery>,
@@ -1340,16 +1517,17 @@ async fn handle_remux(
                 let path = PathBuf::from(&source);
                 return serve_local_file(&path, headers.get(header::RANGE)).await;
             }
-            let client = state.client.read().await;
-            let mut req = client.get(&source);
-            if let Some(ref r) = query.referer {
-                req = req.header("Referer", r);
-            }
-            if let Some(ref ua) = query.ua {
-                req = req.header("User-Agent", ua);
-            }
-            if let Some(ref orig) = query.origin {
-                req = req.header("Origin", orig);
+            let client = state.client.read().await.clone();
+            let headers_map = collect_request_headers(
+                &query.referer,
+                &query.ua,
+                &query.origin,
+                &query.headers,
+            );
+            let mut req = build_request(&client, &source, &headers_map);
+            // Forward Range so the player can seek in the direct stream.
+            if let Some(range) = headers.get(header::RANGE) {
+                req = req.header(header::RANGE, range);
             }
             let resp = req.send().await.map_err(|err| {
                 eprintln!("[remux] Direct stream error: {}", err);
@@ -1359,6 +1537,9 @@ async fn handle_remux(
             let mut builder = Response::builder().status(status);
             if let Some(ct) = resp.headers().get(axum::http::header::CONTENT_TYPE) {
                 builder = builder.header(axum::http::header::CONTENT_TYPE, ct);
+            }
+            if let Some(cl) = resp.headers().get(axum::http::header::CONTENT_LENGTH) {
+                builder = builder.header(axum::http::header::CONTENT_LENGTH, cl);
             }
             if let Some(cr) = resp.headers().get(axum::http::header::CONTENT_RANGE) {
                 builder = builder.header(axum::http::header::CONTENT_RANGE, cr);
@@ -1437,7 +1618,12 @@ async fn handle_remux(
         cmd.arg("-headers").arg(headers_str.join("\r\n"));
     }
 
-    cmd.arg("-i").arg(&source);
+    if is_transcode {
+        // Decode on the GPU when possible (d3d11va, videotoolbox, vaapi...).
+        // FFmpeg falls back to software decoding if no method works.
+        cmd.arg("-hwaccel").arg("auto");
+    }
+    cmd.arg("-i").arg(ffmpeg_input_url(&source, Some(&headers_map)));
 
     let v_idx_opt = query.video_index;
     let a_idx_opt = query.audio_index;
@@ -1459,14 +1645,29 @@ async fn handle_remux(
     }
 
     if is_transcode {
-        cmd.arg("-c:v")
-            .arg("libx264")
-            .arg("-preset")
-            .arg("veryfast")
-            .arg("-crf")
-            .arg("22")
-            .arg("-pix_fmt")
-            .arg("yuv420p");
+        // Keyframe every ~2 s: fragments stay small, so playback starts and
+        // seeks fast (encoder defaults are up to 250 frames).
+        cmd.arg("-g").arg("48");
+        if let Some(encoder) = hw_h264_encoder(&ffmpeg_path).await {
+            push_hw_encoder_args(&mut cmd, encoder);
+        } else {
+            // Software encoding is the heaviest path. Encoding 4K with libx264
+            // needs most of a CPU, so cap the output at 1080p. On 4 threads
+            // or fewer also use the cheapest preset.
+            let low_end = std::thread::available_parallelism()
+                .map(|n| n.get() <= 4)
+                .unwrap_or(true);
+            cmd.arg("-vf")
+                .arg("scale=-2:'min(1080,ih)':flags=fast_bilinear")
+                .arg("-c:v")
+                .arg("libx264")
+                .arg("-preset")
+                .arg(if low_end { "ultrafast" } else { "veryfast" })
+                .arg("-crf")
+                .arg("22")
+                .arg("-pix_fmt")
+                .arg("yuv420p");
+        }
     } else {
         cmd.arg("-c:v").arg("copy");
         let video_codec = query
@@ -1560,15 +1761,25 @@ async fn handle_remux(
     let (source_pts_sender, source_pts_receiver) = tokio::sync::oneshot::channel::<f64>();
     if let Some(err_pipe) = stderr {
         tokio::spawn(async move {
-            let mut lines = BufReader::new(err_pipe).lines();
-            let mut sender = Some(source_pts_sender);
-            while let Ok(Some(line)) = lines.next_line().await {
-                if let Some(pts) = parse_ffmpeg_source_video_pts(&line, video_stream_index) {
-                    if let Some(tx) = sender.take() {
-                        let _ = tx.send(pts);
+            let mut reader = BufReader::new(err_pipe);
+            let mut line = Vec::new();
+            // Read raw bytes: a non-UTF-8 line (for example in metadata)
+            // must not end the loop, or stderr fills up and FFmpeg stalls.
+            loop {
+                line.clear();
+                match reader.read_until(b'\n', &mut line).await {
+                    Ok(0) | Err(_) => return,
+                    Ok(_) => {
+                        let text = String::from_utf8_lossy(&line);
+                        if let Some(pts) = parse_ffmpeg_source_video_pts(&text, video_stream_index) {
+                            let _ = source_pts_sender.send(pts);
+                            break;
+                        }
                     }
                 }
             }
+            // -debug_ts logs every packet. Discard the rest without parsing.
+            let _ = tokio::io::copy(&mut reader, &mut tokio::io::sink()).await;
         });
     }
 
@@ -1746,6 +1957,19 @@ mod local_file_tests {
         collections::HashMap,
         sync::{Arc, Mutex},
     };
+
+    #[test]
+    fn finds_ts_sync_after_junk_prefix() {
+        let mut data = vec![0x89, b'P', b'N', b'G', 0x47];
+        for _ in 0..3 {
+            let mut packet = vec![0u8; 188];
+            packet[0] = 0x47;
+            data.extend_from_slice(&packet);
+        }
+        assert_eq!(super::find_ts_sync_offset(&data), Some(5));
+        assert_eq!(super::find_ts_sync_offset(&data[5..]), Some(0));
+        assert_eq!(super::find_ts_sync_offset(b"not a transport stream"), None);
+    }
 
     #[test]
     fn parses_local_file_ranges() {

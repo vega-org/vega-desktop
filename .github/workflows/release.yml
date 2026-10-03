@@ -41,6 +41,15 @@ jobs:
       - name: Bundle native FFmpeg sidecars
         run: node scripts/setup-ffmpeg.mjs
 
+      # mpv player engine (Windows only). postinstall already ran the script;
+      # run it again so a failed download fails here, not in the bundler.
+      - name: Bundle libmpv (Windows only)
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        run: |
+          node scripts/setup-libmpv.mjs
+          ls -la src-tauri/lib/libmpv-2.dll src-tauri/lib/libmpv-wrapper.dll src-tauri/resources/windows/vc_redist.x64.exe
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:

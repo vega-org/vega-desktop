@@ -12,9 +12,18 @@
     ]
   },
   "bundle": {
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "resources": [
-      "resources/ffmpeg-sidecar/*"
-    ]
+      "resources/ffmpeg-sidecar/*",
+      "lib/*.dll",
+      "resources/windows/vc_redist.x64.exe"
+    ],
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh"
+      }
+    }
   }
 }

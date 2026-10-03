@@ -7,6 +7,10 @@ import {
   ProviderSource,
 } from "../storage/extensionStorage";
 import { mainStorage } from "../storage/StorageService";
+import {
+  getSourceAuthHeaders,
+  sourceTokenStorage,
+} from "../storage/sourceTokenStorage";
 import { createProviderSource } from "../utils/helpers";
 
 export const isRateLimitError = (error: unknown): boolean => {
@@ -19,6 +23,21 @@ export const isRateLimitError = (error: unknown): boolean => {
   }
   const msg = String((error as any)?.message || "").toLowerCase();
   return msg.includes("rate limit") || msg.includes("status code 403") || msg.includes("status code 429");
+};
+
+// A private source answers 401, 403 or 404 when its token is wrong, expired
+// or has no access. Check this before throwIfRateLimited, which reads 403 as
+// a rate limit.
+const throwIfSourceAccessDenied = (error: unknown, author: string): void => {
+  const status = (error as any)?.response?.status;
+  if (
+    sourceTokenStorage.has(author) &&
+    (status === 401 || status === 403 || status === 404)
+  ) {
+    throw new Error(
+      "Cannot access this private source. Check that the GitHub token is valid and has read access to the repo.",
+    );
+  }
 };
 
 export const throwIfRateLimited = (error: unknown): void => {
@@ -145,6 +164,9 @@ export class ExtensionManager {
       const response = await axios.get(manifestUrl, {
         timeout: 10000,
         adapter: tauriAxiosAdapter,
+        headers: this.testMode
+          ? undefined
+          : getSourceAuthHeaders(activeSource.author, manifestUrl),
       });
 
       if (!response.data || !Array.isArray(response.data)) {
@@ -170,6 +192,9 @@ export class ExtensionManager {
       return providers;
     } catch (error) {
       console.error("Failed to fetch manifest:", error);
+      if (!this.testMode) {
+        throwIfSourceAccessDenied(error, activeSource.author);
+      }
       throwIfRateLimited(error);
 
       // Return cached data if available
@@ -208,12 +233,16 @@ export class ExtensionManager {
           const response = await axios.get(url, {
             timeout: 15000,
             adapter: tauriAxiosAdapter,
+            headers: getSourceAuthHeaders(sourceAuthor, url),
           });
 
           if (response.data) {
             modules[fileName] = response.data;
           }
         } catch (error) {
+          if (requiredFiles.includes(fileName)) {
+            throwIfSourceAccessDenied(error, sourceAuthor);
+          }
           throwIfRateLimited(error);
           if (requiredFiles.includes(fileName)) {
             console.error(

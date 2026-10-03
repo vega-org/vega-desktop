@@ -9,7 +9,12 @@
   "extensions": {
     "shareTarget": false,
     "fileAssociations": [],
-    "protocolHandlers": []
+    "protocolHandlers": [
+      {
+        "name": "vega",
+        "displayName": "Vega"
+      }
+    ]
   },
   "signing": {
     "pfx": null,

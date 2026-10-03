@@ -1,4 +1,5 @@
 import {mainStorage} from './StorageService';
+import {sourceTokenStorage} from './sourceTokenStorage';
 
 /**
  * Provider Source
@@ -179,6 +180,7 @@ export class ExtensionStorage {
     }
 
     mainStorage.setArray(ExtensionKeys.PROVIDER_SOURCES, filtered);
+    sourceTokenStorage.delete(author);
   }
 
   /**

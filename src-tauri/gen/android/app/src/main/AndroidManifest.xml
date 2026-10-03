@@ -24,6 +24,13 @@
                 <!-- AndroidTV support -->
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
+            <!-- Custom "add provider source" intent (action + "url" extra, no data
+                 URI). BROWSABLE lets web pages fire it through a Chrome intent: URI. -->
+            <intent-filter>
+                <action android:name="vega.intent.action.ADD_SOURCE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+            </intent-filter>
         </activity>
 
         <activity

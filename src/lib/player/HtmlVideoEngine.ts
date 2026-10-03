@@ -8,6 +8,7 @@ import type {
   ChapterInfo,
 } from "./PlayerEngine";
 import { JassubManager } from "./jassubManager";
+import { isLowEndDevice } from "./deviceProfile";
 import {
   isTorrentUrl,
   resolveTorrentStream,
@@ -86,6 +87,22 @@ function mergeSrtContent(first: string, second: string): string {
   }
   return cues.map((cue, index) => `${index + 1}\n${cue}`).join("\n\n");
 }
+
+/** End time in seconds of the last cue in SRT text, or null if none. */
+function lastCueEndSeconds(srt: string): number | null {
+  let last: number | null = null;
+  for (const match of srt.matchAll(/-->\s*(\d+):(\d{2}):(\d{2})[,.](\d{3})/g)) {
+    const seconds =
+      Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]) + Number(match[4]) / 1000;
+    if (last === null || seconds > last) last = seconds;
+  }
+  return last;
+}
+
+/** Fetch the next subtitle window when the playhead is this close to its end. */
+const SUBTITLE_PREFETCH_SECONDS = 30;
+/** Cues per rolling window fetch. */
+const SUBTITLE_ROLLING_CUES = 60;
 
 function resolveMseMimeType(videoCodec: string, hasAudio: boolean): string | null {
   if (typeof window === "undefined" || !window.MediaSource) return null;
@@ -245,6 +262,11 @@ export class HtmlVideoEngine implements PlayerEngine {
   private subtitleRenderQueue: Promise<void> = Promise.resolve();
   private subtitleContentMap: Map<number, string> = new Map();
   private subtitleWindowContentMap: Map<number, string> = new Map();
+  // Rolling subtitle windows for remote sources: end (source seconds) of the
+  // last fetched window, and a guard against overlapping fetches.
+  private subtitleRollingEnd: number | null = null;
+  private subtitleRollingBusy = false;
+  private subtitleRollingRetryAt = 0;
   private streamGeneration: number = 0;
   private sourceReferencePTS: number = 0;
   private outputReferencePTS: number = 0;
@@ -572,6 +594,7 @@ export class HtmlVideoEngine implements PlayerEngine {
       }
 
       this.subtitleWindowContentMap.set(trackId, windowText);
+      this.subtitleRollingEnd = lastCueEndSeconds(windowText);
       const existing = this.subtitleContentMap.get(trackId) || "";
       const displayText = mergeSrtContent(existing, windowText);
       this.subtitleContentMap.set(trackId, displayText);
@@ -581,6 +604,73 @@ export class HtmlVideoEngine implements PlayerEngine {
         "[HtmlVideoEngine] Failed to refresh subtitles after seek:",
         error,
       );
+    }
+  }
+
+  private isRemoteSource(): boolean {
+    const source = this.currentSource || "";
+    return (
+      /^https?:\/\//i.test(source) &&
+      !/^https?:\/\/(127\.0\.0\.1|localhost)([:/]|$)/i.test(source)
+    );
+  }
+
+  /**
+   * Remote sources only: when playback nears the end of the subtitles
+   * fetched so far, fetch the next window and merge it in.
+   */
+  private async maybeExtendSubtitleWindow(sourceTime: number): Promise<void> {
+    const trackId = this.selectedSubtitleIndex;
+    const windowEnd = this.subtitleRollingEnd;
+    if (
+      typeof trackId !== "number" ||
+      trackId >= 10000 ||
+      windowEnd === null ||
+      this.subtitleRollingBusy ||
+      this.isSeeking ||
+      sourceTime < windowEnd - SUBTITLE_PREFETCH_SECONDS ||
+      Date.now() < this.subtitleRollingRetryAt ||
+      !this.isRemoteSource()
+    ) {
+      return;
+    }
+
+    const requestId = this.subtitleRequestId;
+    const startTime = Math.max(windowEnd, sourceTime);
+    this.subtitleRollingBusy = true;
+    try {
+      const windowText = await invoke<string>("extract_subtitle_window", {
+        source: this.currentSource,
+        trackIndex: trackId,
+        startTime,
+        headers: this.currentHeaders,
+        maxCues: SUBTITLE_ROLLING_CUES,
+      }).catch(() => "");
+      if (
+        this.isDestroyed ||
+        this.subtitleRequestId !== requestId ||
+        this.selectedSubtitleIndex !== trackId ||
+        this.subtitleRollingEnd !== windowEnd
+      ) {
+        return;
+      }
+
+      const end = windowText.includes("-->") ? lastCueEndSeconds(windowText) : null;
+      if (end === null || end <= windowEnd) {
+        // No new cues (a long silent stretch, or the fetch failed): move on
+        // a little and wait before trying again.
+        this.subtitleRollingEnd = startTime + 60;
+        this.subtitleRollingRetryAt = Date.now() + 10_000;
+        return;
+      }
+
+      this.subtitleRollingEnd = end;
+      const merged = mergeSrtContent(this.subtitleContentMap.get(trackId) || "", windowText);
+      this.subtitleContentMap.set(trackId, merged);
+      this.subtitleWindowContentMap.set(trackId, merged);
+      await this.queueSubtitleRender(trackId, requestId, merged);
+    } finally {
+      this.subtitleRollingBusy = false;
     }
   }
 
@@ -619,6 +709,7 @@ export class HtmlVideoEngine implements PlayerEngine {
         currentTime: actualTime,
         duration: this.probedDuration || v.duration || 0,
       });
+      void this.maybeExtendSubtitleWindow(actualTime);
       if (v.paused && this.jassub) {
         this.jassub.renderFrame(v.currentTime);
       }
@@ -1322,6 +1413,9 @@ export class HtmlVideoEngine implements PlayerEngine {
         } else {
           this.playbackMode = "transcode";
         }
+        console.info(
+          `[HtmlVideoEngine] Playback mode: ${this.playbackMode} (video ${primaryVideo?.codec_name || "unknown"} supported=${videoSupported}, audio supported=${audioSupported}, container ${formatName || "unknown"})`,
+        );
       } else {
         const isMkv =
           source.toLowerCase().includes(".mkv") ||
@@ -1438,9 +1532,19 @@ export class HtmlVideoEngine implements PlayerEngine {
       hlsUrl = `http://127.0.0.1:${port}/playlist.m3u8?${params.toString()}`;
     }
 
+    // hls.js keeps the whole played back buffer by default (backBufferLength
+    // Infinity), so memory grows for the full episode. Cap it, and keep less
+    // ahead on low-end devices.
+    const lowEnd = isLowEndDevice();
     const hls = new Hls({
       startPosition: this.virtualTimeOffset > 0 ? this.virtualTimeOffset : -1,
       enableWorker: true,
+      backBufferLength: lowEnd ? 10 : 30,
+      maxBufferLength: lowEnd ? 20 : 30,
+      maxMaxBufferLength: lowEnd ? 60 : 300,
+      maxBufferSize: (lowEnd ? 30 : 60) * 1000 * 1000,
+      // Auto quality: skip levels larger than the player on screen.
+      capLevelToPlayerSize: true,
     });
     this.hlsInstance = hls;
 
@@ -1485,7 +1589,14 @@ export class HtmlVideoEngine implements PlayerEngine {
         videoTracks = data.levels.map((level, idx) => {
           const height = level.height || 0;
           const width = level.width || 0;
-          const label = height > 0 ? `${height}p` : `Level ${idx + 1}`;
+          // No RESOLUTION in the playlist: placeholder until the decoded
+          // size is known (see fillLevelSizeFromVideo).
+          const label =
+            height > 0
+              ? `${height}p`
+              : data.levels.length === 1
+                ? "Default"
+                : `Level ${idx + 1}`;
           return {
             id: idx,
             type: "video",
@@ -1560,7 +1671,61 @@ export class HtmlVideoEngine implements PlayerEngine {
       }
     });
 
+    // Media playlists (no master) carry no RESOLUTION, so hls.js levels have
+    // height 0. Take the size from the decoded video instead, like ExoPlayer.
+    const fillLevelSizeFromVideo = () => {
+      const width = this.video.videoWidth;
+      const height = this.video.videoHeight;
+      if (this.hlsInstance !== hls || !height) return;
+      const levelIndex = hls.levels.length === 1 ? 0 : hls.currentLevel;
+      const level = hls.levels[levelIndex];
+      if (!level || level.height) return;
+      const track = this.state.videoTracks.find((t) => t.id === levelIndex);
+      if (!track || track.demuxH === height) return;
+      const updated: TrackInfo = {
+        ...track,
+        title: `${height}p`,
+        demuxW: width,
+        demuxH: height,
+      };
+      const videoTracks = this.state.videoTracks.map((t) => (t.id === levelIndex ? updated : t));
+      this.updateState({
+        videoTracks,
+        videoHeight: height,
+        tracks: [...this.state.tracks.filter((t) => t.type !== "video"), ...videoTracks],
+      });
+    };
+    this.video.addEventListener("resize", fillLevelSizeFromVideo);
+    hls.on(Hls.Events.DESTROYING, () => {
+      this.video.removeEventListener("resize", fillLevelSizeFromVideo);
+    });
+
+    // Recover in place before giving up: a dropped segment request or a
+    // decode hiccup should not end playback.
+    let networkRetries = 0;
+    let mediaRecoveries = 0;
+    hls.on(Hls.Events.FRAG_BUFFERED, () => {
+      networkRetries = 0;
+      mediaRecoveries = 0;
+    });
+
     hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (this.hlsInstance !== hls) return;
+      if (data.fatal && data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 3) {
+        networkRetries++;
+        console.warn("[HtmlVideoEngine] HLS network error, retrying:", data.details);
+        setTimeout(() => {
+          if (this.hlsInstance === hls) hls.startLoad();
+        }, 1000 * networkRetries);
+        return;
+      }
+      if (data.fatal && data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries < 2) {
+        mediaRecoveries++;
+        console.warn("[HtmlVideoEngine] HLS media error, recovering:", data.details);
+        if (mediaRecoveries === 2) hls.swapAudioCodec();
+        hls.recoverMediaError();
+        return;
+      }
       if (data.fatal) {
         console.warn("[HtmlVideoEngine] HLS fatal error, trying direct HTML5 video:", data);
         hls.destroy();
@@ -2152,6 +2317,8 @@ export class HtmlVideoEngine implements PlayerEngine {
 
         try {
           console.warn("[SubDebug] Starting extraction for track", id, "source:", this.currentSource?.substring(0, 80));
+          this.subtitleRollingEnd = null;
+          this.subtitleRollingRetryAt = 0;
           const previousWindow = this.subtitleWindowContentMap.get(id);
           if (previousWindow && previousWindow.includes("-->")) {
             await this.queueSubtitleRender(id, currentReqId, previousWindow);
@@ -2176,7 +2343,19 @@ export class HtmlVideoEngine implements PlayerEngine {
           ) {
             this.subtitleWindowContentMap.set(id, windowText);
             this.subtitleContentMap.set(id, windowText);
+            this.subtitleRollingEnd = lastCueEndSeconds(windowText);
             await this.queueSubtitleRender(id, currentReqId, windowText);
+          }
+
+          // Remote source: a full extraction reads the whole file (tens of GB
+          // for a 4K MKV) next to playback and holds one of the server's
+          // connections. Rolling windows ahead of the playhead are used
+          // instead (maybeExtendSubtitleWindow).
+          if (this.isRemoteSource()) {
+            if (this.subtitleRollingEnd === null) {
+              this.subtitleRollingEnd = this.state.currentTime;
+            }
+            return;
           }
 
           // Only start the complete extraction after the current-time window

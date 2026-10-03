@@ -45,6 +45,11 @@
     ]
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["vega"]
+      }
+    },
     "updater": {
       "endpoints": [
         "https://github.com/vega-org/vega-desktop/releases/latest/download/latest.json"

@@ -1,5 +1,6 @@
 import JASSUB from "jassub";
 import { convertSubToAss } from "./subUtils";
+import { isLowEndDevice } from "./deviceProfile";
 
 export class JassubManager {
   private instance: JASSUB | null = null;
@@ -168,6 +169,9 @@ export class JassubManager {
         defaultFont: "liberation sans",
         wasmUrl,
         modernWasmUrl,
+        // Subtitles render at screen resolution; on a 4K or HiDPI screen that
+        // is a large canvas per frame. Cap it, lower on low-end devices.
+        maxRenderHeight: isLowEndDevice() ? 720 : 1080,
       });
 
       const origManualRender = this.instance.manualRender.bind(this.instance);

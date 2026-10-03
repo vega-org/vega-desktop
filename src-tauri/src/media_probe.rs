@@ -138,7 +138,7 @@ pub async fn probe_media(
         }
     }
 
-    cmd.arg(&clean_source);
+    cmd.arg(crate::stream_server::ffmpeg_input_url(&clean_source, headers.as_ref()));
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     let output = tokio::time::timeout(std::time::Duration::from_secs(25), cmd.output())
@@ -478,7 +478,7 @@ pub async fn extract_subtitles_to_string(
     }
 
     cmd.arg("-i")
-        .arg(&clean_source)
+        .arg(crate::stream_server::ffmpeg_input_url(&clean_source, headers.as_ref()))
         .arg("-map")
         .arg(format!("0:{}", sub_index))
         .arg("-vn")
@@ -663,7 +663,11 @@ pub async fn extract_subtitle_window(
     sub_index: u32,
     start_time: f64,
     headers: Option<HashMap<String, String>>,
+    max_cues: Option<u32>,
 ) -> Result<String, String> {
+    // Small by default so the first response is fast; rolling fetches ahead
+    // of the playhead ask for more.
+    let max_cues = max_cues.unwrap_or(8).clamp(1, 500) as usize;
     let clean_source = crate::ffmpeg_resolver::clean_source(source);
     let cache_dir = get_subs_cache_dir();
     let cache_key = compute_sub_cache_key(&clean_source, sub_index);
@@ -718,7 +722,7 @@ pub async fn extract_subtitle_window(
         }
     }
     cmd.arg("-i")
-        .arg(&clean_source)
+        .arg(crate::stream_server::ffmpeg_input_url(&clean_source, headers.as_ref()))
         .arg("-map")
         .arg(format!("0:{sub_index}"))
         .arg("-vn")
@@ -764,7 +768,7 @@ pub async fn extract_subtitle_window(
                 output.extend_from_slice(&chunk[..count]);
                 // Return a small usable window quickly. The complete track keeps
                 // extracting into the regular subtitle cache in parallel.
-                if output.windows(3).filter(|window| *window == b"-->").count() >= 8 {
+                if output.windows(3).filter(|window| *window == b"-->").count() >= max_cues {
                     break;
                 }
             }
@@ -835,7 +839,7 @@ pub async fn find_seek_keyframe(
         }
     }
 
-    cmd.arg(&clean_source);
+    cmd.arg(crate::stream_server::ffmpeg_input_url(&clean_source, headers.as_ref()));
     cmd.stdout(Stdio::piped()).stderr(Stdio::null());
 
     let output = match tokio::time::timeout(std::time::Duration::from_millis(1500), cmd.output()).await {

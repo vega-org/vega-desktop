@@ -1,6 +1,14 @@
-import React from "react";
+import React, { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { LuPlus as Plus, LuX as X, LuGlobe as Globe } from "react-icons/lu";
+import {
+  LuPlus as Plus,
+  LuX as X,
+  LuGlobe as Globe,
+  LuLock as Lock,
+  LuKeyRound as Key,
+  LuEye as Eye,
+  LuEyeOff as EyeOff,
+} from "react-icons/lu";
 import { setFocus } from "@noriginmedia/norigin-spatial-navigation-core";
 import { FocusableButton } from "../layout/FocusableButton";
 import { FocusableInput } from "../layout/FocusableInput";
@@ -11,6 +19,11 @@ interface AddSourceDialogProps {
   onOpenChange: (open: boolean) => void;
   inputValue: string;
   setInputValue: (value: string) => void;
+  isPrivate: boolean;
+  setIsPrivate: (value: boolean) => void;
+  token: string;
+  setToken: (value: string) => void;
+  error?: string;
   onAddSource: () => void;
   canCancel: boolean;
 }
@@ -20,9 +33,54 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
   onOpenChange,
   inputValue,
   setInputValue,
+  isPrivate,
+  setIsPrivate,
+  token,
+  setToken,
+  error,
   onAddSource,
   canCancel,
 }) => {
+  const [showToken, setShowToken] = useState(false);
+  const actionFocusKey = canCancel ? "ADD_SOURCE_CANCEL" : "ADD_SOURCE_SUBMIT";
+  // Row above the action buttons: the token field when private, else the
+  // visibility toggle.
+  const aboveActionsFocusKey = isPrivate
+    ? "ADD_SOURCE_TOKEN"
+    : "ADD_SOURCE_PUBLIC";
+  const belowToggleFocusKey = isPrivate ? "ADD_SOURCE_TOKEN" : actionFocusKey;
+
+  const toggleArrow =
+    (self: "public" | "private") =>
+    (direction: string): boolean => {
+      if (direction === "up") {
+        setFocus("ADD_SOURCE_INPUT");
+      } else if (direction === "down") {
+        setFocus(belowToggleFocusKey);
+      } else if (direction === "right" && self === "public") {
+        setFocus("ADD_SOURCE_PRIVATE");
+      } else if (direction === "left" && self === "private") {
+        setFocus("ADD_SOURCE_PUBLIC");
+      }
+      return false;
+    };
+
+  const renderVisibilityOption = (value: boolean) => {
+    const selected = isPrivate === value;
+    const Icon = value ? Lock : Globe;
+    return (
+      <FocusableButton
+        focusKey={value ? "ADD_SOURCE_PRIVATE" : "ADD_SOURCE_PUBLIC"}
+        className={`source-visibility-option${selected ? " selected" : ""}`}
+        role="radio"
+        aria-checked={selected}
+        onClick={() => setIsPrivate(value)}
+        onArrowPress={toggleArrow(value ? "private" : "public")}
+      >
+        <Icon size={16} aria-hidden="true" /> {value ? "Private" : "Public"}
+      </FocusableButton>
+    );
+  };
   const { ref, DialogFocusProvider } = useDialogFocusBoundary({
     isOpen: open,
     focusKey: "ADD_SOURCE_DIALOG",
@@ -61,7 +119,9 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
               <div>
                 <Dialog.Title>Add source</Dialog.Title>
                 <Dialog.Description>
-                  Enter a GitHub author or a hosted provider manifest URL.
+                  Enter a repo URL (GitHub, Codeberg, Bitbucket, GitLab) or
+                  author name. Use author@cb, author@bb or author@gl for
+                  non-GitHub hosts.
                 </Dialog.Description>
               </div>
               <FocusableButton
@@ -86,7 +146,7 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
               wrapperClassName="extension-dialog-input"
               startIcon={<Globe size={19} aria-hidden="true" />}
               type="text"
-              placeholder="GitHub author or provider source URL"
+              placeholder="author, author@cb or repo URL"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => {
@@ -101,17 +161,90 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
                   return false;
                 }
                 if (direction === "down") {
-                  if (canCancel) {
-                    setFocus("ADD_SOURCE_CANCEL");
-                  } else {
-                    setFocus("ADD_SOURCE_SUBMIT");
-                  }
+                  setFocus("ADD_SOURCE_PUBLIC");
                   return false;
                 }
                 return true;
               }}
               aria-label="Provider source"
             />
+
+            <div
+              className="source-visibility-toggle"
+              role="radiogroup"
+              aria-label="Source visibility"
+            >
+              {renderVisibilityOption(false)}
+              {renderVisibilityOption(true)}
+            </div>
+
+            {isPrivate && (
+              <>
+                <div className="source-token-row">
+                  <FocusableInput
+                    focusKey="ADD_SOURCE_TOKEN"
+                    wrapperClassName="extension-dialog-input source-token-input"
+                    startIcon={<Key size={19} aria-hidden="true" />}
+                    type={showToken ? "text" : "password"}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="GitHub token"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        onAddSource();
+                      }
+                    }}
+                    onArrowPress={(direction) => {
+                      if (direction === "up") {
+                        setFocus("ADD_SOURCE_PRIVATE");
+                        return false;
+                      }
+                      if (direction === "down") {
+                        setFocus(actionFocusKey);
+                        return false;
+                      }
+                      if (direction === "right") {
+                        setFocus("ADD_SOURCE_TOKEN_VISIBILITY");
+                        return false;
+                      }
+                      return true;
+                    }}
+                    aria-label="GitHub token"
+                  />
+                  <FocusableButton
+                    focusKey="ADD_SOURCE_TOKEN_VISIBILITY"
+                    className="source-token-visibility"
+                    aria-label={showToken ? "Hide token" : "Show token"}
+                    onClick={() => setShowToken((current) => !current)}
+                    onArrowPress={(direction) => {
+                      if (direction === "left") {
+                        setFocus("ADD_SOURCE_TOKEN");
+                      } else if (direction === "up") {
+                        setFocus("ADD_SOURCE_PRIVATE");
+                      } else if (direction === "down") {
+                        setFocus("ADD_SOURCE_SUBMIT");
+                      }
+                      return false;
+                    }}
+                  >
+                    {showToken ? <EyeOff size={19} /> : <Eye size={19} />}
+                  </FocusableButton>
+                </div>
+                <p className="source-token-hint">
+                  GitHub only. Use a fine-grained token with read-only Contents
+                  access to this repo. The token is stored on this device.
+                </p>
+              </>
+            )}
+
+            {error && (
+              <p className="source-dialog-error" role="alert">
+                {error}
+              </p>
+            )}
 
             <div className="extensions-dialog-actions">
               {canCancel && (
@@ -121,7 +254,7 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
                   focusKey="ADD_SOURCE_CANCEL"
                   onArrowPress={(direction) => {
                     if (direction === "up") {
-                      setFocus("ADD_SOURCE_INPUT");
+                      setFocus(aboveActionsFocusKey);
                       return false;
                     }
                     if (direction === "right") {
@@ -140,7 +273,7 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
                 focusKey="ADD_SOURCE_SUBMIT"
                 onArrowPress={(direction) => {
                   if (direction === "up") {
-                    setFocus("ADD_SOURCE_INPUT");
+                    setFocus(aboveActionsFocusKey);
                     return false;
                   }
                   if (direction === "left") {

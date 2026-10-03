@@ -23,6 +23,11 @@
     <TargetDeviceFamily Name="Windows.Desktop"
       MinVersion="{{MIN_VERSION}}"
       MaxVersionTested="10.0.22621.0" />
+    <!-- VC++ runtime (vcruntime140.dll) for lib/libmpv-wrapper.dll, the mpv
+         player engine. The NSIS build installs vc_redist instead. -->
+    <PackageDependency Name="Microsoft.VCLibs.140.00.UWPDesktop"
+      MinVersion="14.0.30704.0"
+      Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
   </Dependencies>
 
   <Resources>

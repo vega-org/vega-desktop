@@ -123,8 +123,9 @@ async fn extract_subtitle_window(
     track_index: u32,
     start_time: f64,
     headers: Option<HashMap<String, String>>,
+    max_cues: Option<u32>,
 ) -> Result<String, String> {
-    media_probe::extract_subtitle_window(&source, track_index, start_time, headers).await
+    media_probe::extract_subtitle_window(&source, track_index, start_time, headers, max_cues).await
 }
 
 #[tauri::command]
@@ -619,10 +620,59 @@ fn ensure_window_in_work_area(window: tauri::WebviewWindow, maximized: bool) -> 
     Ok(())
 }
 
+/// Lets the mpv plugin find libmpv-2.dll and libmpv-wrapper.dll, which the
+/// installer puts in `<install dir>/lib`.
+#[cfg(target_os = "windows")]
+fn configure_bundled_dll_search_path() {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::{core::PCWSTR, Win32::System::LibraryLoader::SetDllDirectoryW};
+
+    let Some(lib_dir) = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(|parent| parent.join("lib")))
+        .filter(|path| path.is_dir())
+    else {
+        return;
+    };
+
+    let wide_path: Vec<u16> = lib_dir
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    if let Err(error) = unsafe { SetDllDirectoryW(PCWSTR(wide_path.as_ptr())) } {
+        eprintln!(
+            "[libmpv] Failed to add bundled library directory '{}': {}",
+            lib_dir.display(),
+            error
+        );
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "windows")]
+    configure_bundled_dll_search_path();
+
     let local_files = Arc::new(Mutex::new(HashMap::new()));
+    // Single instance must be the first plugin. A second launch (for example
+    // from a vega:// link) hands its URL to the deep-link plugin of the
+    // running app and exits, so focus the existing window.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init());
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let builder = tauri::Builder::default();
+
+    let builder = builder
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
@@ -639,6 +689,8 @@ pub fn run() {
                 .build(),
         );
 
+    #[cfg(target_os = "windows")]
+    let builder = builder.plugin(tauri_plugin_libmpv::init());
 
     builder
         .manage(ProxyState {
@@ -655,6 +707,16 @@ pub fn run() {
         })
         .setup(|app| {
             process_guard::init_process_guard();
+
+            // Installers register vega:// on Windows and Linux. This also
+            // covers dev runs and portable copies. macOS uses Info.plist.
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(e) = app.deep_link().register_all() {
+                    eprintln!("[deep_link] Failed to register vega:// scheme: {}", e);
+                }
+            }
 
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
@@ -713,6 +775,7 @@ pub fn run() {
             download_manager::list_download_subtitles,
             cookie_manager::get_cookies_for_url,
             cookie_manager::clear_cookies_for_url,
+            cookie_manager::waf_eval,
             open_external_player,
             toggle_devtools,
             set_player_fullscreen,

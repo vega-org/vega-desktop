@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { settingsStorage } from "../../lib/storage";
+import type { PlayerEngineKind } from "../../lib/storage/SettingsStorage";
 import { open } from "@tauri-apps/plugin-dialog";
 import { LuFolderOpen as FolderOpen } from "react-icons/lu";
 import { FocusableButton } from "../layout/FocusableButton";
@@ -13,6 +14,10 @@ export const PlayerSettings: React.FC = () => {
   const [externalPlayerEnabled, setExternalPlayerEnabled] = useState(false);
   const [vlcEnabled, setVlcEnabled] = useState(false);
   const [vlcPath, setVlcPath] = useState("");
+  const [playerEngine, setPlayerEngine] = useState<PlayerEngineKind>(() =>
+    settingsStorage.getPlayerEngine(),
+  );
+  const mpvSupported = settingsStorage.isMpvEngineSupported();
 
   const isAndroid = navigator.userAgent.toLowerCase().includes("android");
 
@@ -33,6 +38,11 @@ export const PlayerSettings: React.FC = () => {
   const handleToggleEpisodeSidebarButton = (enabled: boolean) => {
     setShowEpisodeSidebarButton(enabled);
     settingsStorage.setShowPlayerEpisodeSidebar(enabled);
+  };
+
+  const handleSelectEngine = (engine: PlayerEngineKind) => {
+    setPlayerEngine(engine);
+    settingsStorage.setPlayerEngine(engine);
   };
 
   const handleToggleHwAccel = () => {
@@ -110,22 +120,59 @@ export const PlayerSettings: React.FC = () => {
 
       <div className="settings-divider" />
 
-      {/* Hardware Acceleration */}
-      <div className="settings-row">
-        <div className="settings-info">
-          <h3 className="label-lg">Hardware Acceleration</h3>
-          <p className="body-md text-muted">
-            Use GPU to decode video. Turn off if you experience playback issues.
-          </p>
-        </div>
-        <Switch
-          checked={hwAccelEnabled}
-          onCheckedChange={() => handleToggleHwAccel()}
-          aria-label="Enable hardware acceleration"
-        />
-      </div>
+      {mpvSupported && (
+        <>
+          {/* Player Engine (Windows only) */}
+          <div className="settings-row">
+            <div className="settings-info">
+              <h3 className="label-lg">Player Engine</h3>
+              <p className="body-md text-muted">
+                {playerEngine === "mpv"
+                  ? "mpv: plays HEVC, 4K and HDR with GPU decoding and low CPU use."
+                  : "Built-in: browser video with FFmpeg conversion for unsupported formats."}{" "}
+                Applies the next time the player opens.
+              </p>
+            </div>
+            <div className="theme-toggle-group">
+              <FocusableButton
+                className={`theme-toggle-btn ${playerEngine === "builtin" ? "active" : ""}`}
+                onClick={() => handleSelectEngine("builtin")}
+              >
+                Built-in
+              </FocusableButton>
+              <FocusableButton
+                className={`theme-toggle-btn ${playerEngine === "mpv" ? "active" : ""}`}
+                onClick={() => handleSelectEngine("mpv")}
+              >
+                mpv
+              </FocusableButton>
+            </div>
+          </div>
 
-      <div className="settings-divider" />
+          <div className="settings-divider" />
+        </>
+      )}
+
+      {playerEngine === "mpv" && (
+        <>
+          {/* Hardware Acceleration (mpv only) */}
+          <div className="settings-row">
+            <div className="settings-info">
+              <h3 className="label-lg">Hardware Acceleration</h3>
+              <p className="body-md text-muted">
+                Use GPU to decode video. Turn off if you experience playback issues.
+              </p>
+            </div>
+            <Switch
+              checked={hwAccelEnabled}
+              onCheckedChange={() => handleToggleHwAccel()}
+              aria-label="Enable hardware acceleration"
+            />
+          </div>
+
+          <div className="settings-divider" />
+        </>
+      )}
 
       {/* External Player / VLC */}
       {isAndroid ? (

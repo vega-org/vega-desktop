@@ -66,3 +66,32 @@ pub async fn clear_cookies_for_url<R: Runtime>(
 
     Ok(())
 }
+
+const WAF_WEBVIEW_LABEL: &str = "waf-solver";
+const WAF_EVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Runs JavaScript in the WAF solver window and returns the result as a JSON
+/// string. The solver window shows a remote site without IPC access, so the
+/// dialog uses this to inject provider scripts and read their messages back.
+/// Limited to the solver window: it never runs in the main app window.
+#[tauri::command]
+pub async fn waf_eval<R: Runtime>(app: AppHandle<R>, script: String) -> Result<String, String> {
+    let webview = app
+        .get_webview_window(WAF_WEBVIEW_LABEL)
+        .ok_or_else(|| "WAF window is not open".to_string())?;
+
+    let (tx, rx) = tokio::sync::oneshot::channel::<String>();
+    let tx = std::sync::Mutex::new(Some(tx));
+    webview
+        .eval_with_callback(script, move |result| {
+            if let Some(tx) = tx.lock().ok().and_then(|mut slot| slot.take()) {
+                let _ = tx.send(result);
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    tokio::time::timeout(WAF_EVAL_TIMEOUT, rx)
+        .await
+        .map_err(|_| "WAF script timed out".to_string())?
+        .map_err(|_| "WAF window closed".to_string())
+}
