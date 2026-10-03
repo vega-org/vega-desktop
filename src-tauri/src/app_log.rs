@@ -83,6 +83,11 @@ pub fn init(dir: PathBuf) {
     let _ = log::set_logger(&PLUGIN_LOGGER);
     log::set_max_level(log::LevelFilter::Debug);
 
+    std::thread::Builder::new()
+        .name("VegaSystemInfo".into())
+        .spawn(|| record(Level::Info, "System", &system_info()))
+        .ok();
+
     let next = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         record(Level::Error, "VegaCrash", &format!("Panic: {info}"));
@@ -307,10 +312,9 @@ pub async fn log_export(
     let version = app.package_info().version.to_string();
     tauri::async_runtime::spawn_blocking(move || {
         let mut header = format!(
-            "Vega Desktop {}\nOS {} {}\nDetailed logging {}\n",
+            "Vega Desktop {}\n{}\nDetailed logging {}\n",
             version,
-            std::env::consts::OS,
-            std::env::consts::ARCH,
+            system_info(),
             if is_detailed() { "on" } else { "off" },
         );
         if let Some(extra) = extra_header.filter(|text| !text.trim().is_empty()) {
@@ -325,4 +329,186 @@ pub async fn log_export(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+// System report --------------------------------------------------------------
+
+/// OS, WebView, display server and media-stack details for bug reports.
+/// Runs a few quick commands, so call it off the main thread.
+pub fn system_info() -> String {
+    let mut lines = vec![format!(
+        "OS {} ({} {})",
+        os_version(),
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    )];
+    lines.push(format!(
+        "WebView {}",
+        tauri::webview_version().unwrap_or_else(|e| format!("unknown ({e})"))
+    ));
+    #[cfg(target_os = "macos")]
+    {
+        let cpu = command_output("sysctl", &["-n", "machdep.cpu.brand_string"]);
+        let model = command_output("sysctl", &["-n", "hw.model"]);
+        lines.push(format!("Mac {} / {}", model, cpu));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        lines.push(format!("Kernel {}", command_output("uname", &["-r"])));
+        lines.push(linux_session_info());
+        lines.push(linux_gstreamer_info());
+    }
+    match crate::ffmpeg_resolver::get_ffmpeg_path() {
+        Ok(path) => {
+            let version = std::process::Command::new(&path)
+                .arg("-version")
+                .output()
+                .ok()
+                .and_then(|out| {
+                    String::from_utf8_lossy(&out.stdout)
+                        .lines()
+                        .next()
+                        .map(str::to_string)
+                })
+                .unwrap_or_else(|| "did not run".into());
+            lines.push(format!("FFmpeg {} ({})", version, path.display()));
+        }
+        Err(e) => lines.push(format!("FFmpeg not found: {e}")),
+    }
+    lines.join("\n")
+}
+
+/// First line of a command's stdout, or "unknown".
+#[allow(dead_code)]
+fn command_output(program: &str, args: &[&str]) -> String {
+    let mut cmd = std::process::Command::new(program);
+    cmd.args(args);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    cmd.output()
+        .ok()
+        .filter(|out| out.status.success())
+        .and_then(|out| {
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty())
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "unknown".into())
+}
+
+fn os_version() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        // "Microsoft Windows [Version 10.0.26200.1234]"
+        command_output("cmd", &["/C", "ver"])
+    }
+    #[cfg(target_os = "macos")]
+    {
+        format!("macOS {}", command_output("sw_vers", &["-productVersion"]))
+    }
+    #[cfg(target_os = "linux")]
+    {
+        fs::read_to_string("/etc/os-release")
+            .ok()
+            .and_then(|text| {
+                text.lines()
+                    .find_map(|line| line.strip_prefix("PRETTY_NAME="))
+                    .map(|name| name.trim_matches('"').to_string())
+            })
+            .unwrap_or_else(|| "Linux".into())
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        std::env::consts::OS.to_string()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_session_info() -> String {
+    let var = |name: &str| std::env::var(name).unwrap_or_else(|_| "-".into());
+    let mut text = format!(
+        "Session {} (desktop {}, WAYLAND_DISPLAY {}, DISPLAY {})",
+        var("XDG_SESSION_TYPE"),
+        var("XDG_CURRENT_DESKTOP"),
+        var("WAYLAND_DISPLAY"),
+        var("DISPLAY"),
+    );
+    if std::env::var("APPIMAGE").is_ok() {
+        text.push_str(", AppImage");
+    }
+    if std::env::var("FLATPAK_ID").is_ok() {
+        text.push_str(", Flatpak");
+    }
+    // Rendering overrides people set to work around WebKitGTK bugs.
+    let overrides: Vec<String> = [
+        "WEBKIT_DISABLE_DMABUF_RENDERER",
+        "WEBKIT_DISABLE_COMPOSITING_MODE",
+        "GDK_BACKEND",
+        "LIBVA_DRIVER_NAME",
+        "GST_PLUGIN_PATH",
+        "GST_PLUGIN_SYSTEM_PATH",
+    ]
+    .iter()
+    .filter_map(|name| std::env::var(name).ok().map(|v| format!("{name}={v}")))
+    .collect();
+    if !overrides.is_empty() {
+        text.push_str(&format!("\nEnv {}", overrides.join(" ")));
+    }
+    text
+}
+
+/// WebKitGTK plays video through GStreamer. Missing plugins are the usual
+/// cause of a black or failed player on Linux, so report which are present.
+#[cfg(target_os = "linux")]
+fn linux_gstreamer_info() -> String {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    for var in ["GST_PLUGIN_PATH", "GST_PLUGIN_SYSTEM_PATH", "GST_PLUGIN_PATH_1_0"] {
+        if let Ok(value) = std::env::var(var) {
+            dirs.extend(std::env::split_paths(&value));
+        }
+    }
+    for dir in [
+        "/usr/lib/x86_64-linux-gnu/gstreamer-1.0",
+        "/usr/lib/aarch64-linux-gnu/gstreamer-1.0",
+        "/usr/lib64/gstreamer-1.0",
+        "/usr/lib/gstreamer-1.0",
+        "/usr/local/lib/gstreamer-1.0",
+    ] {
+        dirs.push(PathBuf::from(dir));
+    }
+    dirs.retain(|dir| dir.is_dir());
+
+    // (plugin file, what it provides)
+    let plugins = [
+        ("libgstlibav.so", "gst-libav: H.264/HEVC/AAC/AC-3 software decode"),
+        ("libgstisomp4.so", "good: MP4 demux"),
+        ("libgstmatroska.so", "good: MKV/WebM demux"),
+        ("libgstvideoparsersbad.so", "bad: H.264/HEVC parsers"),
+        ("libgstva.so", "bad: VA-API hardware decode"),
+        ("libgstvaapi.so", "vaapi: legacy VA-API decode"),
+        ("libgstnvcodec.so", "bad: NVIDIA decode"),
+        ("libgstopus.so", "base: Opus"),
+        ("libgstaudioparsers.so", "good: audio parsers"),
+        ("libgstfdkaac.so", "bad: AAC (fdk)"),
+    ];
+    let mut present = Vec::new();
+    let mut missing = Vec::new();
+    for (file, label) in plugins {
+        if dirs.iter().any(|dir| dir.join(file).exists()) {
+            present.push(label);
+        } else {
+            missing.push(label);
+        }
+    }
+    format!(
+        "GStreamer dirs {:?}\nGStreamer present: {}\nGStreamer missing: {}",
+        dirs,
+        if present.is_empty() { "none".to_string() } else { present.join("; ") },
+        if missing.is_empty() { "none".to_string() } else { missing.join("; ") },
+    )
 }

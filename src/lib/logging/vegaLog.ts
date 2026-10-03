@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { mainStorage } from "../storage";
+import { frontendDiagnostics } from "./diagnostics";
 
 /**
  * Keeps the newest frontend log lines in the same on-disk log as the Rust
@@ -97,7 +98,7 @@ export const exportLogs = async (extraHeader?: string): Promise<boolean> => {
     filters: [{ name: "Text", extensions: ["txt"] }],
   });
   if (!path) return false;
-  const header = [`User agent ${navigator.userAgent}`, extraHeader]
+  const header = [frontendDiagnostics(), extraHeader]
     .filter(Boolean)
     .join("\n");
   await invoke("log_export", { path, extraHeader: header });
@@ -147,4 +148,11 @@ export const installVegaLog = (): void => {
     void flush();
   });
   window.addEventListener("beforeunload", () => void flush());
+
+  // Once per launch, so every exported log shows what this WebView supports.
+  setTimeout(() => {
+    try {
+      console.info(`[Diagnostics]\n${frontendDiagnostics()}`);
+    } catch {}
+  }, 0);
 };

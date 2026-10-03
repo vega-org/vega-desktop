@@ -282,6 +282,11 @@ export class HtmlVideoEngine implements PlayerEngine {
   private currentTorrentInfoHash: string | null = null;
   private hasTriedCodecFallback: boolean = false;
   private isCodecFallbackInProgress: boolean = false;
+  // Black-screen detection: one health check per started stream.
+  private playbackCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  private playbackCheckKey = "";
+  private probedHasVideo = false;
+  private mediaSummary = "not probed";
   private playbackSpeed: number = 1.0;
   private mseSession: {
     mediaSource: MediaSource;
@@ -738,6 +743,7 @@ export class HtmlVideoEngine implements PlayerEngine {
       this.releaseFreezeFrame();
       finishSeeking();
       this.updateState({ isBuffering: false, isPaused: false });
+      this.schedulePlaybackCheck();
       if (this.jassub) {
         this.jassub.setBuffering(false);
         this.jassub.resize();
@@ -899,41 +905,123 @@ export class HtmlVideoEngine implements PlayerEngine {
       if (
         err?.code === 4 && // MEDIA_ERR_SRC_NOT_SUPPORTED
         this.playbackMode === "remux" &&
-        !this.hasTriedCodecFallback &&
-        !this.isDestroyed
+        this.tryTranscodeFallback(msg)
       ) {
-        this.hasTriedCodecFallback = true;
-        this.isCodecFallbackInProgress = true;
-        this.playbackMode = "transcode";
-        const fallbackLoadId = this.loadRequestId;
-        const resumeAfterPrepare = !this.state.isPaused;
-        const restartTime = Math.max(
-          0,
-          Number.isFinite(this.state.currentTime)
-            ? this.state.currentTime
-            : this.requestedStartTime,
-        );
-        this.updateState({ error: null, isBuffering: true });
-        void this.startStream(restartTime, resumeAfterPrepare)
-          .then(async () => {
-            if (fallbackLoadId !== this.loadRequestId) return;
-            if (resumeAfterPrepare) await this.play();
-            this.isCodecFallbackInProgress = false;
-          })
-          .catch((fallbackError) => {
-            if (fallbackLoadId !== this.loadRequestId) return;
-            this.isCodecFallbackInProgress = false;
-            const fallbackMessage = fallbackError instanceof Error
-              ? fallbackError.message
-              : String(fallbackError);
-            if (fallbackMessage.toLowerCase().includes("superseded")) return;
-            console.warn("[HtmlVideoEngine] Codec fallback failed:", fallbackError);
-            this.updateState({ error: fallbackMessage, isBuffering: false });
-          });
         return;
       }
+      console.error(
+        `[HtmlVideoEngine] Playback failed: ${msg} (${this.describePlayback()})`,
+      );
       this.updateState({ error: msg, isBuffering: false });
     });
+  }
+
+  /**
+   * Restarts the current stream as an FFmpeg H.264 transcode, once per load.
+   * False when that is not possible or was already tried.
+   */
+  private tryTranscodeFallback(reason: string): boolean {
+    if (
+      this.hasTriedCodecFallback ||
+      this.isCodecFallbackInProgress ||
+      this.isDestroyed ||
+      this.playbackMode === "transcode" ||
+      this.hlsInstance
+    ) {
+      return false;
+    }
+    console.warn(
+      `[HtmlVideoEngine] Switching to transcode: ${reason} (${this.describePlayback()})`,
+    );
+    this.hasTriedCodecFallback = true;
+    this.isCodecFallbackInProgress = true;
+    this.playbackMode = "transcode";
+    const fallbackLoadId = this.loadRequestId;
+    const resumeAfterPrepare = !this.state.isPaused;
+    const restartTime = Math.max(
+      0,
+      Number.isFinite(this.state.currentTime)
+        ? this.state.currentTime
+        : this.requestedStartTime,
+    );
+    this.updateState({ error: null, isBuffering: true });
+    void this.startStream(restartTime, resumeAfterPrepare)
+      .then(async () => {
+        if (fallbackLoadId !== this.loadRequestId) return;
+        if (resumeAfterPrepare) await this.play();
+        this.isCodecFallbackInProgress = false;
+      })
+      .catch((fallbackError) => {
+        if (fallbackLoadId !== this.loadRequestId) return;
+        this.isCodecFallbackInProgress = false;
+        const fallbackMessage = fallbackError instanceof Error
+          ? fallbackError.message
+          : String(fallbackError);
+        if (fallbackMessage.toLowerCase().includes("superseded")) return;
+        console.warn("[HtmlVideoEngine] Codec fallback failed:", fallbackError);
+        this.updateState({ error: fallbackMessage, isBuffering: false });
+      });
+    return true;
+  }
+
+  /** One line with everything needed to tell why playback looks wrong. */
+  private describePlayback(): string {
+    const v = this.video;
+    const quality = typeof v.getVideoPlaybackQuality === "function"
+      ? v.getVideoPlaybackQuality()
+      : null;
+    return [
+      `mode ${this.hlsInstance ? "hls" : this.playbackMode}`,
+      `media ${this.mediaSummary}`,
+      `element ${v.videoWidth}x${v.videoHeight}`,
+      `readyState ${v.readyState}`,
+      `networkState ${v.networkState}`,
+      `time ${v.currentTime.toFixed(1)}s`,
+      quality
+        ? `frames ${quality.totalVideoFrames} dropped ${quality.droppedVideoFrames}`
+        : "frames n/a",
+    ].join(", ");
+  }
+
+  /**
+   * Some WebViews accept a stream, advance time and play audio, yet never
+   * decode a frame (black screen, no error event). Check a few seconds into
+   * each stream; log what was seen and fall back to transcode if no video.
+   */
+  private schedulePlaybackCheck(): void {
+    const key = `${this.loadRequestId}:${this.streamGeneration}`;
+    if (this.playbackCheckKey === key) return;
+    this.playbackCheckKey = key;
+    if (this.playbackCheckTimer) clearTimeout(this.playbackCheckTimer);
+
+    const startTime = this.video.currentTime;
+    let attempts = 0;
+    const check = () => {
+      this.playbackCheckTimer = null;
+      if (this.isDestroyed || this.playbackCheckKey !== key) return;
+      const v = this.video;
+      const advanced = v.currentTime - startTime;
+      if ((v.paused || this.state.isBuffering || advanced < 2) && attempts < 5) {
+        attempts++;
+        this.playbackCheckTimer = setTimeout(check, 4000);
+        return;
+      }
+      const quality = typeof v.getVideoPlaybackQuality === "function"
+        ? v.getVideoPlaybackQuality()
+        : null;
+      const noFrames =
+        advanced >= 2 &&
+        (v.videoWidth === 0 || (quality !== null && quality.totalVideoFrames === 0));
+      if (noFrames && this.probedHasVideo) {
+        console.error(
+          `[HtmlVideoEngine] Black screen: time advances but no video frames are decoded (${this.describePlayback()})`,
+        );
+        this.tryTranscodeFallback("no video frames decoded");
+        return;
+      }
+      console.info(`[HtmlVideoEngine] Playback check: ${this.describePlayback()}`);
+    };
+    this.playbackCheckTimer = setTimeout(check, 6000);
   }
 
   private cleanupMse(): void {
@@ -1155,6 +1243,10 @@ export class HtmlVideoEngine implements PlayerEngine {
     const currentLoadId = ++this.loadRequestId;
     this.hasTriedCodecFallback = false;
     this.isCodecFallbackInProgress = false;
+    this.probedHasVideo = false;
+    this.mediaSummary = "not probed";
+    if (this.playbackCheckTimer) clearTimeout(this.playbackCheckTimer);
+    this.playbackCheckTimer = null;
 
     // Immediately teardown previous stream session so the previous server/FFmpeg is killed instantly
     const prevSessionId = this.sessionId;
@@ -1413,8 +1505,16 @@ export class HtmlVideoEngine implements PlayerEngine {
         } else {
           this.playbackMode = "transcode";
         }
+        this.probedHasVideo = Boolean(primaryVideo);
+        this.mediaSummary = [
+          primaryVideo
+            ? `${primaryVideo.codec_name || "?"}${primaryVideo.profile ? ` ${primaryVideo.profile}` : ""} ${primaryVideo.width || "?"}x${primaryVideo.height || "?"} ${primaryVideo.bit_depth || "?"}-bit${primaryVideo.fps ? ` ${Math.round(primaryVideo.fps)}fps` : ""}`
+            : "no video",
+          defaultAudio ? `audio ${defaultAudio.codec}` : "no audio",
+          formatName || "unknown container",
+        ].join(" / ");
         console.info(
-          `[HtmlVideoEngine] Playback mode: ${this.playbackMode} (video ${primaryVideo?.codec_name || "unknown"} supported=${videoSupported}, audio supported=${audioSupported}, container ${formatName || "unknown"})`,
+          `[HtmlVideoEngine] Playback mode: ${this.playbackMode} (${this.mediaSummary}; video supported=${videoSupported}, audio supported=${audioSupported})`,
         );
       } else {
         const isMkv =
@@ -2572,6 +2672,8 @@ export class HtmlVideoEngine implements PlayerEngine {
   }
 
   public destroy(): void {
+    if (this.playbackCheckTimer) clearTimeout(this.playbackCheckTimer);
+    this.playbackCheckTimer = null;
     this.isDestroyed = true;
     this.listeners.clear();
     this.subtitleContentMap.clear();

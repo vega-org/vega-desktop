@@ -329,11 +329,29 @@ export const useMpvPlayer = (opts?: UseMpvPlayerOptions) => {
             level === "info" ||
             (text && text.includes("http"))
           ) {
-            console.log(`[MPV LOG] [${level}] ${text?.trim()}`);
+            // Errors and warnings always reach the exported log; the rest
+            // only with detailed logging.
+            const line = `[MPV LOG] [${level}] ${text?.trim()}`;
+            if (level === "error") console.error(line);
+            else if (level === "warn") console.warn(line);
+            else console.log(line);
           }
         }
         if (event.event === "file-loaded") {
           console.log("mpv: file-loaded");
+          // For bug reports: which decoder mpv picked for this file.
+          setTimeout(() => {
+            Promise.all([
+              getProperty("video-codec", "string").catch(() => "?"),
+              getProperty("hwdec-current", "string").catch(() => "no"),
+              getProperty("video-params/pixelformat", "string").catch(() => "?"),
+              getProperty("current-vo", "string").catch(() => "?"),
+            ]).then(([codec, hwdec, pixfmt, vo]) =>
+              console.info(
+                `[mpv] Playing ${codec} (${pixfmt}), hwdec ${hwdec || "no"}, vo ${vo}`,
+              ),
+            );
+          }, 2000);
           setIsBuffering(false);
           getProperty("pause", "flag")
             .then((p) => setIsPaused(p as boolean))

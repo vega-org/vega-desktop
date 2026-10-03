@@ -31,7 +31,23 @@
       "frameworks": []
     },
     "linux": {
-      "deb": {}
+      "appimage": {
+        "bundleMediaFramework": true
+      },
+      "deb": {
+        "recommends": [
+          "gstreamer1.0-plugins-good",
+          "gstreamer1.0-plugins-bad",
+          "gstreamer1.0-libav"
+        ]
+      },
+      "rpm": {
+        "recommends": [
+          "gstreamer1-plugins-good",
+          "gstreamer1-plugins-bad-free",
+          "gstreamer1-plugin-libav"
+        ]
+      }
     },
     "android": {
       "versionCode": 17

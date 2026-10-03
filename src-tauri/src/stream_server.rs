@@ -1446,6 +1446,35 @@ static HW_H264_ENCODER: tokio::sync::OnceCell<Option<&'static str>> =
 /// First hardware H.264 encoder that works on this machine, tested once per
 /// app run with a tiny encode. A build can list an encoder whose GPU or
 /// driver is missing, so listing alone is not enough.
+const FFMPEG_STDERR_TAIL_LINES: usize = 30;
+
+/// `-debug_ts` per-packet lines (`demuxer -> ist_index:... pkt_pts:...`).
+fn is_ffmpeg_debug_ts_line(line: &[u8]) -> bool {
+    line.windows(8).any(|w| w == b"pts_time" || w == b"dts_time")
+}
+
+/// Logs FFmpeg's last stderr lines when they contain an error, so an
+/// exported log shows why a remux or transcode failed.
+fn log_ffmpeg_errors(label: &str, tail: &std::collections::VecDeque<String>) {
+    let has_error = tail.iter().any(|line| {
+        let lower = line.to_ascii_lowercase();
+        lower.contains("error")
+            || lower.contains("failed")
+            || lower.contains("invalid")
+            || lower.contains("could not")
+            || lower.contains("not supported")
+    });
+    if !has_error {
+        return;
+    }
+    let text = tail.iter().cloned().collect::<Vec<_>>().join("\n");
+    crate::app_log::record(
+        crate::app_log::Level::Warn,
+        "FFmpeg",
+        &format!("[{label}] FFmpeg reported errors:\n{text}"),
+    );
+}
+
 async fn hw_h264_encoder(ffmpeg_path: &Path) -> Option<&'static str> {
     *HW_H264_ENCODER
         .get_or_init(|| async {
@@ -1467,11 +1496,11 @@ async fn hw_h264_encoder(ffmpeg_path: &Path) -> Option<&'static str> {
                     Ok(Ok(status)) if status.success()
                 );
                 if works {
-                    vlog_warn!("[remux] Hardware encoder: {}", encoder);
+                    crate::app_log::record(crate::app_log::Level::Info, "FFmpeg", &format!("Hardware H.264 encoder: {encoder}"));
                     return Some(encoder);
                 }
             }
-            vlog_warn!("[remux] No hardware encoder, using libx264");
+            crate::app_log::record(crate::app_log::Level::Info, "FFmpeg", "No hardware H.264 encoder works, using libx264");
             None
         })
         .await
@@ -1778,8 +1807,25 @@ async fn handle_remux(
                     }
                 }
             }
-            // -debug_ts logs every packet. Discard the rest without parsing.
-            let _ = tokio::io::copy(&mut reader, &mut tokio::io::sink()).await;
+            // -debug_ts logs every packet. Skip those lines and keep the last
+            // few others; on exit, log any errors among them for bug reports.
+            let mut tail: std::collections::VecDeque<String> = std::collections::VecDeque::new();
+            loop {
+                line.clear();
+                match reader.read_until(b'\n', &mut line).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {
+                        if is_ffmpeg_debug_ts_line(&line) {
+                            continue;
+                        }
+                        if tail.len() == FFMPEG_STDERR_TAIL_LINES {
+                            tail.pop_front();
+                        }
+                        tail.push_back(String::from_utf8_lossy(&line).trim_end().to_string());
+                    }
+                }
+            }
+            log_ffmpeg_errors("remux", &tail);
         });
     }
 
