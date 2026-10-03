@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { navigateByDirection } from "@noriginmedia/norigin-spatial-navigation-core";
 
 type Direction = "up" | "down" | "left" | "right";
 
@@ -9,7 +8,9 @@ interface DirectionState {
   lastRepeatTime: number;
 }
 
-const INITIAL_DELAY_MS = 220;
+// Match Android's default key repeat timeout so a normal press on a Bluetooth remote
+// (which Android exposes as a gamepad) doesn't auto-repeat.
+const INITIAL_DELAY_MS = 400;
 const REPEAT_INTERVAL_MS = 90;
 const STICK_DEADZONE = 0.45;
 
@@ -28,6 +29,8 @@ export function useGamepadNavigation() {
       window.dispatchEvent(new CustomEvent("vega:remote-activity"));
     };
 
+    // Emulate exactly one real key press: dispatch once on the focused element and let it
+    // bubble to window, where spatial navigation and other listeners handle it.
     const dispatchKeyEvent = (key: string, code: string, type: "keydown" | "keyup" = "keydown") => {
       const activeEl = document.activeElement || document.body;
       const event = new KeyboardEvent(type, {
@@ -38,14 +41,13 @@ export function useGamepadNavigation() {
         view: window,
       });
       activeEl.dispatchEvent(event);
-      window.dispatchEvent(event);
     };
 
+    // Navigation happens through the synthetic arrow key event (spatial navigation reads
+    // event.code), so don't also call navigateByDirection() or each press moves focus twice.
+    // This matters for Bluetooth TV remotes that Android exposes as gamepads.
     const triggerDirection = (dir: Direction) => {
       notifyActivity();
-      try {
-        navigateByDirection(dir);
-      } catch {}
 
       const keyMap: Record<Direction, { key: string; code: string }> = {
         up: { key: "ArrowUp", code: "ArrowUp" },
