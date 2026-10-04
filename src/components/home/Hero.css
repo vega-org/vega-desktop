@@ -62,8 +62,8 @@
 
 .hero-title {
   color: var(--on-surface);
-  text-shadow: 0 4px 16px
-    color-mix(in srgb, var(--surface-container-lowest) 70%, transparent);
+  text-shadow: 0 2px 12px
+    color-mix(in srgb, var(--surface-container-lowest) 60%, transparent);
   margin-bottom: var(--spacing-xs);
 }
 
@@ -90,19 +90,20 @@
   gap: 8px;
   background-color: var(--primary);
   color: var(--on-primary);
-  padding: 12px 28px;
-  border-radius: var(--rounded-full);
+  height: 40px;
+  padding: 0 20px 0 16px;
+  border-radius: var(--rounded-DEFAULT);
   border: none;
   cursor: pointer;
+  font-size: 15px;
   font-weight: 600;
-  transition: all 0.2s ease;
+  transition: filter 120ms ease;
 }
 
 .btn-play:hover {
   background-color: var(--primary);
   color: var(--on-primary);
   filter: brightness(1.08);
-  transform: scale(1.05);
 }
 
 .btn-play.tv-focus {
@@ -114,18 +115,18 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 28px;
-  border-radius: var(--rounded-lg);
-  border: 1px solid var(--surface-variant);
+  height: 40px;
+  padding: 0 18px;
+  border-radius: var(--rounded-DEFAULT);
+  border: 1px solid var(--outline-variant);
   color: var(--on-surface);
   cursor: pointer;
   font-weight: 600;
-  transition: all 0.2s ease;
+  transition: background-color 120ms ease;
 }
 
 .btn-info:hover {
   background-color: var(--surface-container-highest);
-  transform: scale(1.05);
 }
 
 /* Skeleton State */
@@ -154,10 +155,10 @@
 }
 
 .hero-skeleton-button {
-  width: 132px;
-  height: 48px;
+  width: 104px;
+  height: 40px;
   margin-top: 8px;
-  border-radius: var(--rounded-full);
+  border-radius: var(--rounded-DEFAULT);
 }
 
 @media (max-width: 768px) {

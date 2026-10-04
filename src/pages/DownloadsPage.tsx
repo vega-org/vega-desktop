@@ -12,6 +12,7 @@ import {
 } from "react-icons/lu";
 import { useFocusable } from "@noriginmedia/norigin-spatial-navigation-react";
 import { useNavigate } from "react-router-dom";
+import { ConfirmActionDialog } from "../components/extensions/ConfirmActionDialog";
 import { FocusableButton } from "../components/layout/FocusableButton";
 import { settingsStorage } from "../lib/storage";
 import {
@@ -58,6 +59,8 @@ export const DownloadsPage = () => {
     useDownloadStore();
   const navigate = useNavigate();
   const allDownloads = Object.values(downloads);
+  // Show waiting for delete confirmation; removing a whole show is not undoable.
+  const [pendingDelete, setPendingDelete] = useState<CompletedGroup | null>(null);
 
   useEffect(() => {
     syncFromSharedFolder().catch((err) =>
@@ -139,31 +142,26 @@ export const DownloadsPage = () => {
 
   return (
     <main className="downloads-page">
-      <header className="downloads-page-header">
-        <div className="downloads-page-icon" aria-hidden="true">
-          <Download size={27} />
-        </div>
-        <div>
-          <p className="downloads-eyebrow">Offline library</p>
-          <h1>Downloads</h1>
-          <p>
+      <header className="page-header">
+        <div className="page-header-copy">
+          <h1 className="page-title">Downloads</h1>
+          <p className="page-subtitle">
             {allDownloads.length
               ? `${allDownloads.length} ${allDownloads.length === 1 ? "item" : "items"} stored or in progress`
-              : "Keep movies and episodes ready for offline playback"}
+              : "Movies and episodes for offline playback"}
           </p>
         </div>
       </header>
 
       {isEmpty ? (
-        <section
-          className="downloads-empty-state"
-          aria-labelledby="downloads-empty-title"
-        >
-          <div className="downloads-empty-icon" aria-hidden="true">
-            <HardDrive size={35} />
-          </div>
-          <h2 id="downloads-empty-title">Nothing downloaded yet</h2>
-          <p>Download a movie or episode and its progress will appear here.</p>
+        <section className="empty-view" aria-labelledby="downloads-empty-title">
+          <HardDrive size={40} className="empty-view-icon" aria-hidden="true" />
+          <h2 id="downloads-empty-title" className="empty-view-title">
+            Nothing downloaded yet
+          </h2>
+          <p className="empty-view-text">
+            Download a movie or episode and its progress will appear here.
+          </p>
         </section>
       ) : (
         <div className="downloads-content">
@@ -173,10 +171,9 @@ export const DownloadsPage = () => {
               aria-labelledby="active-downloads-title"
             >
               <div className="downloads-section-heading">
-                <div>
-                  <p className="downloads-section-kicker">In progress</p>
-                  <h2 id="active-downloads-title">Active downloads</h2>
-                </div>
+                <h2 id="active-downloads-title" className="section-title">
+                  Active downloads
+                </h2>
                 <span className="downloads-count-chip">
                   {activeDownloads.length}
                 </span>
@@ -336,10 +333,9 @@ export const DownloadsPage = () => {
               aria-labelledby="completed-downloads-title"
             >
               <div className="downloads-section-heading">
-                <div>
-                  <p className="downloads-section-kicker">Ready to watch</p>
-                  <h2 id="completed-downloads-title">Downloaded</h2>
-                </div>
+                <h2 id="completed-downloads-title" className="section-title">
+                  Downloaded
+                </h2>
                 <span className="downloads-count-chip">
                   {completedGroups.length}
                 </span>
@@ -351,9 +347,7 @@ export const DownloadsPage = () => {
                     key={group.showName}
                     group={group}
                     onOpen={() => openGroup(group)}
-                    onDelete={() => {
-                      group.items.forEach((item) => void cancelDownload(item.id));
-                    }}
+                    onDelete={() => setPendingDelete(group)}
                   />
                 ))}
               </div>
@@ -361,6 +355,28 @@ export const DownloadsPage = () => {
           )}
         </div>
       )}
+
+      <ConfirmActionDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title={`Delete ${pendingDelete?.showName ?? "download"}?`}
+        description={
+          pendingDelete && pendingDelete.items.length > 1
+            ? `All ${pendingDelete.items.length} downloaded files (${formatBytes(pendingDelete.totalBytes)}) are removed from this device.`
+            : `The downloaded file${pendingDelete?.totalBytes ? ` (${formatBytes(pendingDelete.totalBytes)})` : ""} is removed from this device.`
+        }
+        confirmLabel="Delete"
+        focusKeyPrefix="DOWNLOAD_DELETE_CONFIRM"
+        restoreFocusKey={
+          pendingDelete
+            ? `DOWNLOAD_GROUP_${pendingDelete.showName.replace(/[^a-zA-Z0-9_-]/g, "_")}`
+            : undefined
+        }
+        onConfirm={() => {
+          pendingDelete?.items.forEach((item) => void cancelDownload(item.id));
+          setPendingDelete(null);
+        }}
+      />
     </main>
   );
 };

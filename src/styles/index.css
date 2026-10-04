@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 @import "./variables.css";
 
@@ -72,7 +71,7 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--primary-container);
+  background: var(--outline);
 }
 
 html,
@@ -95,6 +94,33 @@ body {
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
   overflow-x: hidden;
+  /* App chrome is not a document: no drag-selecting labels or buttons. */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+/* Text people may want to copy stays selectable. */
+input,
+textarea,
+[contenteditable="true"],
+.selectable,
+.selectable * {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+img,
+a {
+  -webkit-user-drag: none;
+}
+
+h1,
+h2,
+.display-lg,
+.headline-lg,
+.headline-md {
+  font-family: var(--font-family-display);
 }
 
 a {
@@ -102,14 +128,13 @@ a {
   text-decoration: none;
 }
 
-:where(
-  button:not(:disabled),
-  [role="button"]:not([aria-disabled="true"]),
-  a[href],
-  summary,
-  select
-) {
+/* Clickable controls show the hand cursor; disabled ones fall back to the arrow. */
+:where(button, [role="button"], a[href], summary, select) {
   cursor: pointer;
+}
+
+:where(button:disabled, [aria-disabled="true"]) {
+  cursor: default;
 }
 
 :where(button) {
@@ -117,11 +142,8 @@ a {
   color: inherit;
 }
 
-/* Glassmorphism utility */
 .glass-overlay {
-  background: rgba(19, 19, 19, 0.6); /* background color with opacity */
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: color-mix(in srgb, var(--surface-container) 96%, transparent);
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */
@@ -136,22 +158,22 @@ a {
 
 /* Typography styles */
 .display-lg {
-  font-size: 48px;
-  font-weight: 800;
-  line-height: 56px;
-  letter-spacing: -0.02em;
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 52px;
+  letter-spacing: -0.01em;
 }
 
 .headline-lg {
-  font-size: 32px;
-  font-weight: 700;
-  line-height: 40px;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 36px;
 }
 
 .headline-md {
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 32px;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 28px;
 }
 
 .body-lg {
@@ -179,13 +201,93 @@ a {
   line-height: 16px;
 }
 
+/* Shared page layout: Library, Downloads, Providers, Settings. */
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.page-header-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.page-title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font-family: var(--font-family-display);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 36px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-subtitle {
+  margin: 2px 0 0;
+  color: var(--on-surface-variant);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.page-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-title {
+  margin: 0;
+  color: var(--on-surface);
+  font-family: var(--font-family-display);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+/* Empty page: plain icon and text, no card. */
+.empty-view {
+  display: flex;
+  max-width: 420px;
+  flex-direction: column;
+  align-items: center;
+  margin: 14vh auto 0;
+  color: var(--on-surface-variant);
+  text-align: center;
+}
+
+.empty-view-icon {
+  margin-bottom: 14px;
+  opacity: 0.7;
+}
+
+.empty-view-title {
+  margin: 0;
+  color: var(--on-surface);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.empty-view-text {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+
 /* TV Spatial Navigation Focus State */
 .tv-focus {
   outline: 3px solid var(--primary);
   outline-offset: 2px;
   transform: scale(1.03);
-  box-shadow: 0 0 15px var(--primary-container);
-  transition: all 0.2s ease-in-out;
+  transition:
+    transform 0.2s ease-in-out,
+    outline-color 0.2s ease-in-out;
   z-index: 100;
   border-radius: 8px; /* Safe default, can be overridden by specific components if needed */
 }

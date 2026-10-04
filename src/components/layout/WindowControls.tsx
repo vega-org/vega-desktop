@@ -20,6 +20,14 @@ export const isWindowsPlatform = (): boolean => {
   return platform === "windows";
 };
 
+/** Maximize or restore, keeping the window inside the work area. */
+export const toggleWindowMaximize = async (): Promise<boolean> => {
+  await appWindow.toggleMaximize();
+  const isMaximized = await appWindow.isMaximized();
+  await invoke("ensure_window_in_work_area", { maximized: isMaximized });
+  return isMaximized;
+};
+
 export const WindowControls: React.FC = () => {
   if (!isWindowsPlatform()) return null;
 
@@ -65,13 +73,9 @@ export const WindowControls: React.FC = () => {
 
   const toggleMaximize = async () => {
     try {
-      await appWindow.toggleMaximize();
-      const isMaximized = await appWindow.isMaximized();
+      const isMaximized = await toggleWindowMaximize();
       maximizedRef.current = isMaximized;
       setMaximized(isMaximized);
-      await invoke("ensure_window_in_work_area", {
-        maximized: isMaximized,
-      });
     } catch (error) {
       console.error("Failed to toggle window maximize state", error);
     }

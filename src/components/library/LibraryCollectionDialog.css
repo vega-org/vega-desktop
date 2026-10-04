@@ -41,7 +41,7 @@
 .library-dialog .extensions-dialog-close {
   display: grid;
   place-items: center;
-  border-radius: 14px;
+  border-radius: 8px;
   color: var(--on-surface-variant);
   background: var(--surface-container-highest);
 }
@@ -58,7 +58,7 @@
   gap: 12px;
   padding: 0 14px 0 10px;
   border: 1px solid var(--outline-variant);
-  border-radius: 18px;
+  border-radius: 10px;
   color: var(--on-surface);
   background: var(--surface-container-highest);
   cursor: pointer;
@@ -76,7 +76,7 @@
 }
 
 .library-pick-row.tv-focus {
-  border-radius: 18px;
+  border-radius: 10px;
   transform: none;
 }
 
@@ -132,7 +132,7 @@
   flex: 1;
   min-height: 38px;
   place-items: center;
-  border-radius: 13px;
+  border-radius: 8px;
   color: var(--on-surface-variant);
   background: var(--surface-container-highest);
   font-size: 13px;
@@ -146,7 +146,7 @@
 }
 
 .library-icon-tab.tv-focus {
-  border-radius: 13px;
+  border-radius: 8px;
   transform: none;
 }
 
@@ -165,7 +165,7 @@
   height: 44px;
   place-items: center;
   border: 1.5px solid transparent;
-  border-radius: 12px;
+  border-radius: 8px;
   color: var(--on-surface-variant);
   cursor: pointer;
 }
@@ -180,8 +180,7 @@
 }
 
 .library-icon-choice.tv-focus {
-  border-radius: 12px;
-  transform: scale(1.08);
+  border-radius: 8px;
 }
 
 .library-color-row {
@@ -209,7 +208,6 @@
 
 .library-color-swatch.tv-focus {
   border-radius: 50%;
-  transform: scale(1.15);
 }
 
 .library-delete-hint {

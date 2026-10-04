@@ -112,8 +112,8 @@ export const Hero: React.FC<HeroProps> = ({ post }) => {
             style={heroButtonStyle}
             onClick={handlePlayClick}
           >
-            <Play size={24} fill="currentColor" />
-            <span className="label-lg">Play</span>
+            <Play size={18} fill="currentColor" />
+            <span>Play</span>
           </button>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { useLocation } from "react-router-dom";
 import { FocusableNavLink } from "./FocusableNavLink";
 import { AnimatedNavIcon, type AnimatedNavIconName } from "./AnimatedNavIcon";
 import { FocusableButton } from "./FocusableButton";
+import { isWindowsPlatform } from "./WindowControls";
 import {
   useFocusable,
   FocusContext,
@@ -108,7 +109,10 @@ export const Sidebar: React.FC = () => {
   return (
     <FocusContext.Provider value={focusKey}>
       <aside className={`sidebar ${collapsed ? "collapsed" : ""}`} ref={ref as any}>
-        <div className="sidebar-brand">
+        <div
+          className="sidebar-brand"
+          {...(isWindowsPlatform() ? { "data-tauri-drag-region": true } : {})}
+        >
           <FocusableButton
             className="sidebar-menu-toggle"
             onClick={toggleSidebar}
@@ -116,11 +120,11 @@ export const Sidebar: React.FC = () => {
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             aria-expanded={!collapsed}
           >
-            <Menu size={26} />
+            <Menu size={20} />
           </FocusableButton>
-          <div className="sidebar-logo" aria-label="Vega">
-            <span className="sidebar-brand-icon" aria-hidden="true" />
-            <span className="sidebar-brand-name">Vega</span>
+          <div className="sidebar-logo" aria-label="Vega" data-tauri-drag-region>
+            <span className="sidebar-brand-icon" aria-hidden="true" data-tauri-drag-region />
+            <span className="sidebar-brand-name" data-tauri-drag-region>Vega</span>
           </div>
         </div>
 

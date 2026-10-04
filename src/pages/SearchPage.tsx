@@ -182,7 +182,7 @@ export const SearchPage: React.FC = () => {
                 window.setTimeout(() => nativeInputRef.current?.focus(), 0);
               }}
             >
-              <Search size={23} className="search-page-icon" aria-hidden="true" />
+              <Search size={17} className="search-page-icon" aria-hidden="true" />
               <input
                 ref={nativeInputRef}
                 type="text"
@@ -236,7 +236,7 @@ export const SearchPage: React.FC = () => {
                   onClick={clearSearch}
                   aria-label="Clear search"
                 >
-                  <X size={19} />
+                  <X size={16} />
                 </button>
               )}
             </div>
@@ -245,7 +245,6 @@ export const SearchPage: React.FC = () => {
               onClick={submitSearch}
               disabled={!localQuery.trim()}
             >
-              <Search size={19} aria-hidden="true" />
               <span>Search</span>
             </FocusableButton>
           </form>
@@ -270,23 +269,24 @@ export const SearchPage: React.FC = () => {
           )}
         </div>
         {isCurrentlyLoading && (
-          <Spinner size={26} label="Searching providers" />
+          <Spinner size={20} label="Searching providers" />
         )}
       </div>
 
       {!query ? (
-        <div className="search-page-empty">
-          <span className="search-empty-icon">
-            <Search size={34} />
-          </span>
-          <h2 className="headline-lg">Discover content</h2>
-          <p className="body-lg text-muted">
-            Search across all installed providers from one place.
+        <section className="empty-view" aria-labelledby="search-empty-title">
+          <Search size={40} className="empty-view-icon" aria-hidden="true" />
+          <h2 id="search-empty-title" className="empty-view-title">
+            Search all providers
+          </h2>
+          <p className="empty-view-text">
+            Results from every installed provider show up here, one row per
+            provider.
           </p>
-        </div>
+        </section>
       ) : (
         <div className="search-results-meta">
-          <p className="body-lg text-muted">
+          <p>
             {isAllLoaded ? "Searched for" : "Searching for"}{" "}
             <span className="text-primary">"{query}"</span>
           </p>
@@ -297,12 +297,10 @@ export const SearchPage: React.FC = () => {
         !isCurrentlyLoading &&
         !hasAnyResults &&
         emptyResults.length > 0 && (
-          <div className="empty-state">
-            <h2 className="headline-md">No results found</h2>
-            <p className="body-lg text-muted">
-              Try adjusting your search terms.
-            </p>
-          </div>
+          <section className="empty-view search-no-results">
+            <h2 className="empty-view-title">No results found</h2>
+            <p className="empty-view-text">Try a different title or spelling.</p>
+          </section>
         )}
 
       {query && (

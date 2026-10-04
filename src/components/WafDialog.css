@@ -14,7 +14,7 @@
 
 .waf-dialog {
   background: var(--bg-tertiary, #1a1a2e);
-  border-radius: 16px;
+  border-radius: 8px;
   overflow: hidden;
   width: 100%;
   max-width: 420px;

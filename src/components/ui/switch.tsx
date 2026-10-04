@@ -43,13 +43,13 @@ const Switch = React.forwardRef<
         disabled={disabled}
         tabIndex={tvMode ? -1 : props.tabIndex}
         className={cn(
-          "vega-switch peer relative inline-flex h-8 w-[52px] shrink-0 cursor-pointer items-center rounded-full border-2 border-outline bg-surface-container-highest transition-[background-color,border-color] duration-200 outline-none hover:border-on-surface-variant data-[state=checked]:border-primary data-[state=checked]:bg-primary disabled:cursor-not-allowed disabled:opacity-45",
+          "vega-switch peer relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-outline bg-transparent transition-[background-color,border-color] duration-150 outline-none hover:border-on-surface-variant data-[state=checked]:border-primary data-[state=checked]:bg-primary disabled:cursor-not-allowed disabled:opacity-45",
           focused && "tv-focus",
           className,
         )}
         {...props}
       >
-        <SwitchPrimitive.Thumb className="pointer-events-none absolute left-[6px] top-1/2 block size-4 -translate-y-1/2 rounded-full bg-outline transition-[width,height,transform,background-color] duration-200 data-[state=checked]:size-6 data-[state=checked]:translate-x-4 data-[state=checked]:bg-on-primary" />
+        <SwitchPrimitive.Thumb className="pointer-events-none absolute left-[4px] top-1/2 block size-3 -translate-y-1/2 rounded-full bg-on-surface-variant transition-[width,height,transform,background-color] duration-150 data-[state=checked]:size-3.5 data-[state=checked]:translate-x-[19px] data-[state=checked]:bg-on-primary" />
       </SwitchPrimitive.Root>
     );
   },

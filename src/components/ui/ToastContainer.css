@@ -17,7 +17,7 @@
   align-items: stretch;
   background-color: var(--surface-container-high, #211f26);
   border: 1px solid var(--outline-variant, rgba(255, 255, 255, 0.12));
-  border-radius: 12px;
+  border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
   overflow: hidden;
   pointer-events: auto;
@@ -25,10 +25,6 @@
   animation: toastSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   transition: transform 0.15s ease, opacity 0.15s ease;
   backdrop-filter: blur(12px);
-}
-
-.global-toast-item:hover {
-  transform: translateY(-2px);
 }
 
 .toast-left-indicator {

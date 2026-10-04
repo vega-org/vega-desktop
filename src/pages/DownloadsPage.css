@@ -1,73 +1,33 @@
 .downloads-page,
 .downloads-series-page {
   min-height: 100%;
-  padding: 34px clamp(24px, 4vw, 56px) 64px;
+  padding: 12px clamp(16px, 3vw, 44px) 48px;
   color: var(--on-surface);
 }
 
-.downloads-page-header,
 .downloads-series-header {
   display: flex;
   align-items: center;
-  gap: 18px;
-  margin-bottom: 34px;
+  gap: 14px;
+  margin-bottom: 24px;
 }
 
-.downloads-page-icon {
-  display: grid;
-  width: 58px;
-  height: 58px;
-  flex: 0 0 58px;
-  place-items: center;
-  border-radius: 20px;
-  color: var(--on-primary-container);
-  background: var(--primary-container);
-}
-
-.downloads-eyebrow,
-.downloads-section-kicker {
-  margin: 0 0 4px;
-  color: var(--on-surface-variant);
-  font-size: 12px;
-  font-weight: 750;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.downloads-page-header h1,
-.downloads-series-header h1 {
-  margin: 0;
-  font-size: clamp(29px, 3vw, 40px);
-  font-weight: 760;
-  letter-spacing: -0.035em;
-}
-
-.downloads-page-header > div:last-child > p:last-child,
-.downloads-series-header-copy > p:last-child {
-  margin: 5px 0 0;
-  color: var(--on-surface-variant);
-  font-size: 15px;
+.downloads-series-header-copy {
+  min-width: 0;
 }
 
 .downloads-content {
   display: flex;
   flex-direction: column;
-  gap: 42px;
+  gap: 32px;
 }
 
 .downloads-section-heading {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 18px;
-}
-
-.downloads-section-heading h2 {
-  margin: 0;
-  font-size: 23px;
-  font-weight: 700;
-  letter-spacing: -0.025em;
+  gap: 16px;
+  margin-bottom: 14px;
 }
 
 .downloads-count-chip {
@@ -93,7 +53,7 @@
   gap: 17px;
   padding: 13px 14px;
   border: 1px solid var(--outline-variant);
-  border-radius: 22px;
+  border-radius: 10px;
   background: var(--surface-container-low);
   transition:
     border-color 180ms ease,
@@ -104,7 +64,6 @@
 .active-download-card:hover {
   border-color: var(--outline);
   background: var(--surface-container);
-  transform: translateY(-1px);
 }
 
 .download-row-poster {
@@ -113,7 +72,7 @@
   aspect-ratio: 2 / 3;
   place-items: center;
   overflow: hidden;
-  border-radius: 13px;
+  border-radius: 8px;
   color: var(--on-surface-variant);
   background-color: var(--surface-container-high);
   background-position: center;
@@ -221,7 +180,7 @@
   width: 42px;
   height: 42px;
   place-items: center;
-  border-radius: 14px;
+  border-radius: 8px;
   color: var(--on-surface-variant);
   background: var(--surface-container-high);
   transition:
@@ -240,7 +199,6 @@
 .episode-download-action.tv-focus {
   color: var(--on-surface);
   background: var(--surface-container-highest);
-  transform: scale(1.04);
 }
 
 .download-action-button.is-primary,
@@ -275,7 +233,7 @@
   place-items: center;
   overflow: hidden;
   border: 1px solid var(--outline-variant);
-  border-radius: 18px;
+  border-radius: 10px;
   color: var(--on-surface-variant);
   background: var(--surface-container-high);
   background-position: center;
@@ -320,19 +278,15 @@
 .download-library-poster:hover {
   border-color: var(--outline);
   box-shadow: 0 16px 34px color-mix(in srgb, var(--surface) 72%, transparent);
-  transform: translateY(-5px);
 }
 
 .download-library-poster.tv-focus {
   border-color: var(--primary);
   box-shadow: 0 16px 34px color-mix(in srgb, var(--surface) 72%, transparent);
-  transform: translateY(-5px);
 }
 
 .download-library-poster.child-focused {
   border-color: color-mix(in srgb, var(--primary) 60%, transparent);
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--primary) 25%, transparent);
-  transform: translateY(-3px);
 }
 
 .download-library-poster:hover::after,
@@ -359,7 +313,7 @@
   z-index: 120;
   width: 36px;
   height: 36px;
-  border-radius: 12px;
+  border-radius: 8px;
   border: none;
   opacity: 0;
   cursor: pointer;
@@ -389,41 +343,6 @@
   color: var(--on-error-container);
   outline: 2px solid var(--primary);
   outline-offset: 2px;
-  transform: scale(1.18);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 40%, transparent);
-}
-
-.downloads-empty-state {
-  width: min(100%, 540px);
-  margin: clamp(50px, 11vh, 120px) auto 0;
-  padding: clamp(38px, 7vw, 68px);
-  border: 1px solid var(--outline-variant);
-  border-radius: 32px;
-  background: var(--surface-container-low);
-  text-align: center;
-}
-
-.downloads-empty-icon {
-  display: grid;
-  width: 76px;
-  height: 76px;
-  margin: 0 auto 22px;
-  place-items: center;
-  border-radius: 26px;
-  color: var(--on-primary-container);
-  background: var(--primary-container);
-}
-
-.downloads-empty-state h2 {
-  margin: 0;
-  font-size: 26px;
-  letter-spacing: -0.025em;
-}
-
-.downloads-empty-state p {
-  margin: 10px auto 0;
-  color: var(--on-surface-variant);
-  line-height: 1.55;
 }
 
 @keyframes download-indeterminate {
@@ -454,7 +373,7 @@
   place-items: center;
   overflow: hidden;
   border: 1px solid var(--outline-variant);
-  border-radius: 24px;
+  border-radius: 12px;
   color: var(--on-surface-variant);
   background: var(--surface-container-high);
   background-position: center;
@@ -479,12 +398,6 @@
   margin-bottom: 18px;
 }
 
-.series-episodes-toolbar h2 {
-  margin: 0;
-  font-size: 24px;
-  letter-spacing: -0.025em;
-}
-
 .season-selector-custom {
   width: 100%;
   min-width: 0;
@@ -501,7 +414,7 @@
   gap: 14px;
   padding: 12px;
   border: 1px solid var(--outline-variant);
-  border-radius: 14px;
+  border-radius: 8px;
   background: var(--surface-container-low);
   transition:
     background-color 170ms ease,
@@ -518,7 +431,6 @@
   border-color: var(--primary);
   outline: 3px solid var(--primary);
   outline-offset: 2px;
-  box-shadow: 0 0 15px color-mix(in srgb, var(--primary) 40%, transparent);
   background: color-mix(in srgb, var(--primary) 8%, var(--surface-container));
   transform: scale(1.015);
   z-index: 10;
@@ -531,7 +443,7 @@
   min-width: 0;
   gap: 16px;
   padding: 0;
-  border-radius: 14px;
+  border-radius: 8px;
   cursor: pointer;
 }
 
@@ -670,7 +582,7 @@
   overflow: hidden;
   padding-left: 14px;
   border: 1px solid var(--outline-variant);
-  border-radius: 18px;
+  border-radius: 10px;
   color: var(--primary);
   background: var(--surface-container-high);
 }
@@ -722,7 +634,7 @@
   margin-left: auto;
   flex: 0 0 48px;
   place-items: center;
-  border-radius: 18px;
+  border-radius: 10px;
   color: var(--on-secondary-container);
   background: var(--secondary-container);
   cursor: pointer;

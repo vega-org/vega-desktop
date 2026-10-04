@@ -10,6 +10,7 @@ import { ContentOverview } from "../components/content/ContentOverview";
 import { EpisodeDetailsDialog, type EpisodeDetails } from "../components/content/EpisodeDetailsDialog";
 import { EpisodeRow } from "../components/content/EpisodeRow";
 import { InfoStoryDialog } from "../components/content/InfoStoryDialog";
+import { ResumeButton, type ResumeTarget } from "../components/content/ResumeButton";
 import { LibraryCollectionDialog } from "../components/library/LibraryCollectionDialog";
 import { SeasonSelector } from "../components/content/SeasonSelector";
 import { DownloadServerDialog } from "../components/DownloadServerDialog";
@@ -21,14 +22,47 @@ import { useEpisodes } from "../lib/hooks/useEpisodes";
 import { useImageIsPortrait } from "../lib/hooks/useImageIsPortrait";
 import type { EpisodeLink, Link, Stream, SkipInterval } from "../lib/providers/types";
 import { providerManager } from "../lib/services/ProviderManager";
-import { cacheStorage } from "../lib/storage";
+import { cacheStorage, type WatchHistoryItem } from "../lib/storage";
 import { settingsStorage } from "../lib/storage/SettingsStorage";
 import useContentStore from "../lib/zustand/contentStore";
 import { useDownloadStore, isVideoDownloadItem, isSubtitleDownloadItem } from "../lib/zustand/downloadStore";
+import useWatchHistoryStore from "../lib/zustand/watchHistrory";
 import useWatchListStore from "../lib/zustand/watchListStore";
 import "./MetaPage.css";
 
 const EPISODE_SORT_ORDER_KEY_PREFIX = "episodeSortOrder";
+/** Watched fraction past which the Resume button moves on to the next episode. */
+const WATCHED_FRACTION = 0.85;
+
+type EpisodeIdentity = { id?: string; sourceLink?: string; link?: string };
+
+// Downloads play from a file path; sourceLink then holds the provider link.
+const episodeKeys = (episode?: EpisodeIdentity) =>
+  [episode?.id, episode?.sourceLink, episode?.link].filter((key): key is string => Boolean(key));
+
+const findEpisodeIndex = (rows: EpisodeIdentity[], episode?: EpisodeIdentity) => {
+  const keys = episodeKeys(episode);
+  return rows.findIndex((row) => episodeKeys(row).some((key) => keys.includes(key)));
+};
+
+const seasonRows = (season: Link | null, episodeList: EpisodeLink[] | undefined, fallbackType?: string) => ({
+  rows: (season?.episodesLink ? episodeList || [] : season?.directLinks || []) as EpisodeLink[],
+  type: season?.episodesLink ? "series" : season?.directLinks?.[0]?.type || fallbackType || "movie",
+});
+
+/** Watched position of an episode: its history entry, else the player's saved progress. */
+const readWatched = (entry: WatchHistoryItem, episode: EpisodeIdentity) => {
+  if (entry.duration && entry.duration > 0) {
+    return { position: entry.progress ?? entry.currentTime ?? 0, duration: entry.duration };
+  }
+  for (const key of episodeKeys(episode)) {
+    try {
+      const stored = JSON.parse(cacheStorage.getString(key) || "null");
+      if (stored?.duration > 0) return { position: stored.position || 0, duration: stored.duration };
+    } catch { /* Ignore invalid legacy progress. */ }
+  }
+  return { position: 0, duration: 0 };
+};
 
 interface DialogContext {
   id: string;
@@ -84,13 +118,13 @@ const EpisodeSearchField: React.FC<EpisodeSearchFieldProps> = ({
   return (
     <div
       ref={ref as any}
-      className={`episode-search-field ${focused ? "tv-focus" : ""}`}
+      className={`episode-search-field ${tvMode && focused ? "tv-focus" : ""}`}
       onClick={() => {
         setIsTyping(true);
         window.setTimeout(() => inputRef.current?.focus(), 0);
       }}
     >
-      <LuSearch size={21} />
+      <LuSearch size={17} />
       <input
         ref={inputRef}
         aria-label="Find episode"
@@ -250,6 +284,54 @@ export const MetaPage: React.FC = () => {
     setEpisodesProgress(progressMap);
   }, [episodeList, activeSeason, title]);
 
+  // Newest history entry for this title. History syncs between devices, so
+  // episodes played in the mobile app count too.
+  const watchHistory = useWatchHistoryStore((state) => state.history);
+  const lastWatched = useMemo(
+    () =>
+      watchHistory
+        .filter(
+          (item) =>
+            item.link === link &&
+            item.episode &&
+            (!item.provider || item.provider === activeProviderValue),
+        )
+        .reduce<WatchHistoryItem | undefined>((latest, item) => {
+          const time = item.timestamp || item.lastPlayed || 0;
+          return !latest || time > (latest.timestamp || latest.lastPlayed || 0) ? item : latest;
+        }, undefined),
+    [watchHistory, link, activeProviderValue],
+  );
+  const [pendingResume, setPendingResume] = useState<{ season: string; episode: EpisodeIdentity } | null>(null);
+
+  const play = (items: Array<{ title: string; link: string }>, index: number, type: string) => {
+    navigate("/player", {
+      state: {
+        episodeList: items,
+        linkIndex: index,
+        primaryTitle: title,
+        secondaryTitle: activeSeason?.title || "",
+        type,
+        poster: { poster: posterImage, logo: meta?.logo || info?.logo, background: bgImage },
+        providerValue: activeProviderValue,
+        infoUrl: link,
+      },
+    });
+  };
+
+  // After switching season for a resume, play once its episodes arrive.
+  useEffect(() => {
+    if (!pendingResume || !lastWatched || activeSeason?.title !== pendingResume.season) return;
+    if (activeSeason.episodesLink && episodeLoading) return;
+    setPendingResume(null);
+    const { rows: seasonItems, type } = seasonRows(activeSeason, episodeList, info?.type);
+    const index = findEpisodeIndex(seasonItems, pendingResume.episode);
+    if (index < 0) return;
+    const { position, duration } = readWatched(lastWatched, pendingResume.episode);
+    const watched = duration > 0 && position / duration > WATCHED_FRACTION;
+    play(seasonItems, watched && seasonItems[index + 1] ? index + 1 : index, type);
+  }, [pendingResume, activeSeason, episodeList, episodeLoading]);
+
   const dialogDownloadedSubtitles = useMemo(() => {
     if (!dialogContext) return [];
     return Object.values(downloads)
@@ -301,21 +383,6 @@ export const MetaPage: React.FC = () => {
     if (hasCustomCollections) setCollectionPickerOpen(true);
     else if (isInWatchList) removeItem(link);
     else addItem({ title, poster: posterImage, link, provider: activeProviderValue });
-  };
-
-  const play = (items: Array<{ title: string; link: string }>, index: number, type: string) => {
-    navigate("/player", {
-      state: {
-        episodeList: items,
-        linkIndex: index,
-        primaryTitle: title,
-        secondaryTitle: activeSeason?.title || "",
-        type,
-        poster: { poster: posterImage, logo: meta?.logo || info.logo, background: bgImage },
-        providerValue: activeProviderValue,
-        infoUrl: link,
-      },
-    });
   };
 
   const prepareDownload = async (
@@ -509,8 +576,7 @@ export const MetaPage: React.FC = () => {
     setDialogError(null);
   };
 
-  const rows = activeSeason?.episodesLink ? episodeList || [] : activeSeason?.directLinks || [];
-  const rowType = activeSeason?.episodesLink ? "series" : activeSeason?.directLinks?.[0]?.type || info.type || "movie";
+  const { rows, type: rowType } = seasonRows(activeSeason, episodeList, info.type);
   const displayedRows = rows
     .map((episode: any, sourceIndex: number) => ({ episode, sourceIndex }))
     .filter(({ episode }) =>
@@ -520,6 +586,70 @@ export const MetaPage: React.FC = () => {
   const playableRows = displayedRows.map(({ episode }) => episode);
   const showEpisodeSearch = rows.length > 8 || Boolean(episodeSearch);
   const showEpisodeSort = rows.length > 1;
+
+  // Same targets as the mobile app: resume the last episode, move on to the
+  // next one once it is mostly watched, or start from the first.
+  const lastSeason =
+    lastWatched?.seasonTitle && lastWatched.seasonTitle !== activeSeason?.title
+      ? filteredLinkList.find((season: Link) => season.title === lastWatched.seasonTitle)
+      : undefined;
+  let resumeTarget: (ResumeTarget & { index?: number }) | null = null;
+  if (lastWatched?.episode && lastSeason) {
+    resumeTarget = {
+      mode: "resume",
+      seasonTitle: lastSeason.title,
+      title: lastWatched.episode.title || lastWatched.episodeTitle || "Last episode",
+    };
+  } else {
+    const index = lastWatched ? findEpisodeIndex(rows, lastWatched.episode) : -1;
+    const episodeTitle = (i: number) => rows[i].title?.trim() || `Episode ${i + 1}`;
+    if (lastWatched && index >= 0) {
+      const { position, duration } = readWatched(lastWatched, rows[index]);
+      const fraction = duration > 0 ? position / duration : 0;
+      if (fraction <= WATCHED_FRACTION) {
+        resumeTarget = {
+          mode: "resume",
+          title: episodeTitle(index),
+          index,
+          progress: fraction || undefined,
+          remainingSeconds: duration > 0 ? duration - position : undefined,
+        };
+      } else if (rows[index + 1]) {
+        resumeTarget = { mode: "next", title: episodeTitle(index + 1), index: index + 1 };
+      }
+    } else if (rows.length > 1) {
+      resumeTarget = { mode: "start", title: episodeTitle(0), index: 0 };
+    }
+  }
+  const handleResume = () => {
+    if (lastSeason && lastWatched?.episode) {
+      setPendingResume({ season: lastSeason.title, episode: lastWatched.episode });
+      setActiveSeason(lastSeason);
+      localStorage.setItem(`vega_season_${link}`, lastSeason.title);
+      return;
+    }
+    if (resumeTarget?.index !== undefined) play(rows, resumeTarget.index, rowType);
+  };
+  const sortButton = showEpisodeSort ? (
+    <FocusableButton
+      className="episode-sort-button"
+      focusKey="EPISODE_SORT_BUTTON"
+      aria-label={sortOrder === "asc" ? "Sort episodes descending" : "Sort episodes ascending"}
+      title={sortOrder === "asc" ? "Sort episodes descending" : "Sort episodes ascending"}
+      onClick={() => {
+        const nextOrder = sortOrder === "asc" ? "desc" : "asc";
+        setSortOrder(nextOrder);
+        localStorage.setItem(episodeSortOrderKey, nextOrder);
+      }}
+    >
+      {sortOrder === "asc" ? (
+        <LuArrowDownNarrowWide size={18} />
+      ) : (
+        <LuArrowDownWideNarrow size={18} />
+      )}
+    </FocusableButton>
+  ) : null;
+  const resumeButton = resumeTarget ? <ResumeButton target={resumeTarget} onPress={handleResume} /> : null;
 
   return (
     <FocusContext.Provider value={focusKey}>
@@ -546,6 +676,7 @@ export const MetaPage: React.FC = () => {
                 onOpenWeb={webUrl ? () => void openUrl(webUrl) : undefined}
                 onOpenStory={info.tmdbId || info.imdbId ? () => setStoryOpen(true) : undefined}
                 onOpenTrailer={trailerUrl ? () => void openUrl(trailerUrl) : undefined}
+                primaryAction={resumeButton}
               />
             ) : undefined
           }
@@ -562,11 +693,13 @@ export const MetaPage: React.FC = () => {
               onOpenWeb={webUrl ? () => void openUrl(webUrl) : undefined}
               onOpenStory={info.tmdbId || info.imdbId ? () => setStoryOpen(true) : undefined}
               onOpenTrailer={trailerUrl ? () => void openUrl(trailerUrl) : undefined}
+              primaryAction={resumeButton}
             />
           )}
 
           <section className="content-episodes-section" aria-label="Available links">
-            <div>
+            {/* Without the search field, the sort button sits beside the season picker. */}
+            <div className="season-row">
               <SeasonSelector
                 seasons={filteredLinkList}
                 activeSeason={activeSeason}
@@ -576,36 +709,17 @@ export const MetaPage: React.FC = () => {
                   localStorage.setItem(`vega_season_${link}`, season.title);
                 }}
               />
+              {!showEpisodeSearch && sortButton}
             </div>
 
-            {(showEpisodeSearch || showEpisodeSort) && (
+            {showEpisodeSearch && (
               <div className="episode-tools">
-                {showEpisodeSearch && (
-                  <EpisodeSearchField
-                    value={episodeSearch}
-                    onChange={setEpisodeSearch}
-                    tvMode={tvMode}
-                  />
-                )}
-                {showEpisodeSort && (
-                  <FocusableButton
-                    className="episode-sort-button"
-                    focusKey="EPISODE_SORT_BUTTON"
-                    aria-label={sortOrder === "asc" ? "Sort episodes descending" : "Sort episodes ascending"}
-                    title={sortOrder === "asc" ? "Sort episodes descending" : "Sort episodes ascending"}
-                    onClick={() => {
-                      const nextOrder = sortOrder === "asc" ? "desc" : "asc";
-                      setSortOrder(nextOrder);
-                      localStorage.setItem(episodeSortOrderKey, nextOrder);
-                    }}
-                  >
-                    {sortOrder === "asc" ? (
-                      <LuArrowDownNarrowWide size={22} />
-                    ) : (
-                      <LuArrowDownWideNarrow size={22} />
-                    )}
-                  </FocusableButton>
-                )}
+                <EpisodeSearchField
+                  value={episodeSearch}
+                  onChange={setEpisodeSearch}
+                  tvMode={tvMode}
+                />
+                {sortButton}
               </div>
             )}
 

@@ -3,6 +3,7 @@ import { useFocusable } from '@noriginmedia/norigin-spatial-navigation-react';
 import { settingsStorage } from '../../lib/storage';
 import { useModalFocus, useIsInModal } from '../../lib/context/ModalFocusContext';
 import { useControlsFocus } from '../../lib/context/ControlsFocusContext';
+import { useKeyboardNavActive } from '../../lib/hooks/useKeyboardNavActive';
 
 export interface FocusableButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   // If true, will not take focus
@@ -37,6 +38,10 @@ export const FocusableButton: React.FC<FocusableButtonProps> = ({
   const isControlsVisible = useControlsFocus();
 
   const isAllowedMode = isInModal || tvMode;
+  // Outside TV mode, dialogs keep spatial focus for keyboard and controller,
+  // but only show the ring while one of those is in use.
+  const keyboardNavActive = useKeyboardNavActive();
+  const showRing = tvMode || keyboardNavActive;
   const canFocus =
     isAllowedMode &&
     isControlsVisible &&
@@ -73,7 +78,7 @@ export const FocusableButton: React.FC<FocusableButtonProps> = ({
       role="button"
       aria-disabled={disabled || undefined}
       tabIndex={disabled || tvMode || !isControlsVisible ? -1 : (tabIndex ?? 0)}
-      className={`${className} ${focused && isAllowedMode && isControlsVisible ? 'tv-focus' : ''}`.trim()}
+      className={`${className} ${focused && isAllowedMode && isControlsVisible && showRing ? 'tv-focus' : ''}`.trim()}
       onClick={onClick}
       onKeyDown={(event) => {
         onKeyDown?.(event as any);

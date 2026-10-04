@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { isWindowsPlatform, toggleWindowMaximize } from "./WindowControls";
 import {
   useFocusable,
   FocusContext,
@@ -42,6 +43,15 @@ export const Layout: React.FC = () => {
       <div className="layout-root" ref={ref as any}>
         <Sidebar />
         <div className="layout-main">
+          {isWindowsPlatform() && (
+            // Title bar area: drag to move, double-click to maximize.
+            <div
+              className="layout-drag-region"
+              data-tauri-drag-region
+              aria-hidden="true"
+              onDoubleClick={() => void toggleWindowMaximize().catch(() => {})}
+            />
+          )}
           <Topbar />
           <main
             className={`layout-content ${needsTopPadding ? "layout-content-padded" : ""}`}

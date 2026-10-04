@@ -1,52 +1,28 @@
 .extensions-page {
   display: flex;
-  width: min(100%, 1040px);
+  width: 100%;
+  max-width: 1200px;
   min-height: 100%;
+  margin-inline: auto;
   flex-direction: column;
-  gap: 26px;
-  margin: 0 auto;
-  padding: 22px 0 110px;
+  gap: 22px;
+  padding: 12px clamp(16px, 3vw, 44px) 64px;
   color: var(--on-surface);
 }
 
-.extensions-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.extensions-eyebrow {
-  margin: 0 0 4px;
-  color: var(--on-surface-variant);
-  font-size: 12px;
-  font-weight: 750;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.extensions-header h1 {
-  margin: 0;
-  font-size: clamp(28px, 3vw, 36px);
-  font-weight: 760;
-  letter-spacing: -0.035em;
-}
-
-.extensions-header > div > p:last-child {
-  margin: 4px 0 0;
-  color: var(--on-surface-variant);
-  font-size: 14px;
+.extensions-page > .page-header {
+  margin-bottom: 0;
 }
 
 .extensions-refresh-button,
 .add-source-button,
 .extensions-dialog-close {
   display: grid;
-  width: 48px;
-  height: 48px;
-  flex: 0 0 48px;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
   place-items: center;
-  border-radius: 16px;
+  border-radius: 8px;
   color: var(--on-surface-variant);
   background: var(--surface-container-high);
   transition:
@@ -57,8 +33,8 @@
 .extensions-refresh-button:hover,
 .extensions-refresh-button.tv-focus,
 .extensions-dialog-close:hover {
-  color: var(--on-primary-container);
-  background: var(--primary-container);
+  color: var(--on-surface);
+  background: var(--surface-container-highest);
 }
 
 .extensions-error {
@@ -66,7 +42,7 @@
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 16px;
+  border-radius: 8px;
   color: var(--on-error-container);
   background: var(--error-container);
   font-size: 14px;
@@ -83,7 +59,7 @@
   height: 34px;
   place-items: center;
   border: 0;
-  border-radius: 11px;
+  border-radius: 8px;
   color: inherit;
   background: color-mix(in srgb, var(--on-error-container) 10%, transparent);
   cursor: pointer;
@@ -110,13 +86,13 @@
 .active-source-button {
   display: flex;
   min-width: 0;
-  min-height: 64px;
+  min-height: 52px;
   flex: 1;
   align-items: center;
-  gap: 13px;
-  padding: 10px 14px;
+  gap: 12px;
+  padding: 6px 12px 6px 8px;
   border: 1px solid transparent;
-  border-radius: 19px;
+  border-radius: 10px;
   color: var(--on-surface);
   background: var(--surface-container-high);
   transition:
@@ -132,11 +108,11 @@
 
 .source-control-icon {
   display: grid;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
   place-items: center;
-  border-radius: 14px;
+  border-radius: 8px;
   color: var(--on-primary-container);
   background: var(--primary-container);
 }
@@ -165,10 +141,10 @@
 }
 
 .add-source-button {
-  width: 64px;
-  height: 64px;
-  flex-basis: 64px;
-  border-radius: 19px;
+  width: 52px;
+  height: 52px;
+  flex-basis: 52px;
+  border-radius: var(--rounded-lg);
   border: 1px solid var(--outline-variant);
   color: var(--on-primary-container);
   background: var(--primary-container);
@@ -197,27 +173,27 @@
 
 .providers-section-heading h2 {
   margin: 0;
-  font-size: 22px;
-  font-weight: 730;
-  letter-spacing: -0.025em;
+  font-family: var(--font-family-display);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 24px;
 }
 
-.providers-section-heading p {
-  margin: 3px 0 0;
+.providers-count {
+  margin-left: 8px;
   color: var(--on-surface-variant);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 400;
 }
 
 .refreshing-label {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 7px 11px;
-  border-radius: 999px;
-  color: var(--on-secondary-container);
-  background: var(--secondary-container);
+  padding: 0;
+  color: var(--on-surface-variant);
   font-size: 12px;
-  font-weight: 680;
+  font-weight: 500;
 }
 
 .providers-list {
@@ -229,21 +205,20 @@
 .provider-card {
   display: flex;
   min-width: 0;
-  min-height: 88px;
+  min-height: 72px;
   align-items: center;
-  gap: 14px;
-  padding: 13px;
+  gap: 12px;
+  padding: 10px 12px;
   border: 1px solid var(--outline-variant);
-  border-radius: 21px;
-  background: var(--surface-container-high);
+  border-radius: var(--rounded-lg);
+  background: var(--surface-container-low);
   transition:
     border-color 160ms ease,
     background-color 160ms ease;
 }
 
 .provider-card:hover {
-  border-color: var(--outline);
-  background: var(--surface-container-highest);
+  background: var(--surface-container);
 }
 
 .provider-card.active {
@@ -265,12 +240,12 @@
 
 .provider-icon {
   display: grid;
-  width: 50px;
-  height: 50px;
-  flex: 0 0 50px;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
   place-items: center;
   overflow: hidden;
-  border-radius: 16px;
+  border-radius: 8px;
   color: var(--on-primary-container);
   background: var(--primary-container);
 }
@@ -286,15 +261,15 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 7px;
+  gap: 5px;
 }
 
 .provider-copy h3 {
   overflow: hidden;
   margin: 0;
   color: var(--on-surface);
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -339,39 +314,45 @@
 .dialog-danger-button,
 .dialog-text-button {
   display: inline-flex;
-  min-height: 42px;
+  min-height: 34px;
   align-items: center;
   justify-content: center;
   gap: 7px;
   padding: 0 14px;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--rounded-DEFAULT);
   font: inherit;
   font-size: 13px;
-  font-weight: 720;
+  font-weight: 600;
   cursor: pointer;
 }
 
-.provider-install-button,
 .empty-add-source,
 .dialog-primary-button {
-  border: 1px solid var(--outline-variant);
+  border: 1px solid transparent;
   color: var(--on-primary-container);
   background: var(--primary-container);
 }
 
+/* One filled button per row would be loud in a list of 30 providers. */
+.provider-install-button {
+  border: 1px solid var(--outline-variant);
+  color: var(--on-surface);
+  background: var(--surface-container-high);
+}
+
 .provider-update-button {
   display: inline-flex;
-  min-height: 42px;
+  min-height: 34px;
   align-items: center;
   justify-content: center;
   gap: 7px;
   padding: 0 14px;
   border: 1px solid var(--outline-variant);
-  border-radius: 14px;
+  border-radius: var(--rounded-DEFAULT);
   font: inherit;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   color: var(--on-primary, #ffffff);
   background: var(--primary, #6366f1);
@@ -384,7 +365,10 @@
 }
 
 .provider-install-button:hover,
-.provider-install-button.tv-focus,
+.provider-install-button.tv-focus {
+  background: var(--surface-container-highest);
+}
+
 .empty-add-source:hover,
 .empty-add-source.tv-focus,
 .dialog-primary-button:hover,
@@ -406,7 +390,7 @@
 .provider-select-target {
   min-width: 0;
   flex: 1;
-  border-radius: 16px;
+  border-radius: 8px;
   text-align: left;
 }
 
@@ -418,19 +402,19 @@
 .provider-settings-button,
 .source-picker-remove {
   display: grid;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
   place-items: center;
-  border-radius: 14px;
+  border-radius: var(--rounded-DEFAULT);
   color: var(--on-surface-variant);
   background: var(--surface-container-highest);
 }
 
 .provider-settings-button:hover,
 .provider-settings-button.tv-focus {
-  color: var(--on-primary-container);
-  background: var(--primary-container);
+  color: var(--on-surface);
+  background: var(--surface-bright);
 }
 
 .provider-remove-button:hover,
@@ -460,7 +444,7 @@
   justify-content: center;
   flex-direction: column;
   padding: 36px;
-  border-radius: 24px;
+  border-radius: 12px;
   color: var(--on-surface-variant);
   background: var(--surface-container-low);
   text-align: center;
@@ -472,7 +456,7 @@
   height: 64px;
   place-items: center;
   margin-bottom: 15px;
-  border-radius: 22px;
+  border-radius: 10px;
   color: var(--on-primary-container);
   background: var(--primary-container);
 }
@@ -512,7 +496,7 @@
   overflow-y: auto;
   padding: 22px;
   border: 1px solid var(--outline-variant);
-  border-radius: 26px;
+  border-radius: 12px;
   outline: none;
   color: var(--on-surface);
   background: var(--surface-container-high);
@@ -538,7 +522,7 @@
   margin: 0;
   font-size: 22px;
   font-weight: 740;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.015em;
 }
 
 .extensions-dialog-header p,
@@ -569,7 +553,7 @@
   gap: 8px;
   padding: 7px;
   border: 1px solid var(--outline-variant);
-  border-radius: 18px;
+  border-radius: 10px;
   background: var(--surface-container);
 }
 
@@ -589,7 +573,7 @@
   align-items: center;
   gap: 11px;
   padding: 4px;
-  border-radius: 13px;
+  border-radius: 8px;
 }
 
 .source-picker-main > span:nth-child(2) {
@@ -620,7 +604,7 @@
   gap: 11px;
   padding: 0 15px;
   border: 1px solid var(--outline-variant);
-  border-radius: 17px;
+  border-radius: 8px;
   color: var(--on-surface-variant);
   background: var(--surface-container-highest);
 }
@@ -632,11 +616,10 @@
 }
 
 .extension-dialog-input.tv-focus {
-  border-radius: 17px !important;
+  border-radius: 8px !important;
   border-color: var(--primary);
   outline: 3px solid var(--primary);
   outline-offset: 2px;
-  box-shadow: 0 0 15px var(--primary-container);
   color: var(--on-surface);
   transform: none !important;
 }
@@ -689,7 +672,7 @@
   height: 52px;
   place-items: center;
   margin: 0 auto 14px;
-  border-radius: 18px;
+  border-radius: 10px;
   color: var(--on-error-container);
   background: var(--error-container);
 }
@@ -767,7 +750,7 @@
   justify-content: center;
   gap: 7px;
   border: 1px solid var(--outline-variant);
-  border-radius: 14px;
+  border-radius: 8px;
   color: var(--on-surface-variant);
   background: var(--surface-container-highest);
   font: inherit;
@@ -797,7 +780,6 @@
   border-color: var(--primary);
   outline: 3px solid var(--primary);
   outline-offset: 2px;
-  box-shadow: 0 0 15px var(--primary-container);
 }
 
 .source-token-row {

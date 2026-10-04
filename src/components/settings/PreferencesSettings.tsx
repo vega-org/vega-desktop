@@ -5,6 +5,8 @@ import {
   LuFolderOpen as FolderOpen,
   LuTrash2 as Trash2,
   LuCheck as Check,
+  LuMinus as Minus,
+  LuPlus as Plus,
 } from "react-icons/lu";
 import { FocusableButton } from "../layout/FocusableButton";
 import { useDownloadStore } from "../../lib/zustand/downloadStore";
@@ -196,23 +198,23 @@ export const PreferencesSettings: React.FC = () => {
             Extra downloads wait in a FIFO queue. Default is 2.
           </p>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div className="number-stepper">
           <FocusableButton
-            className="theme-toggle-btn"
+            className="number-stepper-btn"
             disabled={downloadConcurrency <= 1}
             onClick={() => updateDownloadConcurrency(downloadConcurrency - 1)}
+            aria-label="Fewer concurrent downloads"
           >
-            -
+            <Minus size={15} />
           </FocusableButton>
-          <span style={{ minWidth: "28px", textAlign: "center" }}>
-            {downloadConcurrency}
-          </span>
+          <span className="number-stepper-value">{downloadConcurrency}</span>
           <FocusableButton
-            className="theme-toggle-btn"
+            className="number-stepper-btn"
             disabled={downloadConcurrency >= 5}
             onClick={() => updateDownloadConcurrency(downloadConcurrency + 1)}
+            aria-label="More concurrent downloads"
           >
-            +
+            <Plus size={15} />
           </FocusableButton>
         </div>
       </div>

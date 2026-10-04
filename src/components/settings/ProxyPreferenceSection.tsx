@@ -13,7 +13,7 @@ import {
   BYEDPI_PRESETS,
   ProxyStatus,
 } from "../../lib/services/proxyService";
-import { LuCheck as Check, LuRotateCcw as Reset, LuShieldCheck as ShieldCheck } from "react-icons/lu";
+import { LuCheck as Check, LuRotateCcw as Reset } from "react-icons/lu";
 
 export const ProxyPreferenceSection: React.FC = () => {
   const [warpEnabled, setWarpEnabled] = useState<boolean>(false);
@@ -187,17 +187,15 @@ export const ProxyPreferenceSection: React.FC = () => {
             {byeDpiStatus?.is_running && (
               <span className="proxy-active-badge">
                 <span className="proxy-active-dot" />
-                Active :{byeDpiStatus.port}
+                Running on port {byeDpiStatus.port}
               </span>
             )}
           </div>
           <p className="body-md text-muted">
-            Local TCP desynchronization proxy. Defeats ISP Deep Packet Inspection without a VPN or remote server.
+            Local proxy that splits TCP packets so ISP deep packet inspection
+            cannot block providers. No VPN or remote server needed. Works
+            together with DNS over HTTPS.
           </p>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px", fontSize: "11px", color: "var(--primary)" }}>
-            <ShieldCheck size={14} />
-            <span>Works in direct synergy with DNS over HTTPS (DoH)</span>
-          </div>
 
           {byeDpiEnabled && (
             <div style={{ marginTop: "14px", display: "grid", gap: "10px" }}>

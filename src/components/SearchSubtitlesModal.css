@@ -19,7 +19,7 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--outline-variant);
-  border-radius: 30px;
+  border-radius: 12px;
   color: var(--on-surface);
   background: var(--surface-container-high);
   box-shadow: 0 30px 100px rgba(0, 0, 0, 0.58);
@@ -49,7 +49,7 @@
   color: var(--on-surface);
   font-size: 25px;
   font-weight: 760;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.015em;
 }
 
 .close-btn {
@@ -58,7 +58,7 @@
   height: 44px;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 15px;
+  border-radius: 8px;
   color: var(--on-surface-variant);
   background: var(--surface-container-highest);
   cursor: pointer;
@@ -90,7 +90,7 @@
   height: 48px;
   padding: 0 13px;
   border: 1px solid var(--outline-variant);
-  border-radius: 15px;
+  border-radius: 8px;
   outline: none;
   color: var(--on-surface);
   background: var(--surface-container-high);
@@ -132,7 +132,7 @@
   width: 100%;
   min-height: 48px;
   height: 48px;
-  border-radius: 15px;
+  border-radius: 8px;
   font-size: 13px;
   padding: 0 12px;
   box-sizing: border-box;
@@ -155,7 +155,7 @@
   min-width: 48px;
   place-items: center;
   border: 0;
-  border-radius: 16px;
+  border-radius: 8px;
   color: var(--on-primary-container);
   background: var(--primary-container);
   cursor: pointer;
@@ -215,7 +215,7 @@
   gap: 13px;
   padding: 11px 12px 11px 14px;
   border: 1px solid transparent;
-  border-radius: 19px;
+  border-radius: 10px;
   color: var(--on-surface);
   background: transparent;
   text-align: left;
@@ -256,7 +256,7 @@
 .season-ep {
   flex: 0 0 auto;
   padding: 3px 7px;
-  border-radius: 99px;
+  border-radius: 12px;
   color: var(--on-primary-container);
   background: var(--primary-container);
   font-size: 10px;
@@ -285,7 +285,7 @@
   flex: 0 0 42px;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: 8px;
   color: var(--on-primary-container);
   background: var(--primary-container);
   transition: all 150ms ease;
@@ -294,7 +294,6 @@
 .result-item:hover .apply-sub-btn,
 .result-item:focus-visible .apply-sub-btn {
   filter: brightness(1.12);
-  transform: scale(1.06);
 }
 
 .modal-message {
@@ -325,7 +324,7 @@
   gap: 13px;
   padding: 12px 14px;
   border: 1px solid transparent;
-  border-radius: 19px;
+  border-radius: 10px;
   color: var(--on-surface);
   background: transparent;
   text-align: left;
@@ -370,7 +369,7 @@
 
 .subtitle-result-lang {
   padding: 3px 7px;
-  border-radius: 99px;
+  border-radius: 12px;
   color: var(--on-primary-container);
   background: var(--primary-container);
   font-weight: 720;
@@ -383,7 +382,7 @@
   height: 40px;
   flex: 0 0 40px;
   place-items: center;
-  border-radius: 14px;
+  border-radius: 8px;
   color: var(--on-primary-container);
   background: var(--primary-container);
 }

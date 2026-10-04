@@ -3,7 +3,6 @@ import {
   LuLibrary as LibraryGlyph,
   LuPencil as Pencil,
   LuPlus as Plus,
-  LuSparkles as Sparkles,
 } from "react-icons/lu";
 import { useNavigate } from "react-router-dom";
 import { PostCardItem, type Post } from "../components/home/PostCardItem";
@@ -116,22 +115,14 @@ export const LibraryPage: React.FC = () => {
 
   return (
     <main className="library-page">
-      <header className="library-header">
-        <div className="library-header-icon" aria-hidden="true">
-          {activeCollection ? (
-            <LibraryIcon icon={activeCollection.icon} color={activeCollection.color} size={26} tile />
-          ) : (
-            <LibraryGlyph size={26} />
-          )}
-        </div>
-        <div className="library-header-copy">
-          <p className="library-eyebrow">Your library</p>
-          <h1>{activeCollection ? activeCollection.name : "Library"}</h1>
-          <p className="library-header-supporting">
+      <header className="page-header library-header">
+        <div className="page-header-copy">
+          <h1 className="page-title">{activeCollection ? activeCollection.name : "Library"}</h1>
+          <p className="page-subtitle">
             {visibleItems.length} saved {visibleItems.length === 1 ? "title" : "titles"}
           </p>
         </div>
-        <div className="library-header-actions">
+        <div className="page-header-actions library-header-actions">
           {editableCollection && (
             <FocusableButton
               focusKey="LIBRARY_EDIT_CATEGORY"
@@ -203,22 +194,20 @@ export const LibraryPage: React.FC = () => {
           ))}
         </section>
       ) : (
-        <section className="library-empty-state" aria-labelledby="library-empty-title">
-          <div className="library-empty-icon" aria-hidden="true">
+        <section className="empty-view" aria-labelledby="library-empty-title">
+          <span className="empty-view-icon" aria-hidden="true">
             {activeCollection ? (
-              <LibraryIcon icon={activeCollection.icon} color={activeCollection.color} size={34} />
+              <LibraryIcon icon={activeCollection.icon} color={activeCollection.color} size={40} />
             ) : (
-              <LibraryGlyph size={34} />
+              <LibraryGlyph size={40} />
             )}
-            <Sparkles size={16} className="library-empty-sparkle" />
-          </div>
-          <p className="library-eyebrow">Your library</p>
-          <h1 id="library-empty-title">
-            {activeCollection ? `${activeCollection.name} is empty` : "Save something for later"}
-          </h1>
-          <p>
-            Use Save on a movie or show and it will be ready here whenever you
-            come back. Make categories to keep your titles organized.
+          </span>
+          <h2 id="library-empty-title" className="empty-view-title">
+            {activeCollection ? `${activeCollection.name} is empty` : "Nothing saved yet"}
+          </h2>
+          <p className="empty-view-text">
+            Use Save on a movie or show to keep it here. Make categories to
+            keep your titles organized.
           </p>
         </section>
       )}

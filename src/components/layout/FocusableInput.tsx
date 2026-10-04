@@ -7,6 +7,7 @@ import {
 } from "@noriginmedia/norigin-spatial-navigation-core";
 import { settingsStorage } from "../../lib/storage";
 import { useModalFocus, useIsInModal } from "../../lib/context/ModalFocusContext";
+import { useKeyboardNavActive } from "../../lib/hooks/useKeyboardNavActive";
 
 export interface FocusableInputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "onFocus" | "onBlur"> {
@@ -32,6 +33,8 @@ export const FocusableInput: React.FC<FocusableInputProps> = ({
     typeof navigator !== "undefined" &&
     navigator.userAgent.toLowerCase().includes("android");
   const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
+  // Outside TV mode, show the ring only while keyboard or controller is in use.
+  const showRing = useKeyboardNavActive() || tvMode;
   const { isModalOpen } = useModalFocus();
   const isInModal = useIsInModal();
   const blockedByModal = isModalOpen && !isInModal;
@@ -67,7 +70,7 @@ export const FocusableInput: React.FC<FocusableInputProps> = ({
       ref={ref as any}
       tabIndex={-1}
       className={`focusable-input-wrapper ${wrapperClassName} ${
-        focused ? "tv-focus" : ""
+        focused && showRing ? "tv-focus" : ""
       }`.trim()}
       onClick={beginTyping}
     >

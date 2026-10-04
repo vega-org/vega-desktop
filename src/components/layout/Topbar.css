@@ -1,16 +1,26 @@
 .topbar {
-  height: 80px;
+  height: 60px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 12px 24px;
+  padding: 10px 24px;
+  border-bottom: 1px solid transparent;
   background-color: transparent;
   position: sticky;
   top: 0;
   z-index: 100;
-  margin-bottom: -80px;
+  margin-bottom: -60px;
   pointer-events: none;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.topbar.scrolled {
+  border-bottom-color: var(--outline-variant);
+  background-color: var(--background);
+  pointer-events: auto;
 }
 
 body.platform-windows .topbar {
@@ -19,8 +29,8 @@ body.platform-windows .topbar {
 
 .search-wrapper {
   position: relative;
-  width: min(460px, 52vw);
-  min-width: 260px;
+  width: min(420px, 48vw);
+  min-width: 240px;
   pointer-events: auto;
 }
 
@@ -28,32 +38,26 @@ body.platform-windows .topbar {
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 52px;
-  padding: 5px 8px 5px 18px;
-  border: 1px solid color-mix(in srgb, var(--outline-variant) 78%, transparent);
-  border-radius: var(--rounded-full);
-  background-color: color-mix(
-    in srgb,
-    var(--surface-container-high) 86%,
-    transparent
-  );
-  box-shadow: 0 8px 30px
-    color-mix(in srgb, var(--surface-container-lowest) 34%, transparent);
-  backdrop-filter: blur(18px) saturate(1.2);
+  height: 38px;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--rounded-md);
+  background-color: var(--surface-container-high);
   transition:
-    border-color 180ms ease,
-    background-color 180ms ease,
-    box-shadow 180ms ease;
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
+.search-container:hover {
+  background-color: var(--surface-container-highest);
+}
+
+/* Focused text field: accent line along the bottom edge. */
 .search-container:focus-within {
-  border-color: var(--primary);
-  background-color: color-mix(
-    in srgb,
-    var(--surface-container-highest) 92%,
-    transparent
-  );
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
+  border-color: var(--outline);
+  background-color: var(--surface-container);
+  box-shadow: inset 0 -2px 0 var(--primary);
 }
 
 .search-form-inner {
@@ -75,7 +79,7 @@ body.platform-windows .topbar {
 .search-icon {
   flex: 0 0 auto;
   color: var(--on-surface-variant);
-  margin-right: 12px;
+  margin-right: 10px;
 }
 
 .search-input {
@@ -84,11 +88,11 @@ body.platform-windows .topbar {
   color: var(--on-surface);
   flex: 1;
   min-width: 0;
-  height: 40px;
+  height: 34px;
   outline: none;
   font-family: inherit;
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 400;
 }
 
 .search-input::placeholder {
@@ -98,10 +102,10 @@ body.platform-windows .topbar {
 .search-clear {
   display: grid;
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--rounded-DEFAULT);
   color: var(--on-surface-variant);
   transition:
     color 180ms ease,
@@ -120,25 +124,20 @@ body.platform-windows .topbar {
 
 .topbar-suggestions-dropdown {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 4px);
   left: 0;
   right: 0;
   z-index: 1000;
-  background-color: color-mix(
-    in srgb,
-    var(--surface-container-high) 94%,
-    rgba(0, 0, 0, 0.8) 6%
-  );
+  background-color: var(--surface-container-high);
   border: 1px solid var(--outline-variant);
-  border-radius: var(--rounded-2xl, 20px);
-  padding: 8px;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(20px) saturate(1.4);
+  border-radius: var(--rounded-md);
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   max-height: 380px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .topbar-suggestions-dropdown .search-suggestion-item {
@@ -146,8 +145,8 @@ body.platform-windows .topbar {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 10px 14px;
-  border-radius: var(--rounded-xl, 14px);
+  padding: 7px 10px;
+  border-radius: var(--rounded-DEFAULT);
   background: transparent;
   border: none;
   color: var(--on-surface);
@@ -158,7 +157,7 @@ body.platform-windows .topbar {
 
 .topbar-suggestions-dropdown .search-suggestion-item:hover,
 .topbar-suggestions-dropdown .search-suggestion-item:focus {
-  background-color: var(--surface-container-high);
+  background-color: var(--surface-container-highest);
   outline: none;
 }
 

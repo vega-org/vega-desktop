@@ -452,6 +452,7 @@ const TvPlayer: React.FC<any> = ({
         lastPlayed: Date.now(),
         playbackRate: 1,
         episodeTitle: state.secondaryTitle,
+        seasonTitle: state.secondaryTitle,
         episode: activeEpisode,
         type: state.type,
       });
@@ -1502,6 +1503,7 @@ const DesktopPlayer: React.FC<any> = ({
       lastPlayed: Date.now(),
       playbackRate: playbackRateRef.current || 1,
       episodeTitle: activeEpisode?.title || state.secondaryTitle,
+      seasonTitle: state.secondaryTitle,
       episode: activeEpisode,
       type: state.type,
     });

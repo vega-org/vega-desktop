@@ -60,9 +60,11 @@ export const SettingsPage: React.FC = () => {
 
   return (
     <div className="settings-page">
-      <div className="page-header">
-        <h1 className="headline-lg">Settings</h1>
-      </div>
+      <header className="page-header">
+        <div className="page-header-copy">
+          <h1 className="page-title">Settings</h1>
+        </div>
+      </header>
 
       <div className="settings-content">
         {/* Appearance Group */}

@@ -18,7 +18,7 @@
   overflow: hidden;
   box-sizing: border-box;
   border: 1px solid var(--outline-variant);
-  border-radius: 28px;
+  border-radius: 12px;
   color: var(--on-surface);
   background: var(--surface-container-high);
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.52);
@@ -39,7 +39,7 @@
   margin: 0;
   font-size: 23px;
   font-weight: 750;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.015em;
 }
 .download-dialog-header p {
   margin: 5px 0 0;
@@ -53,7 +53,7 @@
   flex: 0 0 44px;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 15px;
+  border-radius: 8px;
   color: var(--on-surface-variant);
   background: var(--surface-container-highest);
 }
@@ -74,7 +74,7 @@
   display: inline-flex;
   gap: 4px;
   padding: 4px;
-  border-radius: 99px;
+  border-radius: 12px;
   background: var(--surface-container-highest, #232222);
 }
 
@@ -83,7 +83,7 @@
   align-items: center;
   justify-content: center;
   padding: 7px 18px;
-  border-radius: 99px;
+  border-radius: 12px;
   border: none;
   font-size: 13px;
   font-weight: 600;
@@ -141,7 +141,7 @@
   gap: 14px;
   padding: 14px 16px;
   border: 1px solid var(--outline-variant);
-  border-radius: 20px;
+  border-radius: 10px;
   color: var(--on-surface);
   background: var(--surface-container-low);
   text-align: left;
@@ -156,13 +156,11 @@
   border-color: var(--outline);
   outline: none;
   background: var(--surface-container-highest);
-  transform: translateY(-1px);
 }
 .stream-item.tv-focus {
   border-color: var(--primary);
   outline: none;
   background: var(--surface-container-highest);
-  transform: translateY(-1px);
 }
 
 .stream-icon {
@@ -171,7 +169,7 @@
   height: 46px;
   flex: 0 0 46px;
   place-items: center;
-  border-radius: 16px;
+  border-radius: 8px;
   color: var(--on-primary-container);
   background: var(--primary-container);
 }
@@ -202,7 +200,7 @@
 .quality-badge {
   display: inline-flex;
   padding: 3px 8px;
-  border-radius: 99px;
+  border-radius: 12px;
   color: var(--on-secondary-container);
   background: var(--secondary-container);
   font-size: 11px;
@@ -228,7 +226,7 @@
   height: 38px;
   place-items: center;
   border: 0;
-  border-radius: 13px;
+  border-radius: 8px;
   color: var(--on-surface-variant);
   background: transparent;
   cursor: pointer;
@@ -249,7 +247,7 @@
   gap: 14px;
   padding: 14px 18px;
   margin-bottom: 12px;
-  border-radius: 20px;
+  border-radius: 10px;
   border: 1px solid var(--outline-variant);
   background: var(--surface-container-highest);
 }
@@ -278,7 +276,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid transparent;
   font-size: 13px;
   font-weight: 600;
@@ -291,7 +289,6 @@
 .delete-download-btn:hover,
 .delete-download-btn.tv-focus {
   opacity: 0.9;
-  transform: translateY(-1px);
 }
 
 .empty-state-dialog {

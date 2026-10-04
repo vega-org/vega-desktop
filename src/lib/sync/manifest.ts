@@ -46,6 +46,8 @@ export interface SyncedHistory {
   currentTime?: number;
   playbackRate?: number;
   episodeTitle?: string;
+  /** Season (link group) the episode belongs to. Older versions omit it. */
+  seasonTitle?: string;
   episode?: {
     id?: string;
     title: string;

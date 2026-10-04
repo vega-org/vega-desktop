@@ -75,15 +75,21 @@
 }
 
 :root {
-  /* Typography */
+  /* Typography: the platform UI font, so text looks like the rest of the OS
+     and works offline. */
   --font-family:
-    "Plus Jakarta Sans", "Inter", system-ui, -apple-system, sans-serif;
+    "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+    BlinkMacSystemFont, "Cantarell", "Ubuntu", "Noto Sans", sans-serif;
+  --font-family-display:
+    "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system,
+    BlinkMacSystemFont, "Cantarell", "Ubuntu", "Noto Sans", sans-serif;
 
-  --rounded-sm: 0.25rem;
-  --rounded-DEFAULT: 0.5rem;
-  --rounded-md: 0.75rem;
-  --rounded-lg: 1rem;
-  --rounded-xl: 1.5rem;
+  /* Desktop-sized corners: controls 6px, cards 8-12px. */
+  --rounded-sm: 4px;
+  --rounded-DEFAULT: 6px;
+  --rounded-md: 8px;
+  --rounded-lg: 10px;
+  --rounded-xl: 12px;
   --rounded-full: 9999px;
 
   --spacing-base: 8px;

@@ -26,6 +26,8 @@ export interface WatchHistoryItem {
   currentTime?: number;
   playbackRate?: number;
   episodeTitle?: string;
+  /** Season (link group) of the episode, used by the Resume button. */
+  seasonTitle?: string;
   episode?: {
     id?: string;
     title: string;

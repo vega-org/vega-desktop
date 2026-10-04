@@ -142,9 +142,8 @@ export const DownloadsSeriesPage = () => {
           <ArrowLeft size={22} />
         </FocusableButton>
         <div className="downloads-series-header-copy">
-          <p className="downloads-eyebrow">Downloaded series</p>
-          <h1>{decodedShowName}</h1>
-          <p>
+          <h1 className="page-title">{decodedShowName}</h1>
+          <p className="page-subtitle">
             {showDownloads.length} downloaded{" "}
             {showDownloads.length === 1 ? "episode" : "episodes"}
           </p>
@@ -180,10 +179,9 @@ export const DownloadsSeriesPage = () => {
           aria-labelledby="downloaded-episodes-title"
         >
           <div className="series-episodes-toolbar">
-            <div>
-              <p className="downloads-section-kicker">Ready offline</p>
-              <h2 id="downloaded-episodes-title">Episodes</h2>
-            </div>
+            <h2 id="downloaded-episodes-title" className="section-title">
+              Episodes
+            </h2>
             {seasons.length > 0 && (
               <CustomSelect
                 options={seasons.map((season) => ({

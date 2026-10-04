@@ -18,6 +18,8 @@ interface ContentOverviewProps {
   onOpenWeb?: () => void;
   onOpenStory?: () => void;
   onOpenTrailer?: () => void;
+  /** Leading button of the action row, such as Resume. */
+  primaryAction?: React.ReactNode;
 }
 
 export const ContentOverview: React.FC<ContentOverviewProps> = ({
@@ -29,6 +31,7 @@ export const ContentOverview: React.FC<ContentOverviewProps> = ({
   onOpenWeb,
   onOpenStory,
   onOpenTrailer,
+  primaryAction,
 }) => {
   const [readMore, setReadMore] = useState(false);
   const synopsis = description || "No synopsis is available for this title.";
@@ -57,24 +60,25 @@ export const ContentOverview: React.FC<ContentOverviewProps> = ({
       )}
 
       <div className="content-info-actions" aria-label="Title actions">
+        {primaryAction}
         <FocusableButton className="content-info-action" onClick={onSearch} focusKey="CONTENT_SEARCH">
-          <Search size={27} />
+          <Search size={18} />
           <span>Search</span>
         </FocusableButton>
         {onOpenWeb && (
           <FocusableButton className="content-info-action" onClick={onOpenWeb} focusKey="CONTENT_WEB">
-            <Globe size={27} />
+            <Globe size={18} />
             <span>Web</span>
           </FocusableButton>
         )}
         {onOpenStory ? (
           <FocusableButton className="content-info-action" onClick={onOpenStory} focusKey="CONTENT_STORY">
-            <BookOpen size={27} />
+            <BookOpen size={18} />
             <span>Explore</span>
           </FocusableButton>
         ) : onOpenTrailer ? (
           <FocusableButton className="content-info-action" onClick={onOpenTrailer} focusKey="CONTENT_TRAILER">
-            <Clapperboard size={27} />
+            <Clapperboard size={18} />
             <span>Trailer</span>
           </FocusableButton>
         ) : null}
@@ -83,7 +87,7 @@ export const ContentOverview: React.FC<ContentOverviewProps> = ({
           onClick={onToggleSaved}
           focusKey="CONTENT_WATCHLIST"
         >
-          {isSaved ? <BookmarkCheck size={27} /> : <BookmarkPlus size={27} />}
+          {isSaved ? <BookmarkCheck size={18} /> : <BookmarkPlus size={18} />}
           <span>{isSaved ? "Saved" : "Save"}</span>
         </FocusableButton>
       </div>

@@ -153,6 +153,40 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // This is an app, not a web page: hide the browser's own menu (Back,
+    // Refresh, Print, Inspect) and its shortcuts. Text fields keep their
+    // cut/copy/paste menu. With developer shortcuts on, everything stays.
+    const isEditable = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      (target.isContentEditable ||
+        target.closest("input, textarea, [contenteditable='true']") !== null);
+    const browserShortcuts = new Set(["r", "p", "s", "u", "f", "g", "h", "j"]);
+
+    const handleContextMenu = (event: MouseEvent) => {
+      if (settingsStorage.areDevtoolsShortcutsEnabled()) return;
+      if (isEditable(event.target)) return;
+      event.preventDefault();
+    };
+    const handleBrowserShortcut = (event: KeyboardEvent) => {
+      if (settingsStorage.areDevtoolsShortcutsEnabled()) return;
+      const key = event.key.toLowerCase();
+      const ctrl = event.ctrlKey || event.metaKey;
+      if (key === "f5" || (ctrl && browserShortcuts.has(key))) {
+        // Only stop the browser action; app handlers (e.g. Ctrl+S in the
+        // player) still receive the event.
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener("contextmenu", handleContextMenu);
+    window.addEventListener("keydown", handleBrowserShortcut);
+    return () => {
+      window.removeEventListener("contextmenu", handleContextMenu);
+      window.removeEventListener("keydown", handleBrowserShortcut);
+    };
+  }, []);
+
+  useEffect(() => {
     // Start auto provider updates on boot
     updateProvidersService.startAutomaticUpdateCheck();
 

@@ -532,11 +532,10 @@ export const ExtensionsPage: React.FC = () => {
   return (
     <FocusContext.Provider value={pageFocusKey}>
       <main ref={pageFocusRef} className="extensions-page">
-      <header className="extensions-header">
-        <div>
-          <p className="extensions-eyebrow">Settings</p>
-          <h1>Providers</h1>
-          <p>Install and choose streaming sources</p>
+      <header className="page-header extensions-header">
+        <div className="page-header-copy">
+          <h1 className="page-title">Providers</h1>
+          <p className="page-subtitle">Install and choose streaming sources</p>
         </div>
         <FocusableButton
           className="extensions-refresh-button"
@@ -600,11 +599,10 @@ export const ExtensionsPage: React.FC = () => {
       <section className="providers-section" aria-labelledby="providers-title">
         <div className="providers-section-heading">
           <div>
-            <h2 id="providers-title">Providers</h2>
-            <p>
-              {providers.length}{" "}
-              {providers.length === 1 ? "provider" : "providers"}
-            </p>
+            <h2 id="providers-title">
+              Available
+              <span className="providers-count">{providers.length}</span>
+            </h2>
           </div>
           {refreshing && (
             <span className="refreshing-label">

@@ -17,6 +17,7 @@ import {
   type IMDbSuggestion,
 } from "../../lib/services/imdbSuggestions";
 import { ProviderSwitcher } from "./ProviderSwitcher";
+import { isWindowsPlatform, toggleWindowMaximize } from "./WindowControls";
 import "./Topbar.css";
 
 const FocusableSuggestionItem: React.FC<{
@@ -156,6 +157,20 @@ export const Topbar: React.FC = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Over the hero the bar is transparent; once the page scrolls it becomes a
+  // solid title bar so posters do not slide under the search box.
+  const [scrolled, setScrolled] = useState(false);
+  const isHome = location.pathname === "/";
+  useEffect(() => {
+    if (!isHome) return;
+    const scroller = document.querySelector(".layout-content");
+    if (!scroller) return;
+    const update = () => setScrolled(scroller.scrollTop > 24);
+    update();
+    scroller.addEventListener("scroll", update, { passive: true });
+    return () => scroller.removeEventListener("scroll", update);
+  }, [isHome]);
+
   if (location.pathname !== "/") {
     return null;
   }
@@ -222,7 +237,15 @@ export const Topbar: React.FC = () => {
     (isInputFocused || isTyping || isSuggestionsFocused || focused);
 
   return (
-    <header className="topbar">
+    <header
+      className={`topbar${scrolled ? " scrolled" : ""}`}
+      {...(isWindowsPlatform() ? { "data-tauri-drag-region": true } : {})}
+      onDoubleClick={(event) => {
+        if (event.target === event.currentTarget && isWindowsPlatform()) {
+          void toggleWindowMaximize().catch(() => {});
+        }
+      }}
+    >
       <div ref={containerRef} className="search-wrapper">
         <form className="search-container" onSubmit={handleSearch}>
           <div
@@ -234,7 +257,7 @@ export const Topbar: React.FC = () => {
               setTimeout(() => nativeInputRef.current?.focus(), 50);
             }}
           >
-            <Search size={21} className="search-icon" aria-hidden="true" />
+            <Search size={17} className="search-icon" aria-hidden="true" />
             <input
               ref={nativeInputRef}
               type="text"
