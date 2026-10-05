@@ -739,6 +739,17 @@ pub fn run() {
                 window.set_decorations(true)?;
             }
 
+            // Launch with --devtools (or VEGA_DEVTOOLS=1) to open the inspector
+            // when the UI is too broken to reach the settings toggle.
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            if std::env::args().any(|a| a == "--devtools")
+                || std::env::var_os("VEGA_DEVTOOLS").is_some()
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.open_devtools();
+                }
+            }
+
             let app_handle = app.handle().clone();
             let app_handle_for_server = app_handle.clone();
             tauri::async_runtime::spawn(async move {

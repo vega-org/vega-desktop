@@ -10,6 +10,28 @@
 
   <body>
     <div id="root"></div>
+    <script>
+      // Write errors to the app log before the main bundle's logger starts,
+      // so a failing module import does not leave only a black window.
+      (function () {
+        function send(message) {
+          try {
+            var t = window.__TAURI_INTERNALS__;
+            if (t) t.invoke("log_write_batch", { entries: [{ level: "error", message: "[Early] " + message }] });
+          } catch (e) {}
+        }
+        function onError(e) {
+          var err = e.error || e.reason;
+          send((err && err.stack) || (err && err.message) || e.message || String(err));
+        }
+        window.addEventListener("error", onError);
+        window.addEventListener("unhandledrejection", onError);
+        window.__vegaEarlyErrors = function () {
+          window.removeEventListener("error", onError);
+          window.removeEventListener("unhandledrejection", onError);
+        };
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

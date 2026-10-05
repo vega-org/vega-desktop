@@ -136,6 +136,9 @@ export const installVegaLog = (): void => {
   console.warn = wrap("warn", original.warn);
   console.error = wrap("error", original.error);
 
+  // index.html logs errors until this point; take over from it.
+  (window as { __vegaEarlyErrors?: () => void }).__vegaEarlyErrors?.();
+
   window.addEventListener("error", (event) => {
     record("error", [
       "Uncaught error:",
