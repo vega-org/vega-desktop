@@ -7536,6 +7536,7 @@ dependencies = [
  "system-configuration 0.6.1",
  "tokio",
  "tokio-boring2",
+ "tokio-socks",
  "tokio-util",
  "tower",
  "tower-service",

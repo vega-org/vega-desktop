@@ -76,6 +76,46 @@ impl StreamDnsResolver {
     }
 }
 
+impl StreamDnsResolver {
+    /// Resolves a host for the ByeDPI relay, IPv4 addresses first. ISP DNS returns the block
+    /// page address for blocked sites, so this uses DNS over HTTPS even when the user turned
+    /// it off, and only falls back to the system DNS when DNS over HTTPS fails.
+    pub async fn resolve_for_bypass(&self, host: &str) -> Vec<std::net::IpAddr> {
+        let sorted = |mut ips: Vec<std::net::IpAddr>| {
+            ips.sort_by_key(|ip| !ip.is_ipv4());
+            ips
+        };
+        let doh_ips: Vec<std::net::IpAddr> = if *self.enabled.read().await {
+            let resolver = self.resolver.read().await;
+            resolver
+                .lookup_ip(host)
+                .await
+                .map(|r| r.iter().collect())
+                .unwrap_or_default()
+        } else {
+            BYPASS_FALLBACK_RESOLVER
+                .lookup_ip(host)
+                .await
+                .map(|r| r.iter().collect())
+                .unwrap_or_default()
+        };
+        if !doh_ips.is_empty() {
+            return sorted(doh_ips);
+        }
+        vlog_warn!("[byedpi_relay] DoH failed for {}, trying system DNS", host);
+        let system_ips = tokio::net::lookup_host(format!("{}:0", host))
+            .await
+            .map(|addrs| addrs.map(|a| a.ip()).collect())
+            .unwrap_or_default();
+        sorted(system_ips)
+    }
+}
+
+lazy_static::lazy_static! {
+    static ref BYPASS_FALLBACK_RESOLVER: TokioAsyncResolver =
+        crate::doh_client::build_hickory_resolver("cloudflare", None);
+}
+
 impl Resolve for StreamDnsResolver {
     fn resolve(&self, name: Name) -> Resolving {
         let resolver_lock = self.resolver.clone();

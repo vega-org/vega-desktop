@@ -33,6 +33,8 @@ pub struct ActiveProxyState {
     pub proxy_url: Option<String>,
     pub child: Option<tokio::process::Child>,
     pub pid: Option<u32>,
+    /// DoH-resolving SOCKS front of ByeDPI; see byedpi_relay.
+    pub relay: Option<tokio::task::JoinHandle<()>>,
 }
 
 lazy_static! {
@@ -43,6 +45,7 @@ lazy_static! {
             proxy_url: None,
             child: None,
             pid: None,
+            relay: None,
         }));
 }
 
@@ -507,6 +510,9 @@ pub async fn stop_current_proxy_internal(state: &mut ActiveProxyState) {
     if let Some(pid) = state.pid.take() {
         crate::process_guard::kill_pid(pid);
     }
+    if let Some(relay) = state.relay.take() {
+        relay.abort();
+    }
     state.active_type = ProxyType::None;
     state.port = None;
     state.proxy_url = None;
@@ -578,12 +584,24 @@ pub async fn start_byedpi(
         return Err("ByeDPI process failed to start listening in time".to_string());
     }
 
-    let proxy_url = format!("socks5h://127.0.0.1:{}", port);
+    // Clients send host names to the relay (socks5h), which resolves them with DoH and passes
+    // ByeDPI the IP address.
+    let (relay_port, relay) = match crate::byedpi_relay::start(port).await {
+        Ok(started) => started,
+        Err(e) => {
+            if let Some(p) = pid {
+                crate::process_guard::kill_pid(p);
+            }
+            return Err(e);
+        }
+    };
+    let proxy_url = format!("socks5h://127.0.0.1:{}", relay_port);
     state.active_type = ProxyType::ByeDpi;
     state.port = Some(port);
     state.proxy_url = Some(proxy_url.clone());
     state.child = Some(child);
     state.pid = pid;
+    state.relay = Some(relay);
 
     crate::doh_client::clear_client_cache().await;
     crate::stream_server::update_stream_proxy(Some(proxy_url)).await;

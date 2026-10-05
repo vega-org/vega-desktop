@@ -1,5 +1,6 @@
 #[macro_use]
 mod app_log;
+mod byedpi_relay;
 mod cookie_manager;
 mod doh_client;
 mod download_manager;

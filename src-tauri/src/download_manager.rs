@@ -195,7 +195,15 @@ pub async fn start_download(
         );
     }
 
-    client_builder = client_builder.default_headers(header_map);
+    // Same DNS over HTTPS and WARP / ByeDPI route as the player, so hosts the ISP blocks can
+    // still be downloaded.
+    client_builder = client_builder
+        .default_headers(header_map)
+        .dns_resolver(crate::stream_server::GLOBAL_STREAM_RESOLVER.clone());
+    if let Some(proxy_url) = crate::proxy_manager::get_active_proxy_url().await {
+        let proxy = reqwest::Proxy::all(&proxy_url).map_err(|e| e.to_string())?;
+        client_builder = client_builder.proxy(proxy);
+    }
     let client = client_builder.build().map_err(|e| e.to_string())?;
 
     if url.contains(".m3u8") || video_type.as_deref() == Some("m3u8") {
