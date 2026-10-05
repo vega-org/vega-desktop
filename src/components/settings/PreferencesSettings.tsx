@@ -311,7 +311,8 @@ export const PreferencesSettings: React.FC = () => {
         <div className="settings-info">
           <h3 className="label-lg">Developer Tools Shortcuts</h3>
           <p className="body-md text-muted">
-            Allow F12 or Ctrl+Shift+I to toggle developer tools
+            Allow F12 or Ctrl+Shift+I to toggle developer tools.
+            Ctrl+Alt+Shift+I always works.
           </p>
         </div>
         <Switch

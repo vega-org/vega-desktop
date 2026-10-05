@@ -24,6 +24,20 @@
           var err = e.error || e.reason;
           send((err && err.stack) || (err && err.message) || e.message || String(err));
         }
+        // Ctrl+Alt+Shift+I (Cmd+Option+Shift+I on macOS) always toggles
+        // developer tools, even with the setting off or the UI broken.
+        window.addEventListener(
+          "keydown",
+          function (e) {
+            if (e.code !== "KeyI" || !e.altKey || !e.shiftKey || !(e.ctrlKey || e.metaKey)) return;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            try {
+              window.__TAURI_INTERNALS__.invoke("toggle_devtools");
+            } catch (err) {}
+          },
+          true,
+        );
         window.addEventListener("error", onError);
         window.addEventListener("unhandledrejection", onError);
         window.__vegaEarlyErrors = function () {
