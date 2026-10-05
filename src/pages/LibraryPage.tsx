@@ -10,7 +10,6 @@ import { FocusableButton } from "../components/layout/FocusableButton";
 import { LibraryIcon } from "../components/library/LibraryIcon";
 import { LibraryCollectionDialog } from "../components/library/LibraryCollectionDialog";
 import {
-  DEFAULT_COLLECTION,
   getItemCollectionIds,
   type LibraryCollection,
 } from "../lib/storage/WatchListStorage";
@@ -47,11 +46,7 @@ export const LibraryPage: React.FC = () => {
 
   // A deleted category (here or synced from another device) falls back to All.
   const activeCollection =
-    filter === ALL_FILTER
-      ? undefined
-      : filter === DEFAULT_COLLECTION.id
-        ? DEFAULT_COLLECTION
-        : collections.find((c) => c.id === filter);
+    filter === ALL_FILTER ? undefined : collections.find((c) => c.id === filter);
   useEffect(() => {
     if (filter !== ALL_FILTER && !activeCollection) setFilter(ALL_FILTER);
   }, [filter, activeCollection]);
@@ -97,14 +92,11 @@ export const LibraryPage: React.FC = () => {
     else removeItem(post.link);
   };
 
-  const editableCollection =
-    activeCollection && activeCollection.id !== DEFAULT_COLLECTION.id
-      ? (activeCollection as LibraryCollection)
-      : undefined;
+  const editableCollection = activeCollection;
 
   const chips = [
     { id: ALL_FILTER, name: "All", icon: "list", color: undefined, count: watchList.length },
-    ...[DEFAULT_COLLECTION, ...collections].map((c) => ({
+    ...collections.map((c) => ({
       id: c.id,
       name: c.name,
       icon: c.icon,
@@ -147,7 +139,7 @@ export const LibraryPage: React.FC = () => {
       <nav className="library-chips" aria-label="Library categories">
         {chips.map((chip) => {
           const selected = chip.id === filter;
-          const isCustom = chip.id !== ALL_FILTER && chip.id !== DEFAULT_COLLECTION.id;
+          const isCategory = chip.id !== ALL_FILTER;
           return (
             <FocusableButton
               key={chip.id}
@@ -157,14 +149,14 @@ export const LibraryPage: React.FC = () => {
               className={`library-chip${selected ? " selected" : ""}`}
               onClick={() => setFilter(chip.id)}
               onContextMenu={(event) => {
-                if (!isCustom) return;
+                if (!isCategory) return;
                 event.preventDefault();
                 setEditor({
                   open: true,
                   collection: collections.find((c) => c.id === chip.id),
                 });
               }}
-              title={isCustom ? "Right-click to edit" : undefined}
+              title={isCategory ? "Right-click to edit" : undefined}
             >
               <LibraryIcon icon={chip.icon} color={chip.color} size={17} />
               <span className="library-chip-name">{chip.name}</span>

@@ -59,7 +59,7 @@ const SHADOW_COLOR_PRESETS = [
   { label: 'None', value: 'transparent' },
 ];
 
-const FocusableSlider = ({ value, min, max, step, onChange, className }: any) => {
+export const FocusableSlider = ({ value, min, max, step, onChange, className }: any) => {
   const tvMode = settingsStorage.isTvModeEnabled();
   
   const { ref, focused } = useFocusable({

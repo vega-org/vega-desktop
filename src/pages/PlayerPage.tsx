@@ -837,7 +837,26 @@ const DesktopPlayer: React.FC<any> = ({
     }
   }, [showEpisodeSidebar, activeEpisodeIndex, tvMode]);
 
-  const downloads = useDownloadStore((state) => state.downloads);
+  // Select only the matching download's skip list. Subscribing to all
+  // downloads re-rendered the player on every download progress update.
+  const matchedDownloadSkip = useDownloadStore(
+    (store) =>
+      Object.values(store.downloads).find(
+        (d) =>
+          (activeEpisode?.id && d.id === activeEpisode.id) ||
+          (activeEpisode?.link &&
+            (d.filePath === activeEpisode.link ||
+              d.url === activeEpisode.link ||
+              d.sourceLink === activeEpisode.link)) ||
+          (activeEpisode?.sourceLink &&
+            (d.sourceLink === activeEpisode.sourceLink ||
+              d.url === activeEpisode.sourceLink ||
+              d.filePath === activeEpisode.sourceLink)) ||
+          (selectedStream?.link &&
+            (d.filePath === selectedStream.link ||
+              d.url === selectedStream.link)),
+      )?.skip,
+  );
 
   const getCachedSkips = (keys: (string | undefined)[]): SkipInterval[] => {
     for (const key of keys) {
@@ -913,25 +932,7 @@ const DesktopPlayer: React.FC<any> = ({
     }
 
     // Check downloadStore for matching download item with skip intervals
-    const allDownloadsList = Object.values(downloads);
-    const matchedDownload = allDownloadsList.find(
-      (d) =>
-        (activeEpisode?.id && d.id === activeEpisode.id) ||
-        (activeEpisode?.link &&
-          (d.filePath === activeEpisode.link ||
-            d.url === activeEpisode.link ||
-            d.sourceLink === activeEpisode.link)) ||
-        (activeEpisode?.sourceLink &&
-          (d.sourceLink === activeEpisode.sourceLink ||
-            d.url === activeEpisode.sourceLink ||
-            d.filePath === activeEpisode.sourceLink)) ||
-        (selectedStream?.link &&
-          (d.filePath === selectedStream.link ||
-            d.url === selectedStream.link)),
-    );
-    if (matchedDownload?.skip) {
-      addSkips(matchedDownload.skip);
-    }
+    addSkips(matchedDownloadSkip);
 
     // Check cacheStorage if no skips found yet
     const episodeCacheKey =
@@ -968,7 +969,7 @@ const DesktopPlayer: React.FC<any> = ({
     }
 
     return sorted;
-  }, [activeEpisode, downloads, selectedStream, state?.infoUrl, state?.linkList]);
+  }, [activeEpisode, matchedDownloadSkip, selectedStream, state?.infoUrl, state?.linkList]);
 
   useEffect(() => {
     return () => {

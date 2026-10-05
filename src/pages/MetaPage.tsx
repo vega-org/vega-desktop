@@ -171,9 +171,12 @@ export const MetaPage: React.FC = () => {
   const { provider, installedProviders } = useContentStore();
   const { addDownload, downloads, cancelDownload } = useDownloadStore();
   const watchList = useWatchListStore((state) => state.watchList);
-  const addItem = useWatchListStore((state) => state.addItem);
+  const setItemCollections = useWatchListStore((state) => state.setItemCollections);
   const removeItem = useWatchListStore((state) => state.removeItem);
-  const hasCustomCollections = useWatchListStore((state) => state.collections.length > 0);
+  // Id of the only category, or undefined when there are none or several.
+  const onlyCollectionId = useWatchListStore((state) =>
+    state.collections.length === 1 ? state.collections[0].id : undefined,
+  );
   const [collectionPickerOpen, setCollectionPickerOpen] = useState(false);
   const isAndroid = navigator.userAgent.toLowerCase().includes("android");
   const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
@@ -379,10 +382,14 @@ export const MetaPage: React.FC = () => {
 
   const isInWatchList = watchList.some((item) => item.link === link);
   const toggleWatchList = () => {
-    // With categories, ask where to save. With only the default one, toggle.
-    if (hasCustomCollections) setCollectionPickerOpen(true);
+    // With one category, save to it or remove directly. With none or several,
+    // ask where to save.
+    if (!onlyCollectionId) setCollectionPickerOpen(true);
     else if (isInWatchList) removeItem(link);
-    else addItem({ title, poster: posterImage, link, provider: activeProviderValue });
+    else
+      setItemCollections({ title, poster: posterImage, link, provider: activeProviderValue }, [
+        onlyCollectionId,
+      ]);
   };
 
   const prepareDownload = async (

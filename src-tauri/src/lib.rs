@@ -5,6 +5,7 @@ mod doh_client;
 mod download_manager;
 mod ffmpeg_resolver;
 mod media_probe;
+mod parallel_download;
 pub mod proxy_manager;
 mod stream_server;
 mod sync_manifest;

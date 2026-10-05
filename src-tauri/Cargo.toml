@@ -68,7 +68,7 @@ wreq-util = "2"
 # Optional mpv player engine (Settings > Player). Windows only: on macOS and
 # Linux mpv cannot draw under the webview in the same window.
 tauri-plugin-libmpv = "0.3.2"
-windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_UI_WindowsAndMessaging", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security"] }
+windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_UI_WindowsAndMessaging", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_System_Ioctl", "Win32_System_IO"] }
 
 
 

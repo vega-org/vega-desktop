@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { settingsStorage } from "../../lib/storage";
+import {
+  MAX_DOWNLOAD_CONNECTIONS,
+  MIN_DOWNLOAD_CONNECTIONS,
+  settingsStorage,
+} from "../../lib/storage";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   LuFolderOpen as FolderOpen,
@@ -16,6 +20,7 @@ import { CustomSelect } from "../CustomSelect";
 import { syncFromSharedFolder } from "../../lib/sync/syncService";
 import { clearAppCache } from "../../lib/clearAppCache";
 import { ProxyPreferenceSection } from "./ProxyPreferenceSection";
+import { FocusableSlider } from "./SubtitleSettings";
 
 const QUALITIES = ["360p", "480p", "720p", "1080p", "4k"];
 
@@ -31,6 +36,9 @@ export const PreferencesSettings: React.FC = () => {
   const [dohProvider, setDohProvider] = useState<string>("cloudflare");
   const [dohCustomUrl, setDohCustomUrl] = useState<string>("");
   const [downloadConcurrency, setDownloadConcurrency] = useState<number>(2);
+  const [downloadConnections, setDownloadConnections] = useState<number>(
+    settingsStorage.getDownloadConnections(),
+  );
   const [tmdbApiKey, setTmdbApiKey] = useState<string>("");
   const [tmdbKeySaved, setTmdbKeySaved] = useState(false);
   const [cacheCleared, setCacheCleared] = useState(false);
@@ -216,6 +224,33 @@ export const PreferencesSettings: React.FC = () => {
           >
             <Plus size={15} />
           </FocusableButton>
+        </div>
+      </div>
+
+      <div className="settings-divider" />
+
+      {/* Connections per Download */}
+      <div className="settings-row">
+        <div className="settings-info">
+          <h3 className="label-lg">Connections per Download</h3>
+          <p className="body-md text-muted">
+            Faster on servers that limit speed per connection. Applies to new
+            and resumed downloads.
+          </p>
+        </div>
+        <div className="slider-control">
+          <FocusableSlider
+            min={MIN_DOWNLOAD_CONNECTIONS}
+            max={MAX_DOWNLOAD_CONNECTIONS}
+            step={1}
+            value={downloadConnections}
+            onChange={(event: { target: { value: string | number } }) => {
+              const next = Number(event.target.value);
+              settingsStorage.setDownloadConnections(next);
+              setDownloadConnections(next);
+            }}
+          />
+          <span className="slider-value">{downloadConnections}</span>
         </div>
       </div>
 

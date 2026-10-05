@@ -21,7 +21,7 @@ import {
   LIBRARY_ICON_KEYS,
 } from "../../lib/library/libraryIcons";
 import {
-  DEFAULT_COLLECTION,
+  DEFAULT_COLLECTION_ID,
   getItemCollectionIds,
   type LibraryCollection,
   type WatchListItem,
@@ -48,6 +48,7 @@ type IconTab = "icons" | "emoji";
 
 const NAME_MAX_LENGTH = 40;
 const FIRST_PICK_KEY = "LIB_DLG_PICK_0";
+const NEW_PICK_KEY = "LIB_DLG_NEW";
 const NAME_KEY = "LIB_DLG_NAME";
 
 /**
@@ -97,10 +98,12 @@ export const LibraryCollectionDialog: React.FC<LibraryCollectionDialogProps> = (
     setConfirmDelete(false);
   }, [open, itemLink, collectionId]);
 
+  // With no categories, the picker starts on "New category".
+  const firstPickKey = collections.length > 0 ? FIRST_PICK_KEY : NEW_PICK_KEY;
   const { ref, DialogFocusProvider } = useDialogFocusBoundary({
     isOpen: open,
     focusKey: "LIB_DLG",
-    preferredChildFocusKey: item ? FIRST_PICK_KEY : NAME_KEY,
+    preferredChildFocusKey: item ? firstPickKey : NAME_KEY,
     restoreFocusKey,
   });
 
@@ -113,7 +116,7 @@ export const LibraryCollectionDialog: React.FC<LibraryCollectionDialogProps> = (
       return;
     }
     previousStep.current = step;
-    const target = step === "pick" ? FIRST_PICK_KEY : NAME_KEY;
+    const target = step === "pick" ? firstPickKey : NAME_KEY;
     let attempts = 0;
     let timer = 0;
     const tryFocus = () => {
@@ -205,7 +208,7 @@ export const LibraryCollectionDialog: React.FC<LibraryCollectionDialogProps> = (
         </FocusableButton>
       </div>
       <div className="library-pick-list" role="group" aria-label="Categories">
-        {[DEFAULT_COLLECTION, ...collections].map((row, index) => {
+        {collections.map((row, index) => {
           const checked = selectedIds.includes(row.id);
           return (
             <FocusableButton
@@ -227,7 +230,7 @@ export const LibraryCollectionDialog: React.FC<LibraryCollectionDialogProps> = (
           );
         })}
         <FocusableButton
-          focusKey="LIB_DLG_NEW"
+          focusKey={NEW_PICK_KEY}
           className="library-pick-row library-pick-new"
           onClick={openCreate}
         >
@@ -248,6 +251,13 @@ export const LibraryCollectionDialog: React.FC<LibraryCollectionDialogProps> = (
       </div>
     </>
   );
+
+  // Where titles only in the deleted category end up (see deleteCollection).
+  const watchlist = collections.find((c) => c.id === DEFAULT_COLLECTION_ID);
+  const deleteNote =
+    watchlist && collection?.id !== DEFAULT_COLLECTION_ID
+      ? `Titles stay in your library. Titles only in this category move to ${watchlist.name}.`
+      : "Titles stay in your library and show under All.";
 
   const renderEditor = () => {
     const choices = iconTab === "icons" ? LIBRARY_ICON_KEYS : LIBRARY_EMOJIS;
@@ -349,8 +359,7 @@ export const LibraryCollectionDialog: React.FC<LibraryCollectionDialogProps> = (
 
         {editing && confirmDelete && (
           <p className="library-delete-hint">
-            Titles stay in your library. Titles only in this category move to
-            Watchlist.
+            {deleteNote}
           </p>
         )}
 

@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   LuCircleAlert as AlertCircle,
+  LuChevronDown as ChevronDown,
+  LuChevronUp as ChevronUp,
   LuClock3 as Clock,
   LuDownload as Download,
   LuHardDrive as HardDrive,
@@ -14,11 +16,13 @@ import { useFocusable } from "@noriginmedia/norigin-spatial-navigation-react";
 import { useNavigate } from "react-router-dom";
 import { ConfirmActionDialog } from "../components/extensions/ConfirmActionDialog";
 import { FocusableButton } from "../components/layout/FocusableButton";
+import { DownloadConnectionsPanel } from "../components/DownloadConnectionsPanel";
 import { settingsStorage } from "../lib/storage";
 import {
   type DownloadItem,
   useDownloadStore,
 } from "../lib/zustand/downloadStore";
+import { useDownloadConnectionsStore } from "../lib/zustand/downloadConnectionsStore";
 import { getDownloadedVideoThumbnail } from "../lib/downloadThumbnailCache";
 import { syncFromSharedFolder } from "../lib/sync/syncService";
 import "./DownloadsPage.css";
@@ -58,6 +62,8 @@ export const DownloadsPage = () => {
   const { downloads, pauseDownload, resumeDownload, cancelDownload, startNow } =
     useDownloadStore();
   const navigate = useNavigate();
+  const connectionDetails = useDownloadConnectionsStore((state) => state.details);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const allDownloads = Object.values(downloads);
   // Show waiting for delete confirmation; removing a whole show is not undoable.
   const [pendingDelete, setPendingDelete] = useState<CompletedGroup | null>(null);
@@ -189,6 +195,13 @@ export const DownloadsPage = () => {
                         ),
                       )
                     : 0;
+                  const details =
+                    item.status === "downloading" && item.totalBytes > 0
+                      ? connectionDetails[item.id]
+                      : undefined;
+                  const expanded = Boolean(details) && expandedId === item.id;
+                  const toggleExpanded = () =>
+                    setExpandedId(expanded ? null : item.id);
 
                   return (
                     <article className="active-download-card" key={item.id}>
@@ -204,7 +217,10 @@ export const DownloadsPage = () => {
                         {!item.poster && <Download size={24} />}
                       </div>
 
-                      <div className="download-row-copy">
+                      <div
+                        className={`download-row-copy${details ? " is-expandable" : ""}`}
+                        onClick={details ? toggleExpanded : undefined}
+                      >
                         <div className="download-row-title-line">
                           <div>
                             <h3 title={item.episodeName || item.title}>
@@ -293,6 +309,20 @@ export const DownloadsPage = () => {
                             <Rocket size={19} />
                           </FocusableButton>
                         )}
+                        {details && (
+                          <FocusableButton
+                            className="download-action-button"
+                            onClick={toggleExpanded}
+                            title={expanded ? "Hide connections" : "Show connections"}
+                            aria-expanded={expanded}
+                          >
+                            {expanded ? (
+                              <ChevronUp size={19} />
+                            ) : (
+                              <ChevronDown size={19} />
+                            )}
+                          </FocusableButton>
+                        )}
                         {item.status === "downloading" && (
                           <FocusableButton
                             className="download-action-button"
@@ -320,6 +350,12 @@ export const DownloadsPage = () => {
                           <X size={19} />
                         </FocusableButton>
                       </div>
+                      {expanded && details && (
+                        <DownloadConnectionsPanel
+                          details={details}
+                          totalBytes={item.totalBytes}
+                        />
+                      )}
                     </article>
                   );
                 })}

@@ -6,6 +6,16 @@ import { mainStorage } from "./StorageService";
  */
 export type PlayerEngineKind = "builtin" | "mpv";
 
+/** Connections one download may open; servers that refuse extra ones lower it. */
+export const MIN_DOWNLOAD_CONNECTIONS = 1;
+export const MAX_DOWNLOAD_CONNECTIONS = 16;
+const DEFAULT_DOWNLOAD_CONNECTIONS = 4;
+
+const isValidConnectionCount = (value: number | undefined): value is number =>
+  Number.isInteger(value) &&
+  (value as number) >= MIN_DOWNLOAD_CONNECTIONS &&
+  (value as number) <= MAX_DOWNLOAD_CONNECTIONS;
+
 export enum SettingsKeys {
   // UI preferences
   PRIMARY_COLOR = "primaryColor",
@@ -37,6 +47,7 @@ export enum SettingsKeys {
   // Download settings
   DOWNLOAD_LOCATION = "downloadLocation",
   DOWNLOAD_CONCURRENCY = "downloadConcurrency",
+  DOWNLOAD_CONNECTIONS = "downloadConnections",
 
   // Subtitle settings
   SUBTITLE_FONT_SIZE = "subtitleFontSize",
@@ -323,6 +334,19 @@ export class SettingsStorage {
       SettingsKeys.DOWNLOAD_CONCURRENCY,
       Math.min(Math.max(Math.round(value), 1), 5),
     );
+  }
+
+  getDownloadConnections(): number {
+    const value = mainStorage.getNumber(SettingsKeys.DOWNLOAD_CONNECTIONS);
+    return isValidConnectionCount(value)
+      ? value
+      : DEFAULT_DOWNLOAD_CONNECTIONS;
+  }
+
+  setDownloadConnections(value: number): void {
+    if (isValidConnectionCount(value)) {
+      mainStorage.setNumber(SettingsKeys.DOWNLOAD_CONNECTIONS, value);
+    }
   }
 
   // Subtitle settings

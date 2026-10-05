@@ -2,7 +2,6 @@ import {create} from 'zustand';
 import {watchListStorage, WatchListItem} from '../storage';
 import {
   createCollectionId,
-  DEFAULT_COLLECTION_ID,
   getItemCollectionIds,
   type LibraryCollection,
 } from '../storage/WatchListStorage';
@@ -14,7 +13,7 @@ export type CollectionDraft = Pick<LibraryCollection, 'name' | 'icon' | 'color'>
 
 interface WatchListStore {
   watchList: WatchList[];
-  /** User-made library categories (the default category is not included). */
+  /** Library categories, oldest first. Includes Watchlist unless deleted. */
   collections: LibraryCollection[];
   removeItem: (link: string) => void;
   addItem: (item: WatchList) => void;
@@ -84,9 +83,6 @@ const useWatchListStore = create<WatchListStore>()((set, get) => ({
   },
 
   updateCollection: (id, draft) => {
-    if (id === DEFAULT_COLLECTION_ID) {
-      return;
-    }
     set({
       collections: watchListStorage.saveCollections(
         watchListStorage
@@ -107,9 +103,6 @@ const useWatchListStore = create<WatchListStore>()((set, get) => ({
   },
 
   deleteCollection: id => {
-    if (id === DEFAULT_COLLECTION_ID) {
-      return;
-    }
     set(watchListStorage.deleteCollection(id));
   },
 }));

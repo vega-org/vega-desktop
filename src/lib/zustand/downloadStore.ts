@@ -5,6 +5,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { documentDir, join } from "@tauri-apps/api/path";
 import { settingsStorage } from "../storage/SettingsStorage";
 import type { SkipInterval } from "../providers/types";
+import { parseDownloadRanges } from "../downloadSegmentMap";
+import { useDownloadConnectionsStore } from "./downloadConnectionsStore";
 
 export interface DownloadItem {
   id: string;
@@ -209,6 +211,7 @@ export const useDownloadStore = create<DownloadState>()(
               headers: item.headers || null,
               videoType:
                 item.videoType || (item.url.includes(".m3u8") ? "m3u8" : null),
+              connections: settingsStorage.getDownloadConnections(),
             });
           }
         } catch (e: any) {
@@ -375,6 +378,7 @@ export const useDownloadStore = create<DownloadState>()(
                 videoType:
                   item.videoType ||
                   (item.url.includes(".m3u8") ? "m3u8" : null),
+                connections: settingsStorage.getDownloadConnections(),
               });
             }
           } catch (e: any) {
@@ -574,8 +578,15 @@ export function initDownloadListeners() {
   });
 
   listen("download-progress", (event: any) => {
-    const { id, downloaded, total, speed } = event.payload;
+    const { id, downloaded, total, speed, details } = event.payload;
     useDownloadStore.getState().updateProgress(id, downloaded, total, speed);
+    if (details) {
+      useDownloadConnectionsStore.getState().setDetails(id, {
+        ranges: parseDownloadRanges(details.ranges),
+        connections: details.connections ?? 0,
+        connectionLimit: details.connectionLimit ?? 0,
+      });
+    }
   });
 
   listen("download-complete", (event: any) => {
@@ -598,6 +609,7 @@ export function initDownloadListeners() {
     }
 
     useDownloadStore.getState().markCompleted(id);
+    useDownloadConnectionsStore.getState().clearDetails(id);
   });
 
   useDownloadStore.setState((state) => ({

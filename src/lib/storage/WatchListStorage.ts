@@ -6,11 +6,14 @@ import { mainStorage } from "./StorageService";
 export enum WatchListKeys {
   WATCH_LIST = "watchlist",
   COLLECTIONS = "library-collections",
+  /** Set once the Watchlist category was added to the stored categories. */
+  DEFAULT_COLLECTION_ADDED = "library-default-collection-added",
 }
 
 /**
- * Built-in category. It always exists, cannot be deleted, and holds titles
- * saved without picking a category (and titles saved by older app versions).
+ * Category every library starts with. It is stored like any other category,
+ * so the user can rename or delete it. While it exists, it holds titles saved
+ * by older app versions and titles whose categories were all deleted.
  */
 export const DEFAULT_COLLECTION_ID = "watchlist";
 
@@ -48,17 +51,19 @@ export const DEFAULT_COLLECTION: LibraryCollection = {
 };
 
 /**
- * Categories of an item, limited to categories that exist. Falls back to the
- * default category, so an item never disappears when a category is deleted.
+ * Categories of an item, limited to categories that exist. Falls back to
+ * Watchlist while it exists; otherwise the item is in no category and shows
+ * only under All.
  */
 export const getItemCollectionIds = (
   item: WatchListItem,
   existingIds: ReadonlySet<string>,
 ): string[] => {
-  const ids = (item.collections || []).filter(
-    id => id === DEFAULT_COLLECTION_ID || existingIds.has(id),
-  );
-  return ids.length > 0 ? ids : [DEFAULT_COLLECTION_ID];
+  const ids = (item.collections || []).filter(id => existingIds.has(id));
+  if (ids.length > 0) {
+    return ids;
+  }
+  return existingIds.has(DEFAULT_COLLECTION_ID) ? [DEFAULT_COLLECTION_ID] : [];
 };
 
 export const createCollectionId = (): string =>
@@ -84,12 +89,17 @@ export class WatchListStorage {
     // Filter out any existing item with the same link
     const newWatchList = watchList.filter(i => i.link !== item.link);
 
-    // Add the new item to the end
+    // Add the new item to the end. Without categories it goes to Watchlist,
+    // or to the only category when Watchlist was deleted.
+    const collections = this.getCollections();
+    const fallback = collections.some(c => c.id === DEFAULT_COLLECTION_ID)
+      ? [DEFAULT_COLLECTION_ID]
+      : collections.length === 1
+        ? [collections[0].id]
+        : [];
     newWatchList.push({
       ...item,
-      collections: item.collections?.length
-        ? item.collections
-        : [DEFAULT_COLLECTION_ID],
+      collections: item.collections?.length ? item.collections : fallback,
       updatedAt: Date.now(),
     });
 
@@ -152,16 +162,22 @@ export class WatchListStorage {
   }
 
   /**
-   * User-made categories, oldest first. The default category is not stored.
+   * Library categories, oldest first, Watchlist included while it exists.
    */
   getCollections(): LibraryCollection[] {
-    const collections =
-      mainStorage.getArray<LibraryCollection>(WatchListKeys.COLLECTIONS) || [];
-    return collections
-      .filter(
-        c => Boolean(c?.id && c.name) && c.id !== DEFAULT_COLLECTION_ID,
-      )
-      .sort((a, b) => a.createdAt - b.createdAt);
+    const collections = (
+      mainStorage.getArray<LibraryCollection>(WatchListKeys.COLLECTIONS) || []
+    ).filter(c => Boolean(c?.id && c.name));
+    // Older versions kept Watchlist out of storage. Add it once; after that
+    // a missing Watchlist means the user deleted it. Its createdAt and
+    // updatedAt of 0 let a synced edit or delete from another device win.
+    if (!mainStorage.getBool(WatchListKeys.DEFAULT_COLLECTION_ADDED, false)) {
+      mainStorage.setBool(WatchListKeys.DEFAULT_COLLECTION_ADDED, true);
+      if (!collections.some(c => c.id === DEFAULT_COLLECTION_ID)) {
+        return this.saveCollections([DEFAULT_COLLECTION, ...collections]);
+      }
+    }
+    return collections.sort((a, b) => a.createdAt - b.createdAt);
   }
 
   saveCollections(collections: LibraryCollection[]): LibraryCollection[] {
@@ -172,7 +188,7 @@ export class WatchListStorage {
 
   /**
    * Delete a category. Its titles stay in the library: titles in no other
-   * category move to the default category.
+   * category move to Watchlist, or to no category when Watchlist is gone.
    */
   deleteCollection(id: string): {
     collections: LibraryCollection[];
@@ -181,6 +197,9 @@ export class WatchListStorage {
     const collections = this.saveCollections(
       this.getCollections().filter(c => c.id !== id),
     );
+    const fallback = collections.some(c => c.id === DEFAULT_COLLECTION_ID)
+      ? [DEFAULT_COLLECTION_ID]
+      : [];
     const now = Date.now();
     let changed = false;
     const watchList = this.getWatchList().map(item => {
@@ -191,7 +210,7 @@ export class WatchListStorage {
       const rest = item.collections.filter(c => c !== id);
       return {
         ...item,
-        collections: rest.length > 0 ? rest : [DEFAULT_COLLECTION_ID],
+        collections: rest.length > 0 ? rest : fallback,
         updatedAt: now,
       };
     });

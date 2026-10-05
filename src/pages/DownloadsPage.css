@@ -650,3 +650,92 @@
   color: var(--on-surface-variant);
 }
 
+
+/* Connection details for an expanded active download. */
+.download-row-copy.is-expandable {
+  cursor: pointer;
+}
+
+.download-connections-panel {
+  grid-column: 1 / -1;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--surface-container);
+}
+
+.download-connections-header {
+  display: flex;
+  justify-content: space-between;
+  color: var(--on-surface-variant);
+  font-size: 12px;
+}
+
+.download-connections-header strong {
+  color: var(--on-surface);
+  font-weight: 680;
+}
+
+.download-segment-grid {
+  display: grid;
+  grid-template-columns: repeat(30, minmax(0, 1fr));
+  gap: 2px;
+  margin-top: 10px;
+}
+
+.download-segment-cell {
+  display: flex;
+  align-items: flex-end;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--on-surface) 12%, transparent);
+}
+
+.download-segment-cell > span {
+  width: 100%;
+  background: var(--primary);
+  transition: height 400ms linear;
+}
+
+.download-segment-cell.is-active {
+  box-shadow: inset 0 0 0 1px var(--tertiary);
+}
+
+.download-segment-cell.is-active > span {
+  background: var(--tertiary);
+}
+
+.download-connection-list {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.download-connection-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.download-connection-index {
+  width: 18px;
+  color: var(--tertiary);
+  font-weight: 680;
+}
+
+.download-connection-range {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface-variant);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.download-connection-speed {
+  color: var(--on-surface);
+  font-variant-numeric: tabular-nums;
+}

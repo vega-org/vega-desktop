@@ -2,7 +2,12 @@
 export {StorageService, mainStorage, cacheStorage} from './StorageService';
 
 // Export SettingsStorage
-export {SettingsStorage, settingsStorage} from './SettingsStorage';
+export {
+  SettingsStorage,
+  settingsStorage,
+  MAX_DOWNLOAD_CONNECTIONS,
+  MIN_DOWNLOAD_CONNECTIONS,
+} from './SettingsStorage';
 export type {SettingsKeys} from './SettingsStorage';
 
 // Export WatchHistoryStorage
