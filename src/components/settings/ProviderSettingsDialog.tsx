@@ -6,7 +6,11 @@ import { FocusableInput } from "../layout/FocusableInput";
 import { CustomSelect } from "../CustomSelect";
 import { Switch } from "../ui/switch";
 import { useDialogFocusBoundary } from "../../lib/hooks/useDialogFocusBoundary";
-import { providerManager, getScopedKvKey } from "../../lib/services/ProviderManager";
+import { providerManager } from "../../lib/services/ProviderManager";
+import {
+  getScopedKvKey,
+  migrateLegacyProviderData,
+} from "../../lib/providers/providerScope";
 import { ProviderExtension } from "../../lib/storage/extensionStorage";
 import { SettingsField } from "../../lib/providers/types";
 import "./ProviderSettingsDialog.css";
@@ -50,9 +54,10 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
         setFields(schema);
 
         // Load values from scoped KV storage or default
+        migrateLegacyProviderData();
         const initialValues: Record<string, any> = {};
         for (const field of schema) {
-          const raw = localStorage.getItem(getScopedKvKey(provider.value, field.key));
+          const raw = localStorage.getItem(getScopedKvKey(provider.source?.author, provider.value, field.key));
           if (raw !== null) {
             try {
               initialValues[field.key] = JSON.parse(raw);
@@ -85,7 +90,7 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
   const handleSave = () => {
     if (!provider) return;
     for (const [key, value] of Object.entries(values)) {
-      const fullKey = getScopedKvKey(provider.value, key);
+      const fullKey = getScopedKvKey(provider.source?.author, provider.value, key);
       if (value === undefined || value === null || value === "") {
         localStorage.removeItem(fullKey);
       } else {
@@ -107,7 +112,10 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
 
     setResetting(true);
     try {
-      await providerManager.clearProviderStorage(provider.value);
+      await providerManager.clearProviderStorage(
+        provider.value,
+        provider.source?.author,
+      );
       const defaultValues: Record<string, any> = {};
       for (const field of fields) {
         defaultValues[field.key] = field.defaultValue;

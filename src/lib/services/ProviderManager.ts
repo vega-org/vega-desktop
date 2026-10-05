@@ -7,19 +7,30 @@ import { extensionManager } from "./ExtensionManager";
 import { extensionStorage } from "../storage/extensionStorage";
 import { getSourceAuthHeaders } from "../storage/sourceTokenStorage";
 import { getErrorMessage } from "./providerErrors";
+import {
+  getProviderPrefix,
+  getScopedKvKey,
+  migrateLegacyProviderData,
+  providerAuthor,
+  providerScopeId,
+} from "../providers/providerScope";
+import { getJarCookieHeader } from "../providers/providerCookieJar";
 
 const MAX_PROVIDER_STATE_SIZE = 1_000_000;
-const KV_PREFIX = "vega_provider_kv:";
 const MAX_KV_KEY_LENGTH = 256;
 const MAX_KV_VALUE_BYTES = 1_000_000;
 
-export const getScopedKvKey = (providerValue: string, key: string): string => {
-  return `${KV_PREFIX}${providerValue}:${key}`;
-};
+/** Module code and the source author it came from. */
+interface ProviderCode {
+  code: string;
+  author: string;
+}
 
-export const getProviderPrefix = (providerValue: string): string => {
-  return `${KV_PREFIX}${providerValue}:`;
-};
+const providerCode = (
+  module: { sourceAuthor?: string } | undefined,
+  code: string | undefined,
+): ProviderCode | undefined =>
+  code ? { code, author: providerAuthor(module?.sourceAuthor) } : undefined;
 
 const validateKvKey = (key: unknown): string => {
   if (typeof key !== "string" || !key.trim() || key.length > MAX_KV_KEY_LENGTH) {
@@ -30,9 +41,9 @@ const validateKvKey = (key: unknown): string => {
   return key;
 };
 
-const handleKvGet = (providerValue: string, args: any): unknown => {
+const handleKvGet = (author: string, providerValue: string, args: any): unknown => {
   const key = validateKvKey(args?.key);
-  const raw = localStorage.getItem(getScopedKvKey(providerValue, key));
+  const raw = localStorage.getItem(getScopedKvKey(author, providerValue, key));
   if (raw === null) return undefined;
   try {
     return JSON.parse(raw);
@@ -41,9 +52,9 @@ const handleKvGet = (providerValue: string, args: any): unknown => {
   }
 };
 
-const handleKvSet = (providerValue: string, args: any): void => {
+const handleKvSet = (author: string, providerValue: string, args: any): void => {
   const key = validateKvKey(args?.key);
-  const fullKey = getScopedKvKey(providerValue, key);
+  const fullKey = getScopedKvKey(author, providerValue, key);
   const value = args?.value;
   if (value === undefined) {
     localStorage.removeItem(fullKey);
@@ -59,17 +70,17 @@ const handleKvSet = (providerValue: string, args: any): void => {
   localStorage.setItem(fullKey, serialized);
 };
 
-const handleKvDelete = (providerValue: string, args: any): boolean => {
+const handleKvDelete = (author: string, providerValue: string, args: any): boolean => {
   const key = validateKvKey(args?.key);
-  const fullKey = getScopedKvKey(providerValue, key);
+  const fullKey = getScopedKvKey(author, providerValue, key);
   const exists = localStorage.getItem(fullKey) !== null;
   localStorage.removeItem(fullKey);
   return exists;
 };
 
-const handleKvKeys = (providerValue: string): string[] => {
+const handleKvKeys = (author: string, providerValue: string): string[] => {
   const keys: string[] = [];
-  const prefix = getProviderPrefix(providerValue);
+  const prefix = getProviderPrefix(author, providerValue);
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (k && k.startsWith(prefix)) {
@@ -79,8 +90,8 @@ const handleKvKeys = (providerValue: string): string[] => {
   return keys;
 };
 
-const handleKvClear = (providerValue: string): void => {
-  const prefix = getProviderPrefix(providerValue);
+const handleKvClear = (author: string, providerValue: string): void => {
+  const prefix = getProviderPrefix(author, providerValue);
   const toRemove: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
@@ -94,17 +105,21 @@ const handleKvClear = (providerValue: string): void => {
 };
 
 export class ProviderManager {
+  // Keyed by providerScopeId(author, value).
   private readonly providerState = new Map<string, Record<string, unknown>>();
 
   clearProviderState(providerValue: string): void {
-    this.providerState.delete(providerValue);
+    const suffix = `/${encodeURIComponent(providerValue)}`;
+    for (const scope of Array.from(this.providerState.keys())) {
+      if (scope.endsWith(suffix)) this.providerState.delete(scope);
+    }
   }
 
-  private getProviderState(providerValue: string): Record<string, unknown> {
-    return structuredClone(this.providerState.get(providerValue) ?? {});
+  private getProviderState(scope: string): Record<string, unknown> {
+    return structuredClone(this.providerState.get(scope) ?? {});
   }
 
-  private saveProviderState(providerValue: string, value: unknown): void {
+  private saveProviderState(scope: string, value: unknown): void {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       throw new Error("Provider state must be an object");
     }
@@ -113,7 +128,7 @@ export class ProviderManager {
       throw new Error("Provider state exceeds the 1 MB limit");
     }
     this.providerState.set(
-      providerValue,
+      scope,
       JSON.parse(serialized) as Record<string, unknown>,
     );
   }
@@ -167,12 +182,15 @@ export class ProviderManager {
   }
 
   private executeModule<T>(
-    moduleCode: string,
+    module: ProviderCode,
     providerValue: string,
     exportName?: string,
     args?: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<T> {
+    const { code: moduleCode, author } = module;
+    const scope = providerScopeId(author, providerValue);
+    migrateLegacyProviderData();
     if (moduleCode.length > 2_000_000) {
       return Promise.reject(new Error("Provider module is too large"));
     }
@@ -208,6 +226,7 @@ export class ProviderManager {
           try {
             const result = await this.handleRpc(
               providerValue,
+              author,
               message.operation,
               message.args,
             );
@@ -231,7 +250,7 @@ export class ProviderManager {
           try {
             if (message.error) reject(new Error(message.error));
             else {
-              this.saveProviderState(providerValue, message.state);
+              this.saveProviderState(scope, message.state);
               resolve(message.result as T);
             }
           } catch (error) {
@@ -247,13 +266,14 @@ export class ProviderManager {
         moduleCode,
         exportName,
         args,
-        state: this.getProviderState(providerValue),
+        state: this.getProviderState(scope),
       });
     });
   }
 
   private async handleRpc(
     providerValue: string,
+    author: string,
     operation: string,
     args: any,
   ): Promise<unknown> {
@@ -262,13 +282,13 @@ export class ProviderManager {
     }
     if (operation === "openWebView") {
       const url = this.validateProviderUrl(args?.url);
-      const result = await openWebView(url.toString(), args?.options);
+      const result = await openWebView(url.toString(), args?.options, author);
       return { ...result, cookie: result.cookies };
     }
     if (operation === "fetch") {
       const url = this.validateProviderUrl(args?.url);
       const init = args?.init ?? {};
-      const response = await providerFetch(url, {
+      const response = await providerFetch(author, url, {
         method: init.method,
         headers: init.headers,
         body: init.body,
@@ -287,19 +307,19 @@ export class ProviderManager {
       };
     }
     if (operation === "kvGet") {
-      return handleKvGet(providerValue, args);
+      return handleKvGet(author, providerValue, args);
     }
     if (operation === "kvSet") {
-      return handleKvSet(providerValue, args);
+      return handleKvSet(author, providerValue, args);
     }
     if (operation === "kvDelete") {
-      return handleKvDelete(providerValue, args);
+      return handleKvDelete(author, providerValue, args);
     }
     if (operation === "kvKeys") {
-      return handleKvKeys(providerValue);
+      return handleKvKeys(author, providerValue);
     }
     if (operation === "kvClear") {
-      return handleKvClear(providerValue);
+      return handleKvClear(author, providerValue);
     }
     throw new Error(`Unsupported provider operation: ${operation}`);
   }
@@ -309,8 +329,11 @@ export class ProviderManager {
     providerValue: string;
   }): Promise<Catalog[]> => {
     // Use extensionManager which now handles test mode automatically
-    const catalogModule =
-      extensionManager.getProviderModules(providerValue)?.modules.catalog;
+    const catalogRecord = extensionManager.getProviderModules(providerValue);
+    const catalogModule = providerCode(
+      catalogRecord,
+      catalogRecord?.modules.catalog,
+    );
     if (!catalogModule) {
       return [];
     }
@@ -340,8 +363,11 @@ export class ProviderManager {
     providerValue: string;
   }): Promise<Catalog[]> => {
     // Use extensionManager which now handles test mode automatically
-    const catalogModule =
-      extensionManager.getProviderModules(providerValue)?.modules.catalog;
+    const catalogRecord = extensionManager.getProviderModules(providerValue);
+    const catalogModule = providerCode(
+      catalogRecord,
+      catalogRecord?.modules.catalog,
+    );
     if (!catalogModule) {
       return [];
     }
@@ -377,9 +403,9 @@ export class ProviderManager {
     signal: AbortSignal;
   }): Promise<Post[]> => {
     // Use extensionManager which now handles test mode automatically
-    const getPostsModule = (
-      await extensionManager.getProviderModulesAsync(providerValue)
-    )?.modules.posts;
+    const getPostsModuleRecord =
+      await extensionManager.getProviderModulesAsync(providerValue);
+    const getPostsModule = providerCode(getPostsModuleRecord, getPostsModuleRecord?.modules.posts);
     if (!getPostsModule) {
       throw new Error(`No posts module found for provider: ${providerValue}`);
     }
@@ -413,9 +439,9 @@ export class ProviderManager {
     signal: AbortSignal;
   }): Promise<Post[]> => {
     // Use extensionManager which now handles test mode automatically
-    const getPostsModule = (
-      await extensionManager.getProviderModulesAsync(providerValue)
-    )?.modules.posts;
+    const getPostsModuleRecord =
+      await extensionManager.getProviderModulesAsync(providerValue);
+    const getPostsModule = providerCode(getPostsModuleRecord, getPostsModuleRecord?.modules.posts);
     if (!getPostsModule) {
       throw new Error(`No posts module found for provider: ${providerValue}`);
     }
@@ -445,9 +471,9 @@ export class ProviderManager {
     provider: string;
   }): Promise<Info> => {
     // Use extensionManager which now handles test mode automatically
-    const getMetaDataModule = (
-      await extensionManager.getProviderModulesAsync(provider)
-    )?.modules.meta;
+    const getMetaDataModuleRecord =
+      await extensionManager.getProviderModulesAsync(provider);
+    const getMetaDataModule = providerCode(getMetaDataModuleRecord, getMetaDataModuleRecord?.modules.meta);
     if (!getMetaDataModule) {
       throw new Error(`No meta data module found for provider: ${provider}`);
     }
@@ -482,9 +508,9 @@ export class ProviderManager {
     isDownload?: boolean;
   }): Promise<Stream[]> => {
     // Use extensionManager which now handles test mode automatically
-    const getStreamModule = (
-      await extensionManager.getProviderModulesAsync(providerValue)
-    )?.modules.stream;
+    const getStreamModuleRecord =
+      await extensionManager.getProviderModulesAsync(providerValue);
+    const getStreamModule = providerCode(getStreamModuleRecord, getStreamModuleRecord?.modules.stream);
     if (!getStreamModule) {
       throw new Error(`No stream module found for provider: ${providerValue}`);
     }
@@ -493,7 +519,7 @@ export class ProviderManager {
         link,
         type,
         isDownload: Boolean(isDownload),
-        moduleBytes: getStreamModule.length,
+        moduleBytes: getStreamModule.code.length,
       });
       const streams = await this.executeModule<Stream[]>(
         getStreamModule,
@@ -506,7 +532,9 @@ export class ProviderManager {
         `[Provider:${providerValue}] getStream returned`,
         Array.isArray(streams) ? `${streams.length} stream(s)` : streams,
       );
-      return streams;
+      return Array.isArray(streams)
+        ? this.withJarCookies(getStreamModule.author, streams)
+        : streams;
     } catch (error) {
       console.error("Error in stream function:", error);
       throw new Error(
@@ -517,6 +545,28 @@ export class ProviderManager {
       );
     }
   };
+  /**
+   * Provider requests skip the shared client cookie store, so streams get
+   * their author's cookies (e.g. WAF clearance) as a header, unless the
+   * provider set a Cookie header itself.
+   */
+  private withJarCookies(author: string, streams: Stream[]): Stream[] {
+    return streams.map((stream) => {
+      const headers =
+        stream.headers && typeof stream.headers === "object"
+          ? stream.headers
+          : {};
+      if (
+        !/^https?:/i.test(stream.link ?? "") ||
+        Object.keys(headers).some((k) => k.toLowerCase() === "cookie")
+      ) {
+        return stream;
+      }
+      const cookie = getJarCookieHeader(author, stream.link);
+      return cookie ? { ...stream, headers: { ...headers, Cookie: cookie } } : stream;
+    });
+  }
+
   getEpisodes = async ({
     url,
     providerValue,
@@ -525,9 +575,9 @@ export class ProviderManager {
     providerValue: string;
   }): Promise<EpisodeLink[]> => {
     // Use extensionManager which now handles test mode automatically
-    const getEpisodeLinksModule = (
-      await extensionManager.getProviderModulesAsync(providerValue)
-    )?.modules.episodes;
+    const getEpisodeLinksModuleRecord =
+      await extensionManager.getProviderModulesAsync(providerValue);
+    const getEpisodeLinksModule = providerCode(getEpisodeLinksModuleRecord, getEpisodeLinksModuleRecord?.modules.episodes);
     if (!getEpisodeLinksModule) {
       throw new Error(
         `No episode links module found for provider: ${providerValue}`,
@@ -559,6 +609,7 @@ export class ProviderManager {
       await extensionManager.getProviderModulesAsync(providerValue)
     );
     let settingsModule = providerModule?.modules?.settings;
+    let settingsAuthor = providerModule?.sourceAuthor;
 
     if (!settingsModule) {
       try {
@@ -569,8 +620,10 @@ export class ProviderManager {
         let res;
         try {
           res = await axios.get(testUrl, { timeout: 2000 });
+          settingsAuthor = undefined;
         } catch {
           if (sourceUrl) {
+            settingsAuthor = source?.author;
             res = await axios.get(sourceUrl, {
               timeout: 8000,
               // Native fetch: no CORS preflight for the auth header.
@@ -595,7 +648,7 @@ export class ProviderManager {
     if (!settingsModule) return [];
     try {
       return await this.executeModule<SettingsField[]>(
-        settingsModule,
+        { code: settingsModule, author: providerAuthor(settingsAuthor) },
         providerValue,
         "getSettingsSchema",
         {},
@@ -606,9 +659,14 @@ export class ProviderManager {
     }
   };
 
-  clearProviderStorage = async (providerValue: string): Promise<void> => {
-    this.providerState.delete(providerValue);
-    handleKvClear(providerValue);
+  clearProviderStorage = async (
+    providerValue: string,
+    sourceAuthor?: string,
+  ): Promise<void> => {
+    migrateLegacyProviderData();
+    const author = providerAuthor(sourceAuthor);
+    this.providerState.delete(providerScopeId(author, providerValue));
+    handleKvClear(author, providerValue);
   };
 }
 

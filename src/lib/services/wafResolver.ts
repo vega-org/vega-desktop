@@ -5,6 +5,7 @@ import type {
 } from '../providers/types';
 import {useWafStore} from '../zustand/wafStore';
 import {buildCookieString, getCookies, pickUserAgent} from './cookieManager';
+import {LOCAL_AUTHOR} from '../providers/providerScope';
 
 /**
  * Opens a dialog WebView so the user can solve a WAF / captcha challenge
@@ -60,6 +61,7 @@ export const openWebView = async (
   return new Promise<OpenWebViewResult>((resolve, reject) => {
     useWafStore.getState().enqueue({
       url,
+      author: LOCAL_AUTHOR,
       resolve,
       reject,
       ...options,

@@ -5,6 +5,7 @@ import * as cheerio from "cheerio";
 import { ProviderContext } from "./types";
 import { Crypto } from "../../platform/crypto";
 import { openWebView } from "../../platform/waf";
+import { LOCAL_AUTHOR } from "./providerScope";
 import { tauriAxiosAdapter } from "./tauriAxiosAdapter";
 
 // Force all axios requests to go through the Tauri Rust backend.
@@ -92,6 +93,6 @@ export const providerContext: ProviderContext = {
   commonHeaders: headers,
   Crypto,
   cheerio,
-  openWebView,
+  openWebView: (url, options) => openWebView(url, options, LOCAL_AUTHOR),
   kvStore,
 };

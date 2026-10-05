@@ -3,6 +3,7 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { invoke } from '@tauri-apps/api/core';
 import { useWafStore, WafRequest } from '../lib/zustand/wafStore';
 import { OpenWebViewResult } from '../lib/providers/types';
+import { storeJarCookies } from '../lib/providers/providerCookieJar';
 import './WafDialog.css';
 
 interface CookieInfo {
@@ -151,6 +152,17 @@ export const WafDialog: React.FC = () => {
           }
         }
 
+        storeJarCookies(
+          req.author,
+          req.url,
+          cookiesRaw.map(c => ({
+            name: c.name,
+            value: c.value,
+            domain: c.domain || undefined,
+            expiresAt: c.expires ? c.expires * 1000 : null,
+          })),
+        );
+
         const cookies = buildCookieString(cookieMap);
         console.log('[WAF] finalizeResolve cookieMap:', JSON.stringify(cookieMap));
         console.log('[WAF] finalizeResolve cookie string:', cookies);
@@ -214,6 +226,10 @@ export const WafDialog: React.FC = () => {
         height: 600,
         center: true,
         userAgent: customUserAgent,
+        // A private session per solve: no cookies from earlier solves (maybe
+        // another author's) and none left behind. The solved cookies are
+        // read before the window closes and saved to the author's jar.
+        incognito: true,
       });
 
       webviewRef.current = webview;

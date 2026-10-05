@@ -133,10 +133,15 @@ pub async fn clear_client_cache() {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn get_client(provider: &str, custom_url: Option<String>) -> Result<Client, String> {
+async fn get_client(
+    provider: &str,
+    custom_url: Option<String>,
+    cookie_store: bool,
+) -> Result<Client, String> {
     let active_proxy = crate::proxy_manager::get_active_proxy_url().await;
     let key = format!(
-        "{}_{}_{}",
+        "{}_{}_{}_{}",
+        cookie_store,
         provider,
         custom_url.clone().unwrap_or_default(),
         active_proxy.as_deref().unwrap_or_default()
@@ -151,7 +156,7 @@ async fn get_client(provider: &str, custom_url: Option<String>) -> Result<Client
 
     let mut builder = Client::builder()
         .emulation(Emulation::Chrome137)
-        .cookie_store(true)
+        .cookie_store(cookie_store)
         .redirect(Policy::limited(10));
 
     if let Some(ref proxy_url) = active_proxy {
@@ -202,6 +207,10 @@ pub struct FetchArgs {
     pub doh_provider: String,
     #[serde(default)]
     pub doh_custom_url: Option<String>,
+    /// Provider requests: skip the shared cookie store. Provider cookies are
+    /// kept per source author on the JS side and sent as a Cookie header.
+    #[serde(default)]
+    pub isolated_cookies: bool,
 }
 
 fn default_method() -> String {
@@ -233,7 +242,12 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
         args.method, args.url, has_cookie
     );
 
-    let client = get_client(&args.doh_provider, args.doh_custom_url).await?;
+    let client = get_client(
+        &args.doh_provider,
+        args.doh_custom_url,
+        !args.isolated_cookies,
+    )
+    .await?;
 
     let method = Method::from_bytes(args.method.as_bytes()).unwrap_or(Method::GET);
     let mut request = client.request(method, &args.url);
@@ -312,7 +326,7 @@ pub async fn doh_fetch(args: FetchArgs) -> Result<FetchResponse, String> {
     let host_str = parsed_url.host_str().unwrap_or("").to_string();
 
     let mut builder = reqwest::Client::builder()
-        .cookie_store(true);
+        .cookie_store(!args.isolated_cookies);
 
     if let Some(max_redirects) = args.max_redirects {
         if max_redirects == 0 {

@@ -1,7 +1,8 @@
 import {OpenWebViewOptions, OpenWebViewResult} from '../lib/providers/types';
 import {useWafStore} from '../lib/zustand/wafStore';
 import {headers as commonHeaders} from '../lib/providers/headers';
-import {updateGlobalCookies, getGlobalCookies, clearGlobalCookies} from '../lib/providers/cookieStore';
+import {providerAuthor} from '../lib/providers/providerScope';
+import {deleteJarCookie, getJarCookieMap} from '../lib/providers/providerCookieJar';
 
 const pickUserAgent = (
   h?: Record<string, string>,
@@ -16,16 +17,23 @@ const pendingRequests = new Map<
   Array<{resolve: (val: any) => void; reject: (err: any) => void}>
 >();
 
+/**
+ * Opens the WAF solver for a provider. Cookies are read from and saved to the
+ * jar of `author` (the provider's source author), never another author's.
+ */
 export const openWebView = async (
   url: string,
-  options?: OpenWebViewOptions,
+  options: OpenWebViewOptions | undefined,
+  authorRaw: string,
 ): Promise<OpenWebViewResult> => {
   if (!url) {
     throw new Error('openWebView: a url is required');
   }
+  const author = providerAuthor(authorRaw);
 
   const hostname = url.includes('://') ? url.split('/')[2] : url;
-  const cacheKey = options?.waitForCookie ? `${hostname}:${options.waitForCookie}` : hostname;
+  const siteKey = options?.waitForCookie ? `${hostname}:${options.waitForCookie}` : hostname;
+  const cacheKey = `${author}|${siteKey}`;
 
   // Request Coalescing: If a WAF solver is already running for this URL,
   // just wait for its result instead of queuing another dialog!
@@ -38,15 +46,13 @@ export const openWebView = async (
 
   // Handle force and fast path
   if (!options?.force && options?.waitForCookie) {
-    const existingCookies = getGlobalCookies(url);
-    if (existingCookies && existingCookies.includes(options.waitForCookie)) {
+    const cookieMap = getJarCookieMap(author, url);
+    if (cookieMap[options.waitForCookie]) {
       // Fast path: we already have the awaited cookie, return it immediately
-      const cookieMap = existingCookies.split(';').reduce((acc, curr) => {
-        const [k, v] = curr.trim().split('=');
-        if (k && v) acc[k] = v;
-        return acc;
-      }, {} as Record<string, string>);
-      
+      const existingCookies = Object.entries(cookieMap)
+        .map(([name, value]) => `${name}=${value}`)
+        .join('; ');
+
       return {
         data: '',
         cookies: existingCookies,
@@ -57,8 +63,8 @@ export const openWebView = async (
       };
     }
   } else if (options?.waitForCookie) {
-    // If it is forced, clear the bad cookies from the global store before opening
-    clearGlobalCookies(url);
+    // Forced: the saved cookie is bad, drop it before opening
+    deleteJarCookie(author, url, options.waitForCookie);
   }
 
   pendingRequests.set(cacheKey, []);
@@ -73,11 +79,8 @@ export const openWebView = async (
   return new Promise((resolve, reject) => {
     console.log('[WAF] Queuing new solver for:', url);
 
+    // WafDialog saves the solved cookies to the author's jar.
     const wrappedResolve = (result: OpenWebViewResult) => {
-      if (result.cookies) {
-        updateGlobalCookies(new URL(url).origin, result.cookies, result.expires);
-      }
-      
       resolve(result);
       const pending = pendingRequests.get(cacheKey) || [];
       pendingRequests.delete(cacheKey);
@@ -92,8 +95,9 @@ export const openWebView = async (
     };
 
     useWafStore.getState().enqueue({
-      url,
       ...options,
+      url,
+      author,
       resolve: wrappedResolve,
       reject: wrappedReject,
     });

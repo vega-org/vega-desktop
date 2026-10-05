@@ -1,7 +1,7 @@
 import { AxiosAdapter, AxiosResponse, AxiosHeaders } from "axios";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { invoke } from "@tauri-apps/api/core";
-import { getGlobalCookies } from "./cookieStore";
+import { buildRequestCookieHeader, storeSetCookies } from "./providerCookieJar";
 import { settingsStorage } from "../storage/SettingsStorage";
 
 async function executeNativeFetch(
@@ -81,7 +81,12 @@ function decodeResponseData(rawBytes: Uint8Array, responseType: string): any {
   return new TextDecoder().decode(rawBytes);
 }
 
+/**
+ * Sends a provider request. Cookies come from, and go to, the jar of the
+ * provider's source author only; the shared client cookie store is skipped.
+ */
 export async function providerFetch(
+  author: string,
   input: RequestInfo | URL,
   init: RequestInit = {},
 ): Promise<Response> {
@@ -106,13 +111,16 @@ export async function providerFetch(
     }
   }
 
-  const hasCookieHeader = Object.keys(plainHeaders).some(
+  const cookieKey = Object.keys(plainHeaders).find(
     (k) => k.toLowerCase() === "cookie"
   );
-  const globalCookies = getGlobalCookies(url);
-  if (globalCookies && !hasCookieHeader) {
-    plainHeaders["Cookie"] = globalCookies;
-  }
+  const cookieHeader = buildRequestCookieHeader(
+    author,
+    url,
+    cookieKey ? plainHeaders[cookieKey] : undefined,
+  );
+  if (cookieKey) delete plainHeaders[cookieKey];
+  if (cookieHeader) plainHeaders["Cookie"] = cookieHeader;
 
   let body: number[] | undefined;
   if (init.body != null) {
@@ -141,8 +149,17 @@ export async function providerFetch(
       max_redirects: init.redirect === "manual" ? 0 : 10,
       doh_provider: settingsStorage.getDohProvider(),
       doh_custom_url: settingsStorage.getDohCustomUrl(),
+      isolated_cookies: true,
     },
   });
+
+  storeSetCookies(
+    author,
+    response.url || url,
+    response.headers
+      .filter(([key]) => key.toLowerCase() === "set-cookie")
+      .map(([, value]) => value),
+  );
 
   const headerEntries: Array<[string, string]> = [];
   for (const [key, value] of response.headers) {
@@ -253,16 +270,6 @@ export const tauriAxiosAdapter: AxiosAdapter = async (
     });
   }
 
-  const globalCookies = getGlobalCookies(url);
-  if (globalCookies) {
-    const existingCookie = headers.get("Cookie");
-    if (existingCookie) {
-      headers.set("Cookie", existingCookie + "; " + globalCookies);
-    } else {
-      headers.set("Cookie", globalCookies);
-    }
-  }
-
   const method = (config.method || "GET").toUpperCase();
   let body: any = undefined;
 
@@ -294,11 +301,7 @@ export const tauriAxiosAdapter: AxiosAdapter = async (
     (isDohEnabled || forceDoh) &&
     (body === undefined || typeof body === "string");
 
-  // Cloudflare's cf_clearance cookie is bound to the browser's TLS fingerprint.
-  // reqwest (Rust) has a different fingerprint than Chromium, so WAF cookies
-  // will always be rejected by doh_fetch. Use native fetch for WAF-protected domains.
-  const hasWafCookies = !!globalCookies;
-  const shouldUseDoh = canUseDoh && (forceDoh || !hasWafCookies);
+  const shouldUseDoh = canUseDoh;
 
   if (shouldUseDoh) {
     try {
