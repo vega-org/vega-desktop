@@ -167,3 +167,76 @@
     padding: var(--spacing-md);
   }
 }
+
+/* Each hero fades in when the rotation switches to it. */
+.hero-fade {
+  animation: hero-fade-in 0.6s ease;
+}
+
+@keyframes hero-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.hero-dots {
+  display: flex;
+  gap: 6px;
+  margin-top: var(--spacing-md);
+}
+
+.hero-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+
+.hero-dot.active {
+  width: 22px;
+  background: #ffffff;
+}
+
+/* Posters and small images: blurred fill plus the sharp poster on the right. */
+.hero-background.poster-like {
+  filter: blur(28px) brightness(0.7);
+  transform: scale(1.15);
+}
+
+/* Keep the scaled, blurred fill from spilling outside the hero. */
+.hero-container:has(.poster-like) {
+  overflow: hidden;
+}
+
+.hero-poster {
+  position: absolute;
+  right: 8%;
+  top: 50%;
+  height: 72%;
+  max-height: 520px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  transform: translateY(-50%);
+  z-index: 5;
+}
+
+@media (max-width: 900px) {
+  .hero-poster {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-fade {
+    animation: none;
+  }
+}

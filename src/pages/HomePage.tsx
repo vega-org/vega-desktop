@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   useHomePageData,
-  getRandomHeroPost,
+  getRandomHeroPosts,
 } from "../lib/hooks/useHomePageData";
 import { useSearch } from "../lib/hooks/useSearch";
 import useContentStore from "../lib/zustand/contentStore";
@@ -47,12 +47,11 @@ export const HomePage: React.FC = () => {
     settingsStorage.showContinueWatching(),
   );
 
-  const heroPost = useMemo(() => {
-    if (!homeData || homeData.length === 0) {
-      return null;
-    }
-    return getRandomHeroPost(homeData, provider?.value);
-  }, [homeData, provider?.value]);
+  // Heroes are kept per provider, so a refetch does not pick new ones.
+  const heroPosts = useMemo(
+    () => getRandomHeroPosts(homeData, provider?.value),
+    [homeData, provider?.value],
+  );
 
   const continueWatchingPosts = useMemo(() => {
     const latestByLink = new Map<string, (typeof history)[number]>();
@@ -198,7 +197,7 @@ export const HomePage: React.FC = () => {
   if (isHomeLoading && homeData.length === 0) {
     return (
       <div className="home-page">
-        <Hero post={null} />
+        <Hero posts={[]} />
         <ContentSlider title="Loading..." posts={[]} isLoading={true} />
         <ContentSlider title="Loading..." posts={[]} isLoading={true} />
         <ContentSlider title="Loading..." posts={[]} isLoading={true} />
@@ -208,11 +207,11 @@ export const HomePage: React.FC = () => {
 
   return (
     <div className="home-page">
-      {heroPost && <Hero post={heroPost} />}
+      {heroPosts.length > 0 && <Hero posts={heroPosts} />}
 
       <div
         className="sliders-section"
-        style={!heroPost ? { marginTop: "100px" } : undefined}
+        style={heroPosts.length === 0 ? { marginTop: "100px" } : undefined}
       >
         {showContinueWatching && continueWatchingPosts.length > 0 && (
           <ContentSlider
