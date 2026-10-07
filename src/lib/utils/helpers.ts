@@ -207,6 +207,15 @@ const parseGitlabUrl = (url: URL): ParsedSource | null => {
   return {host: 'gitlab', author, repo, branch};
 };
 
+// A malformed link to a known host is an error, not a custom source.
+const KNOWN_HOSTS = [
+  RAW_GITHUB_HOST,
+  GITHUB_HOST,
+  CODEBERG_HOST,
+  BITBUCKET_HOST,
+  GITLAB_HOST,
+];
+
 const URL_PARSERS = [
   parseRawGithubUrl,
   parseGithubRepoUrl,
@@ -222,10 +231,72 @@ const toProviderSource = (parsed: ParsedSource): ProviderSource => ({
 });
 
 /**
- * Accepts a repo or raw URL on GitHub, Codeberg, Bitbucket or GitLab, or a
- * short name: "author" (GitHub), "author@cb" (Codeberg), "author@bb"
- * (Bitbucket) or "author@gl" (GitLab). Short names use the default
- * vega-providers repo on the main branch.
+ * Any other https URL: a manifest file (path ending in .json) or the folder
+ * holding manifest.json. Provider files are resolved against that folder. The
+ * author key is the host and folder path, so two sites never share provider
+ * data, cookies or tokens.
+ */
+const toCustomProviderSource = (url: URL): ProviderSource => {
+  if (url.protocol !== 'https:') {
+    throw new Error('Custom provider sources must use https');
+  }
+  const segments = url.pathname.split('/').filter(Boolean);
+  const manifestFile =
+    segments.length > 0 && /\.json$/i.test(segments[segments.length - 1])
+      ? segments.pop()!
+      : 'manifest.json';
+  const folder = segments.length > 0 ? `/${segments.join('/')}` : '';
+  const base = `${url.origin}${folder}`;
+  return {
+    author: `${url.host.toLowerCase()}${folder}`,
+    url: base,
+    manifestUrl: `${base}/${manifestFile}${url.search}`,
+    isDefault: false,
+  };
+};
+
+/**
+ * True for a manifest `path` that stays inside the source folder: relative
+ * segments only, no "." or "..", no query or backslash.
+ */
+export const isValidProviderPath = (path: unknown): path is string => {
+  // "%2e%2e" is read as ".." by URL parsers, so encoded dots are refused too.
+  if (typeof path !== 'string' || /[\\?#]|%2e/i.test(path)) {
+    return false;
+  }
+  const segments = path.split('/').filter(Boolean);
+  return (
+    segments.length > 0 &&
+    !/^[a-z][a-z0-9+.-]*:/i.test(path) &&
+    segments.every(segment => segment !== '.' && segment !== '..')
+  );
+};
+
+/**
+ * Folder holding a provider's files: the manifest `path` under the source
+ * folder ("/providers/netflix" and "providers/netflix" mean the same), or
+ * dist/{value} when the manifest gives none.
+ */
+export const getProviderFilesUrl = (
+  sourceUrl: string,
+  providerValue: string,
+  path?: string,
+): string => {
+  const base = sourceUrl.replace(/\/+$/, '');
+  if (path === undefined || path === '') {
+    return `${base}/dist/${providerValue}`;
+  }
+  if (!isValidProviderPath(path)) {
+    throw new Error(`Invalid provider path: ${path}`);
+  }
+  return `${base}/${path.split('/').filter(Boolean).join('/')}`;
+};
+
+/**
+ * Accepts a repo or raw URL on GitHub, Codeberg, Bitbucket or GitLab, any
+ * other https manifest URL, or a short name: "author" (GitHub), "author@cb"
+ * (Codeberg), "author@bb" (Bitbucket) or "author@gl" (GitLab). Short names use
+ * the default vega-providers repo on the main branch.
  */
 export const createProviderSource = (value: string): ProviderSource => {
   const input = value.trim();
@@ -249,9 +320,10 @@ export const createProviderSource = (value: string): ProviderSource => {
         return toProviderSource(source);
       }
     }
-    throw new Error(
-      'Only GitHub, Codeberg, Bitbucket or GitLab provider source URLs are supported',
-    );
+    if (KNOWN_HOSTS.includes(hostOf(parsed))) {
+      throw new Error('Unsupported URL for this host');
+    }
+    return toCustomProviderSource(parsed);
   }
 
   const match = /^@?([^\s@/]+)(?:@([a-z]+))?$/i.exec(input);

@@ -289,7 +289,7 @@ export const ExtensionsPage: React.FC = () => {
 
   const handleAddSource = () => {
     if (!inputValue.trim()) {
-      setError("Enter a GitHub author or a valid provider source URL.");
+      setError("Enter a GitHub author, a repo URL or an https manifest URL.");
       return;
     }
 
@@ -298,18 +298,29 @@ export const ExtensionsPage: React.FC = () => {
       if (isPrivateSource) {
         const normalizedToken = normalizeSourceToken(sourceToken);
         if (!normalizedToken) {
-          setError("Enter a valid GitHub token.");
+          setError("Enter a valid access token.");
           return;
         }
-        if (!source.url.startsWith("https://raw.githubusercontent.com/")) {
-          setError("Private sources are supported only on GitHub.");
+        // GitHub raw files and custom https sources take a token; the other
+        // hosts use their own auth schemes.
+        if (
+          !source.url.startsWith("https://raw.githubusercontent.com/") &&
+          !source.manifestUrl
+        ) {
+          setError(
+            "Private sources are supported only on GitHub or a custom manifest URL.",
+          );
           return;
         }
         sourceTokenStorage.set(source.author, normalizedToken);
       } else {
         sourceTokenStorage.delete(source.author);
       }
-      extensionStorage.addProviderSources(source.author, source.url);
+      extensionStorage.addProviderSources(
+        source.author,
+        source.url,
+        source.manifestUrl,
+      );
       extensionStorage.setDefaultProviderSource(source.author);
       const nextSources = extensionStorage.getProviderSources();
       setSources(nextSources);
@@ -335,7 +346,7 @@ export const ExtensionsPage: React.FC = () => {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Enter a GitHub author or a valid provider source URL.",
+          : "Enter a GitHub author, a repo URL or an https manifest URL.",
       );
     }
   };

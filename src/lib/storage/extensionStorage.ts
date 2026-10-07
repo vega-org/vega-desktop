@@ -6,7 +6,10 @@ import {sourceTokenStorage} from './sourceTokenStorage';
  */
 export interface ProviderSource {
   author: string;
+  /** Folder that provider paths resolve against. */
   url: string;
+  /** Custom sources only; others use `${url}/manifest.json`. */
+  manifestUrl?: string;
   isDefault?: boolean;
 }
 
@@ -25,6 +28,8 @@ export interface ProviderExtension {
   installedAt?: number;
   lastUpdated?: number;
   hasSettings?: boolean;
+  /** Folder of the provider's files under the source; dist/{value} if unset. */
+  path?: string;
 }
 
 /**
@@ -103,7 +108,7 @@ export class ExtensionStorage {
   /**
    * Add provider sources
    */
-  addProviderSources(author: string, url: string): void {
+  addProviderSources(author: string, url: string, manifestUrl?: string): void {
     const normalizedAuthor = author.trim();
     const normalizedUrl = this.normalizeUrl(url);
     if (!normalizedAuthor || !normalizedUrl) {
@@ -116,14 +121,21 @@ export class ExtensionStorage {
 
     const existingIndex = sources.findIndex(s => s.author === normalizedAuthor);
     if (existingIndex >= 0) {
-      sources[existingIndex] = {
+      const updated: ProviderSource = {
         ...sources[existingIndex],
         url: normalizedUrl,
       };
+      if (manifestUrl) {
+        updated.manifestUrl = manifestUrl;
+      } else {
+        delete updated.manifestUrl;
+      }
+      sources[existingIndex] = updated;
     } else {
       sources.push({
         author: normalizedAuthor,
         url: normalizedUrl,
+        ...(manifestUrl ? {manifestUrl} : {}),
         isDefault: sources.length === 0,
       });
     }
@@ -257,6 +269,7 @@ export class ExtensionStorage {
       existing.source = provider.source;
       existing.lastUpdated = Date.now();
       existing.hasSettings = provider.hasSettings ?? existing.hasSettings;
+      existing.path = provider.path;
     } else {
       // Add new provider
       installed.push({

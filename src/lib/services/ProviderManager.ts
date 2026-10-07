@@ -6,6 +6,7 @@ import { openWebView } from "../../platform/waf";
 import { extensionManager } from "./ExtensionManager";
 import { extensionStorage } from "../storage/extensionStorage";
 import { getSourceAuthHeaders } from "../storage/sourceTokenStorage";
+import { getProviderFilesUrl } from "../utils/helpers";
 import { getErrorMessage } from "./providerErrors";
 import {
   getProviderPrefix,
@@ -615,7 +616,15 @@ export class ProviderManager {
       try {
         const source = extensionStorage.getProviderSource();
         const testUrl = `http://localhost:3001/dist/${providerValue}/settings.js?v=${Date.now()}`;
-        const sourceUrl = source?.url ? `${source.url}/dist/${providerValue}/settings.js` : null;
+        const path = extensionStorage
+          .getInstalledProviders()
+          .find(
+            (p) =>
+              p.value === providerValue && p.source?.author === source?.author,
+          )?.path;
+        const sourceUrl = source?.url
+          ? `${getProviderFilesUrl(source.url, providerValue, path)}/settings.js`
+          : null;
 
         let res;
         try {

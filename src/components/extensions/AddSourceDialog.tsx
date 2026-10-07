@@ -119,9 +119,9 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
               <div>
                 <Dialog.Title>Add source</Dialog.Title>
                 <Dialog.Description>
-                  Enter a repo URL (GitHub, Codeberg, Bitbucket, GitLab) or
-                  author name. Use author@cb, author@bb or author@gl for
-                  non-GitHub hosts.
+                  Enter a repo URL (GitHub, Codeberg, Bitbucket, GitLab), an
+                  https link to a manifest.json, or author name. Use author@cb,
+                  author@bb or author@gl for non-GitHub hosts.
                 </Dialog.Description>
               </div>
               <FocusableButton
@@ -188,7 +188,7 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
                     type={showToken ? "text" : "password"}
                     autoComplete="off"
                     spellCheck={false}
-                    placeholder="GitHub token"
+                    placeholder="Access token"
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
                     onKeyDown={(e) => {
@@ -212,7 +212,7 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
                       }
                       return true;
                     }}
-                    aria-label="GitHub token"
+                    aria-label="Access token"
                   />
                   <FocusableButton
                     focusKey="ADD_SOURCE_TOKEN_VISIBILITY"

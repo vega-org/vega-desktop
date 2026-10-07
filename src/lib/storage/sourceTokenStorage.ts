@@ -35,14 +35,20 @@ export const sourceTokenStorage = {
 };
 
 /**
- * Auth header for a provider source file. Sent only to raw.githubusercontent.com,
- * so a token never reaches another host.
+ * True when a token of this source may go to the URL: any
+ * raw.githubusercontent.com file, or for a custom source (author key
+ * "host/folder") only files under its own https folder. A token never reaches
+ * another host or another site's folder.
  */
+export const isSourceAuthUrl = (author: string, url: string): boolean =>
+  url.startsWith(RAW_GITHUB_ORIGIN) || url.startsWith(`https://${author}/`);
+
+/** Auth header for a provider source file. */
 export const getSourceAuthHeaders = (
   author: string | undefined,
   url: string,
 ): Record<string, string> => {
-  if (!author || !url.startsWith(RAW_GITHUB_ORIGIN)) {
+  if (!author || !isSourceAuthUrl(author, url)) {
     return {};
   }
   const token = sourceTokenStorage.get(author);

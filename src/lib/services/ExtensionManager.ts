@@ -11,7 +11,11 @@ import {
   getSourceAuthHeaders,
   sourceTokenStorage,
 } from "../storage/sourceTokenStorage";
-import { createProviderSource } from "../utils/helpers";
+import {
+  createProviderSource,
+  getProviderFilesUrl,
+  isValidProviderPath,
+} from "../utils/helpers";
 
 export const isRateLimitError = (error: unknown): boolean => {
   if (!error) return false;
@@ -35,7 +39,7 @@ const throwIfSourceAccessDenied = (error: unknown, author: string): void => {
     (status === 401 || status === 403 || status === 404)
   ) {
     throw new Error(
-      "Cannot access this private source. Check that the GitHub token is valid and has read access to the repo.",
+      "Cannot access this private source. Check that the access token is valid and has read access.",
     );
   }
 };
@@ -63,6 +67,16 @@ export class ExtensionManager {
 
   private getActiveSource(source?: ProviderSource): ProviderSource | undefined {
     if (source) {
+      // Installed providers keep only author and url. Fill in the stored
+      // manifestUrl so update checks of custom sources fetch the right file.
+      if (!source.manifestUrl) {
+        const stored = extensionStorage
+          .getProviderSources()
+          .find((s) => s.author === source.author);
+        if (stored?.manifestUrl) {
+          return { ...source, manifestUrl: stored.manifestUrl };
+        }
+      }
       return source;
     }
 
@@ -156,7 +170,7 @@ export class ExtensionManager {
 
       const manifestBase = this.testMode
         ? `${this.baseUrlTestMode}/manifest.json`
-        : this.getManifest(activeSource.url);
+        : activeSource.manifestUrl || this.getManifest(activeSource.url);
       const manifestUrl = shouldForce
         ? `${manifestBase}${manifestBase.includes("?") ? "&" : "?"}t=${Date.now()}`
         : manifestBase;
@@ -173,17 +187,24 @@ export class ExtensionManager {
         throw new Error("Invalid manifest format");
       }
 
-      const providers: ProviderExtension[] = response.data.map((item: any) => ({
-        value: item.value,
-        display_name: item.display_name,
-        disabled: item.disabled || false,
-        source: activeSource,
-        version: item.version,
-        icon: item.icon || "",
-        type: item.type || "global",
-        installed: false,
-        hasSettings: item.hasSettings || false,
-      }));
+      const providers: ProviderExtension[] = response.data
+        // A path that leaves the source folder is unsafe; skip that entry.
+        .filter(
+          (item: any) =>
+            item?.path === undefined || isValidProviderPath(item.path),
+        )
+        .map((item: any) => ({
+          value: item.value,
+          display_name: item.display_name,
+          disabled: item.disabled || false,
+          source: { author: activeSource.author, url: activeSource.url },
+          version: item.version,
+          icon: item.icon || "",
+          type: item.type || "global",
+          installed: false,
+          hasSettings: item.hasSettings || false,
+          ...(item.path ? { path: item.path } : {}),
+        }));
 
       // Cache the manifest
       extensionStorage.setManifestCache(providers, activeSource.author);
@@ -215,6 +236,7 @@ export class ExtensionManager {
     sourceAuthor: string,
     providerValue: string,
     version: string,
+    path?: string,
   ): Promise<ProviderModule> {
     if (this.testMode) {
       return this.downloadTestProviderModule(providerValue);
@@ -223,11 +245,12 @@ export class ExtensionManager {
       const requiredFiles = ["posts", "meta", "stream", "catalog"];
       const optionalFiles = ["episodes", "settings"];
       const allFiles = [...requiredFiles, ...optionalFiles];
+      const filesUrl = getProviderFilesUrl(sourceUrl, providerValue, path);
 
       const modules: Record<string, string> = {};
       const downloadPromises = allFiles.map(async (fileName) => {
         try {
-          const url = `${sourceUrl}/dist/${providerValue}/${fileName}.js?t=${Date.now()}`;
+          const url = `${filesUrl}/${fileName}.js?t=${Date.now()}`;
           console.log(`Downloading: ${url}`);
 
           const response = await axios.get(url, {
@@ -381,6 +404,7 @@ export class ExtensionManager {
         provider.source.author,
         provider.value,
         provider.version,
+        provider.path,
       );
 
       // Mark as installed
@@ -415,6 +439,7 @@ export class ExtensionManager {
         provider.source.author,
         provider.value,
         provider.version,
+        provider.path,
       );
 
       // Update installation record
