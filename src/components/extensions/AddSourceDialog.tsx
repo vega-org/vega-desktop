@@ -119,9 +119,7 @@ export const AddSourceDialog: React.FC<AddSourceDialogProps> = ({
               <div>
                 <Dialog.Title>Add source</Dialog.Title>
                 <Dialog.Description>
-                  Enter a repo URL (GitHub, Codeberg, Bitbucket, GitLab), an
-                  https link to a manifest.json, or author name. Use author@cb,
-                  author@bb or author@gl for non-GitHub hosts.
+                  Enter an author name, repo URL or manifest URL.
                 </Dialog.Description>
               </div>
               <FocusableButton
