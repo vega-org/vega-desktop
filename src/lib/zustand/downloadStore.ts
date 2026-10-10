@@ -19,6 +19,8 @@ export interface DownloadItem {
   imdbId?: string;
   url: string;
   poster?: string;
+  background?: string;
+  synopsis?: string;
   provider?: string;
   server?: string;
   infoUrl?: string;

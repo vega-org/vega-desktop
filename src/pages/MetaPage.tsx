@@ -68,6 +68,8 @@ interface DialogContext {
   id: string;
   title: string;
   poster: string;
+  background?: string;
+  synopsis?: string;
   showName?: string;
   episodeName?: string;
   seasonTitle?: string;
@@ -196,6 +198,37 @@ export const MetaPage: React.FC = () => {
   const [extractingId, setExtractingId] = useState<string | null>(null);
   const [episodesProgress, setEpisodesProgress] = useState<Record<string, { position: number; duration: number }>>({});
   const [episodeSearch, setEpisodeSearch] = useState("");
+  const [selectedEpisodes, setSelectedEpisodes] = useState<Set<string>>(new Set());
+  const [selectingEpisodes, setSelectingEpisodes] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<string | null>(null);
+  const [batchResult, setBatchResult] = useState("");
+  const batchController = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    setSelectedEpisodes(new Set());
+    setSelectingEpisodes(false);
+    setBatchResult("");
+    setBatchProgress(null);
+    return () => {
+      batchController.current?.abort();
+      batchController.current = null;
+    };
+  }, [link, activeProviderValue, activeSeason?.title, activeSeason?.episodesLink]);
+
+  useEffect(() => {
+    if (!selectingEpisodes) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (batchController.current) batchController.current.abort();
+      else {
+        setSelectingEpisodes(false);
+        setSelectedEpisodes(new Set());
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [selectingEpisodes]);
+
   const [episodeDetails, setEpisodeDetails] = useState<EpisodeDetails | null>(null);
   const [storyOpen, setStoryOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">(() =>
@@ -416,6 +449,8 @@ export const MetaPage: React.FC = () => {
       id,
       title: finalTitle,
       poster: posterImage,
+      background: bgImage,
+      synopsis: description,
       showName: title,
       episodeName: episode.title,
       seasonTitle: groupTitle,
@@ -506,6 +541,8 @@ export const MetaPage: React.FC = () => {
       url: stream.link,
       server: stream.server,
       poster: targetContext.poster,
+      background: targetContext.background,
+      synopsis: targetContext.synopsis,
       provider: activeProviderValue || "unknown",
       infoUrl: link,
       sourceLink: targetContext.sourceLink,
@@ -521,10 +558,11 @@ export const MetaPage: React.FC = () => {
     });
   };
 
-  const executeQuickDownload = async (targetContext: DialogContext, stream: Stream) => {
+  const executeQuickDownload = async (targetContext: DialogContext, stream: Stream, signal?: AbortSignal) => {
+    if (signal?.aborted) return;
     await executeDownloadVideo(targetContext, stream);
 
-    if (stream.subtitles && stream.subtitles.length > 0) {
+    if (!signal?.aborted && stream.subtitles && stream.subtitles.length > 0) {
       const sub = stream.subtitles[0];
       const subId = `${targetContext.id}_subtitle_${sub.title}`;
       await addDownload({
@@ -533,6 +571,8 @@ export const MetaPage: React.FC = () => {
         url: sub.uri,
         server: "Subtitle",
         poster: targetContext.poster,
+        background: targetContext.background,
+        synopsis: targetContext.synopsis,
         provider: activeProviderValue || "unknown",
         infoUrl: link,
         sourceLink: targetContext.sourceLink,
@@ -566,6 +606,8 @@ export const MetaPage: React.FC = () => {
       url: sub.uri,
       server: "Subtitle",
       poster: dialogContext.poster,
+      background: dialogContext.background,
+      synopsis: dialogContext.synopsis,
       provider: activeProviderValue || "unknown",
       infoUrl: link,
       sourceLink: dialogContext.sourceLink,
@@ -591,6 +633,71 @@ export const MetaPage: React.FC = () => {
     );
   if (sortOrder === "desc") displayedRows.reverse();
   const playableRows = displayedRows.map(({ episode }) => episode);
+  const runSelectedEpisodes = async (action: "copy" | "download") => {
+    if (batchController.current || !selectedEpisodes.size) return;
+    const controller = new AbortController();
+    batchController.current = controller;
+    setBatchResult("");
+    const selected = rows.map((episode, sourceIndex) => ({ episode, sourceIndex }))
+      .filter(({ episode }) => selectedEpisodes.has(episode.link));
+    const links: string[] = [];
+    let processed = 0;
+    let skipped = 0;
+    try {
+      for (const [index, { episode, sourceIndex }] of selected.entries()) {
+        if (controller.signal.aborted) break;
+        setBatchProgress(`${action === "copy" ? "Finding links" : "Starting downloads"} ${index + 1}/${selected.length}`);
+        try {
+          const groupTitle = activeSeason?.title || "Default";
+          const id = `${title}_S${groupTitle}_E${sourceIndex + 1}`;
+          if (action === "download" && Object.values(useDownloadStore.getState().downloads).some(
+            (item) => isVideoDownloadItem(item) && item.status !== "error" &&
+              (item.id === id || (item.infoUrl === link && item.sourceLink === episode.link)),
+          )) {
+            skipped++;
+            continue;
+          }
+          const streams = await providerManager.getStream({
+            link: episode.link, type: rowType, signal: controller.signal,
+            providerValue: activeProviderValue, isDownload: true,
+          });
+          if (controller.signal.aborted) break;
+          const stream = streams?.find((item) => /^https?:\/\//i.test(item.link));
+          if (!stream) { skipped++; continue; }
+          if (action === "copy") links.push(stream.link);
+          else await executeQuickDownload({
+            id, title: `${title} S${groupTitle} E${sourceIndex + 1}`,
+            poster: posterImage, background: bgImage, synopsis: description,
+            showName: title, episodeName: episode.title, seasonTitle: groupTitle,
+            episodeIndex: sourceIndex, type: rowType as "movie" | "series",
+            imdbId: info.imdbId || meta?.imdbId, sourceLink: episode.link,
+            skip: (episode as any).skip || (episode as any).skips ||
+              (activeSeason as any)?.skip || (activeSeason as any)?.skips,
+          }, stream, controller.signal);
+          processed++;
+        } catch (error) {
+          if (controller.signal.aborted) break;
+          console.warn("Failed to process selected episode", episode.link, error);
+          skipped++;
+        }
+      }
+      if (action === "copy" && links.length && !controller.signal.aborted) {
+        await navigator.clipboard.writeText(links.join("\n"));
+      }
+      if (batchController.current === controller) {
+        setBatchResult(controller.signal.aborted ? (action === "download" ? "Cancelled. Downloads already queued will continue." : "Copy cancelled.") :
+          `${processed} ${action === "copy" ? "links copied" : "downloads queued"}${skipped ? `, ${skipped} skipped` : ""}.`);
+      }
+    } catch (error) {
+      if (batchController.current === controller) setBatchResult(error instanceof Error ? error.message : "Could not copy links.");
+    } finally {
+      if (batchController.current === controller) {
+        batchController.current = null;
+        setBatchProgress(null);
+      }
+    }
+  };
+
   const showEpisodeSearch = rows.length > 8 || Boolean(episodeSearch);
   const showEpisodeSort = rows.length > 1;
 
@@ -730,6 +837,19 @@ export const MetaPage: React.FC = () => {
               </div>
             )}
 
+            {selectingEpisodes && (
+              <div className="episode-selection-toolbar">
+                <span>{selectedEpisodes.size} selected</span>
+                <FocusableButton disabled={Boolean(batchProgress)} onClick={() => setSelectedEpisodes(new Set(displayedRows.map(({ episode }) => episode.link)))}>Select all</FocusableButton>
+                <FocusableButton disabled={Boolean(batchProgress)} onClick={() => setSelectedEpisodes(new Set())}>Clear</FocusableButton>
+                <FocusableButton disabled={Boolean(batchProgress) || !selectedEpisodes.size} onClick={() => void runSelectedEpisodes("copy")}>Copy links</FocusableButton>
+                <FocusableButton disabled={Boolean(batchProgress) || !selectedEpisodes.size} onClick={() => void runSelectedEpisodes("download")}>Download</FocusableButton>
+                {batchProgress ? <FocusableButton onClick={() => batchController.current?.abort()}>Cancel</FocusableButton> :
+                  <FocusableButton onClick={() => { setSelectingEpisodes(false); setSelectedEpisodes(new Set()); setBatchResult(""); }}>Exit selection</FocusableButton>}
+                <span role="status">{batchProgress || batchResult}</span>
+              </div>
+            )}
+
             {episodeLoading ? (
               <div className="content-skeleton-episode-grid" aria-label="Loading episodes">
                 {Array.from({ length: 6 }, (_, index) => (
@@ -790,7 +910,21 @@ export const MetaPage: React.FC = () => {
                       download={storedDownload}
                       hasDownloadedSubtitles={hasDownloadedSubtitles}
                       extracting={extractingId === id}
-                      onPlay={() => play(playableRows, index, rowType)}
+                      selecting={selectingEpisodes}
+                      selected={selectedEpisodes.has(episode.link)}
+                      onPlay={(event) => {
+                        if (selectingEpisodes || event?.ctrlKey || event?.metaKey) {
+                          if (batchProgress) return;
+                          setSelectingEpisodes(true);
+                          setBatchResult("");
+                          setSelectedEpisodes((previous) => {
+                            const next = new Set(previous);
+                            if (next.has(episode.link)) next.delete(episode.link);
+                            else next.add(episode.link);
+                            return next;
+                          });
+                        } else play(playableRows, index, rowType);
+                      }}
                       onDownload={(e) => {
                         const isLongPress = Boolean(e?.ctrlKey || e?.metaKey);
                         void prepareDownload(episode, sourceIndex, rowType, groupTitle, id, isLongPress);

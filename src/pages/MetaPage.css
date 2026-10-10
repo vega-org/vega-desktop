@@ -2473,4 +2473,8 @@
   .spin {
     animation: none;
   }
-}
+}.episode-selection-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px 0; padding: 12px; border: 1px solid var(--outline-variant); border-radius: 10px; }
+.episode-selection-toolbar [role="button"] { padding: 8px 12px; border-radius: 6px; background: rgba(128,128,128,.18); }
+.content-episode-row.selected { border-color: var(--detail-accent); background: var(--detail-accent-container); opacity: 1; }
+.episode-selection-check { display: flex; align-items: center; justify-content: center; width: 22px; flex-shrink: 0; }
+.episode-selection-check > span { width: 18px; height: 18px; border: 1px solid currentColor; border-radius: 4px; }

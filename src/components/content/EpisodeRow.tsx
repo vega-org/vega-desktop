@@ -83,7 +83,9 @@ interface EpisodeRowProps {
   download?: DownloadItem;
   hasDownloadedSubtitles?: boolean;
   extracting: boolean;
-  onPlay: () => void;
+  selected?: boolean;
+  selecting?: boolean;
+  onPlay: (event?: React.MouseEvent | React.KeyboardEvent) => void;
   onDownload: (
     event?:
       | React.MouseEvent
@@ -127,6 +129,8 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
   download,
   hasDownloadedSubtitles,
   extracting,
+  selected,
+  selecting,
   onPlay,
   onDownload,
   onDeleteDownload: _onDeleteDownload,
@@ -266,12 +270,14 @@ export const EpisodeRow: React.FC<EpisodeRowProps> = ({
   }, [measureDescription]);
 
   return (
-    <article className={`content-episode-row ${watched ? "watched" : ""}`}>
+    <article className={`content-episode-row ${watched ? "watched" : ""} ${selected ? "selected" : ""}`}>
       <FocusableButton
         className="episode-play-area"
+        aria-pressed={selecting ? Boolean(selected) : undefined}
         onClick={onPlay}
         focusKey={`EPISODE_PLAY_${index}`}
       >
+        {selecting && <span className="episode-selection-check">{selected ? <Check size={20} /> : <span />}</span>}
         <EpisodeMedia image={image} />
         <span className="episode-copy">
           <strong>{title}</strong>
