@@ -32,7 +32,7 @@ const FocusableSuggestionItem: React.FC<{
     <button
       ref={ref as any}
       type="button"
-      className={`search-suggestion-item ${focused ? "tv-focus" : ""}`}
+      className={`search-suggestion-item ${tvMode && focused ? "tv-focus" : ""}`}
       onMouseDown={(e) => {
         e.preventDefault();
         onSelect(item.title);
@@ -69,8 +69,7 @@ export const SearchPage: React.FC = () => {
   const nativeInputRef = useRef<HTMLInputElement>(null);
   const navigatingToSuggestionsRef = useRef(false);
   const suppressSuggestionsRef = useRef(true);
-  const isAndroid = navigator.userAgent.toLowerCase().includes("android");
-  const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
+  const tvMode = settingsStorage.isTvModeEnabled();
   const {
     ref: searchFocusRef,
     focused: searchFocused,
@@ -141,6 +140,7 @@ export const SearchPage: React.FC = () => {
 
   const stopTyping = () => {
     setIsTyping(false);
+    if (!tvMode) return;
     window.setTimeout(() => {
       resume();
       focusSearch();
@@ -176,7 +176,7 @@ export const SearchPage: React.FC = () => {
           <form className="search-page-form" onSubmit={handleSearch}>
             <div
               ref={searchFocusRef}
-              className={`search-page-form-inner ${searchFocused ? "tv-focus" : ""}`}
+              className={`search-page-form-inner ${tvMode && searchFocused ? "tv-focus" : ""}`}
               onClick={() => {
                 setIsTyping(true);
                 window.setTimeout(() => nativeInputRef.current?.focus(), 0);

@@ -47,7 +47,7 @@ const FocusableSuggestionItem: React.FC<{
     <button
       ref={ref as any}
       type="button"
-      className={`search-suggestion-item ${focused ? "tv-focus" : ""}`}
+      className={`search-suggestion-item ${tvMode && focused ? "tv-focus" : ""}`}
       onMouseDown={(e) => {
         e.preventDefault();
         onSelect(item.title);
@@ -91,8 +91,7 @@ export const Topbar: React.FC = () => {
   const nativeInputRef = useRef<HTMLInputElement>(null);
   const navigatingToSuggestionsRef = useRef(false);
 
-  const isAndroid = navigator.userAgent.toLowerCase().includes("android");
-  const tvMode = settingsStorage.isTvModeEnabled() || isAndroid;
+  const tvMode = settingsStorage.isTvModeEnabled();
 
   const {
     ref: focusRef,
@@ -227,14 +226,16 @@ export const Topbar: React.FC = () => {
     setIsTyping(false);
     setTimeout(() => {
       setIsInputFocused(false);
-      resume();
-      focusSelf();
+      if (tvMode) {
+        resume();
+        focusSelf();
+      }
     }, 150);
   };
 
   const showSuggestions =
     suggestions.length > 0 &&
-    (isInputFocused || isTyping || isSuggestionsFocused || focused);
+    (isInputFocused || isTyping || isSuggestionsFocused || (tvMode && focused));
 
   return (
     <header
@@ -250,7 +251,7 @@ export const Topbar: React.FC = () => {
         <form className="search-container" onSubmit={handleSearch}>
           <div
             ref={focusRef}
-            className={`search-form-inner ${focused ? "tv-focus" : ""}`}
+            className={`search-form-inner ${tvMode && focused ? "tv-focus" : ""}`}
             onClick={() => {
               setIsTyping(true);
               setIsInputFocused(true);
@@ -261,7 +262,7 @@ export const Topbar: React.FC = () => {
             <input
               ref={nativeInputRef}
               type="text"
-              tabIndex={-1}
+              tabIndex={tvMode ? -1 : 0}
               readOnly={tvMode ? !isTyping : false}
               placeholder="Search this provider"
               aria-label="Search this provider"
