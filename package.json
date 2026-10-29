@@ -54,7 +54,7 @@
     "@tauri-apps/plugin-updater": "^2.10.1",
     "@tauri-apps/plugin-upload": "^2.4.0",
     "@tauri-apps/plugin-window-state": "^2.4.1",
-    "@vega/libmedia-engine": "https://codeload.github.com/vega-org/web-player-engine/tar.gz/c8e040d948d362455bd41220073ec96adeb6fe47",
+    "@vega/libmedia-engine": "https://codeload.github.com/vega-org/web-player-engine/tar.gz/1d1bfb96331acd4a6235585aee62688be277fd55",
     "axios": "^1.18.0",
     "cheerio": "^1.2.0",
     "class-variance-authority": "^0.7.1",

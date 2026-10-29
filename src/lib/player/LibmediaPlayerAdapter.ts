@@ -41,7 +41,14 @@ export class LibmediaPlayerAdapter implements PlayerEngine {
    this.styleObserver=new ResizeObserver(()=>this.updateSubtitleSettings());
    this.styleObserver.observe(this.container);
   }
-  this.engine.setEventListeners({onStateChange:state=>this.receive(state),onError:error=>this.update({error:error.message,isBuffering:false})});
+  this.engine.setEventListeners({onStateChange:state=>this.receive(state),onError:error=>{
+   console.error('[Libmedia] Playback failure', {
+    category:error.category, message:error.message, details:error.rawDetails,
+    recoverable:error.recoverable, timestamp:error.timestamp,
+    diagnostics:this.engine.getDiagnostics(),
+   });
+   this.update({error:error.message,isBuffering:false});
+  }});
  }
  subscribe(listener:(state:PlayerEngineState)=>void){this.listeners.add(listener);listener(this.state);return()=>{this.listeners.delete(listener);};}
  private update(state:Partial<PlayerEngineState>){if(this.disposed)return;this.state={...this.state,...state};for(const listener of this.listeners)listener(this.state);}
