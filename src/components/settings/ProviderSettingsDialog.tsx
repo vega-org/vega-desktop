@@ -33,6 +33,9 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [runningAction, setRunningAction] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const actionBusy = React.useRef(false);
 
   useEffect(() => {
     if (!open || !provider) {
@@ -46,9 +49,10 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
     let isMounted = true;
     setLoading(true);
     setSaved(false);
+    setActionError(null);
 
     providerManager
-      .getSettingsSchema({ providerValue: provider.value })
+      .getSettingsSchema({ providerValue: provider.value, sourceAuthor: provider.source?.author })
       .then((schema) => {
         if (!isMounted) return;
         setFields(schema);
@@ -57,6 +61,7 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
         migrateLegacyProviderData();
         const initialValues: Record<string, any> = {};
         for (const field of schema) {
+          if (field.type === 'button') continue;
           const raw = localStorage.getItem(getScopedKvKey(provider.source?.author, provider.value, field.key));
           if (raw !== null) {
             try {
@@ -118,6 +123,7 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
       );
       const defaultValues: Record<string, any> = {};
       for (const field of fields) {
+        if (field.type === 'button') continue;
         defaultValues[field.key] = field.defaultValue;
       }
       setValues(defaultValues);
@@ -184,8 +190,26 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
               </div>
             ) : (
               <div className="provider-settings-form">
+                {actionError && <p role="alert">{actionError}</p>}
                 {fields.map((field) => {
                   const value = values[field.key];
+
+                  if (field.type === 'button') {
+                    return <div key={field.key} className="provider-settings-field">
+                      {field.buttonLabel && <span className="provider-settings-label">{field.label}</span>}
+                      {field.description && <span className="provider-settings-desc">{field.description}</span>}
+                      <FocusableButton className="dialog-text-button" focusKey={`PROVIDER_SETTING_ACTION_${field.key}`}
+                        disabled={runningAction !== null || resetting} onClick={async () => {
+                          if (!provider || actionBusy.current) return;
+                          actionBusy.current = true; setRunningAction(field.key); setActionError(null);
+                          try {await providerManager.runSettingsAction({providerValue: provider.value, sourceAuthor: provider.source?.author, key: field.key});}
+                          catch (error) {setActionError(error instanceof Error ? error.message : 'Action failed');}
+                          finally {actionBusy.current = false; setRunningAction(null);}
+                        }}>
+                        {runningAction === field.key ? 'Working…' : field.buttonLabel || field.label}
+                      </FocusableButton>
+                    </div>;
+                  }
 
                   if (field.type === "toggle") {
                     return (
@@ -337,7 +361,7 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
                 <FocusableButton
                   className="dialog-text-button"
                   onClick={handleResetDefaults}
-                  disabled={resetting}
+                  disabled={resetting || runningAction !== null}
                   focusKey={`PROVIDER_SETTINGS_RESET_${provider.value}`}
                 >
                   {resetting ? <RefreshCw size={14} className="spin mr-1" /> : null}
@@ -347,6 +371,7 @@ export const ProviderSettingsDialog: React.FC<ProviderSettingsDialogProps> = ({
                   <FocusableButton
                     className="dialog-primary-button"
                     onClick={handleSave}
+                    disabled={resetting || runningAction !== null}
                     focusKey={`PROVIDER_SETTINGS_SAVE_${provider.value}`}
                   >
                     {saved ? <Check size={18} /> : null}

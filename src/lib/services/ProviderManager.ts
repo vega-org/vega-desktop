@@ -600,20 +600,38 @@ export class ProviderManager {
       throw new Error(errorMessage);
     }
   };
+  private settingsActionModules = new Map<string, ProviderCode>();
+
+  runSettingsAction = async ({providerValue, sourceAuthor, key}: {
+    providerValue: string; sourceAuthor?: string; key: string;
+  }): Promise<void> => {
+    const schema = await this.getSettingsSchema({providerValue, sourceAuthor});
+    if (!schema.some(field => field.type === 'button' && field.key === key)) {
+      throw new Error('Unknown provider settings action');
+    }
+    const module = this.settingsActionModules.get(providerScopeId(sourceAuthor, providerValue));
+    if (!module) throw new Error('Provider settings module is unavailable');
+    await this.executeModule(module, providerValue, 'onSettingsAction', {key});
+  };
+
   getSettingsSchema = async ({
     providerValue,
+    sourceAuthor,
   }: {
     providerValue: string;
+    sourceAuthor?: string;
   }): Promise<SettingsField[]> => {
     let providerModule = (
-      await extensionManager.getProviderModulesAsync(providerValue)
+      await extensionManager.getProviderModulesAsync(providerValue, sourceAuthor)
     );
     let settingsModule = providerModule?.modules?.settings;
     let settingsAuthor = providerModule?.sourceAuthor;
 
     if (!settingsModule) {
       try {
-        const source = extensionStorage.getProviderSource();
+        const source = sourceAuthor
+          ? extensionStorage.getProviderSources().find(item => item.author === sourceAuthor)
+          : extensionStorage.getProviderSource();
         const testUrl = `http://localhost:3001/dist/${providerValue}/settings.js?v=${Date.now()}`;
         const path = extensionStorage
           .getInstalledProviders()
@@ -654,6 +672,7 @@ export class ProviderManager {
     }
 
     if (!settingsModule) return [];
+    this.settingsActionModules.set(providerScopeId(sourceAuthor, providerValue), {code: settingsModule, author: providerAuthor(settingsAuthor)});
     try {
       return await this.executeModule<SettingsField[]>(
         { code: settingsModule, author: providerAuthor(settingsAuthor) },
