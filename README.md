@@ -33,11 +33,6 @@ https://web.vega-app.in
 
 <br>
 
-## Add Provider source
-> [!TIP]
-> Follow the guide here https://vega.8man.in/guide/adding-providers/
-
-
 
 ### Sreenshots
 <img width="2047" height="1077" alt="Screenshot 2026-06-26 112125" src="https://github.com/user-attachments/assets/ade6354c-cc1c-448a-a353-dc6912246471" />
