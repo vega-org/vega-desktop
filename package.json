@@ -1,7 +1,7 @@
 {
   "name": "vega-desktop",
   "private": true,
-  "version": "2.3.0",
+  "version": "2.4.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/setup-libmedia.mjs && node scripts/setup-provider-sandbox.mjs && vite",

@@ -52,7 +52,7 @@ playback and DRM need verification on a physical Samsung TV.
 ```sh
 npm install --global @webos-tools/cli@3.2.6
 npm run package:webos
-ares-install --device YOUR_TV dist-tv/webos/in.vegaapp.tv_2.3.0_all.ipk
+ares-install --device YOUR_TV dist-tv/webos/in.vegaapp.tv_2.4.0_all.ipk
 ares-launch --device YOUR_TV in.vegaapp.tv
 ```
 
