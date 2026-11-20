@@ -374,7 +374,7 @@ const PlayerInner: React.FC<PlayerInnerProps> = ({ state }) => {
     isAndroid && settingsStorage.isExternalPlayerEnabled();
   const useVlc = supportsVlcLaunch() && settingsStorage.isVlcEnabled();
 
-  if (useExternalPlayer || useVlc) {
+  if ((useExternalPlayer || useVlc) && !selectedStream?.drm) {
     return (
       <TvPlayer
         state={state}
@@ -1017,7 +1017,7 @@ const DesktopPlayer: React.FC<any> = ({
   }, []);
 
   const openInVlc = useCallback(async () => {
-    if (!supportsVlcLaunch() || !selectedStream?.link) return;
+    if (!supportsVlcLaunch() || !selectedStream?.link || selectedStream.drm) return;
     try {
       let playUrl = selectedStream.link;
       if (isTorrentUrl(playUrl)) {
@@ -1186,7 +1186,8 @@ const DesktopPlayer: React.FC<any> = ({
   // are always called; the unused one stays idle (no <video> to bind, no
   // initPlayer call).
   const [selectedEngine, setSelectedEngine] = useState(() => settingsStorage.getPlayerEngine());
-  const useMpvEngine = selectedEngine === "mpv";
+  const activeEngine = selectedStream?.drm ? "drm" : selectedEngine;
+  const useMpvEngine = activeEngine === "mpv";
   const engineOptions: Parameters<typeof usePlayerEngine>[1] = {
     onError: handlePlaybackError,
     onFileLoaded: () => {
@@ -1217,7 +1218,7 @@ const DesktopPlayer: React.FC<any> = ({
   const builtinPlayer = usePlayerEngine(
     useMpvEngine ? undefined : videoRef,
     engineOptions,
-    selectedEngine === "libmedia" ? "libmedia" : "builtin",
+    useMpvEngine ? "builtin" : activeEngine,
   );
   const mpvPlayer = useMpvPlayer(engineOptions);
   const mpv = useMpvEngine ? mpvPlayer : builtinPlayer;
@@ -1331,11 +1332,12 @@ const DesktopPlayer: React.FC<any> = ({
   }, []);
 
   useEffect(() => {
+    prevStreamLinkRef.current = null;
     mpv.initPlayer();
     return () => {
       mpv.destroyPlayer();
     };
-  }, []);
+  }, [activeEngine]);
 
   useEffect(() => {
     if (mpv.isInitialized) {
@@ -1475,8 +1477,9 @@ const DesktopPlayer: React.FC<any> = ({
 
   useEffect(() => {
     if (!mpv.isInitialized || !selectedStream?.link) return;
-    if (prevStreamLinkRef.current === selectedStream.link) return;
-    prevStreamLinkRef.current = selectedStream.link;
+    const loadKey = JSON.stringify([activeEngine, selectedStream.link, selectedStream.server, Boolean(selectedStream.drm)]);
+    if (prevStreamLinkRef.current === loadKey) return;
+    prevStreamLinkRef.current = loadKey;
 
     (async () => {
       const allSubs = [
@@ -1500,6 +1503,7 @@ const DesktopPlayer: React.FC<any> = ({
           subs,
           selectedStream.type,
           selectedStream.localBaseDir,
+          selectedStream.drm,
         );
       } catch (err: any) {
         console.error("loadFile failed:", err);
@@ -1513,6 +1517,8 @@ const DesktopPlayer: React.FC<any> = ({
     selectedStream?.subtitles,
     selectedStream?.type,
     selectedStream?.localBaseDir,
+    selectedStream?.drm,
+    activeEngine,
     externalSubs,
     mpv.loadFile,
     handlePlaybackError,
@@ -2262,6 +2268,7 @@ const DesktopPlayer: React.FC<any> = ({
       {!useMpvEngine && (
         <div className="player-video-wrapper" style={{transform:zoomLevel!==100?`scale(${zoomLevel/100})`:undefined}}>
           <video
+            key={activeEngine}
             ref={mpv.bindVideo}
             className={`player-video-element ${isCropped ? "cropped" : ""}`}
             playsInline
@@ -2372,7 +2379,7 @@ const DesktopPlayer: React.FC<any> = ({
           <PlayerInitError
             error={mpv.initializationError}
             onBack={() => navigate(-1)}
-            onOpenVlc={supportsVlcLaunch() && selectedStream?.link ? openInVlc : undefined}
+            onOpenVlc={supportsVlcLaunch() && selectedStream?.link && !selectedStream.drm ? openInVlc : undefined}
           />
         </div>
       )}
@@ -2430,7 +2437,7 @@ const DesktopPlayer: React.FC<any> = ({
           videoTracks={mpv.videoTracks}
           audioDelay={mpv.audioDelay}
           onAudioDelayChange={(delayMs) => {
-            if(selectedEngine === "libmedia"){toast("Audio sync adjustment is unavailable with Libmedia.");return;}
+            if(activeEngine === "libmedia"){toast("Audio sync adjustment is unavailable with Libmedia.");return;}
             mpv.setAudioDelay?.(delayMs);
             toast(`Audio Sync: ${delayMs > 0 ? `+${delayMs}` : delayMs}ms`);
           }}
@@ -2486,7 +2493,7 @@ const DesktopPlayer: React.FC<any> = ({
           }}
           showShortcuts={showShortcuts}
           onToggleShortcuts={() => setShowShortcuts((current) => !current)}
-          onOpenVlc={supportsVlcLaunch() ? openInVlc : undefined}
+          onOpenVlc={supportsVlcLaunch() && !selectedStream?.drm ? openInVlc : undefined}
           onCopyLink={selectedStream?.link ? copyStreamLink : undefined}
           skips={combinedSkips}
         />

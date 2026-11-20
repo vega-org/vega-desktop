@@ -1,3 +1,4 @@
+import { createDrmPlayer } from "./drmPlayback";
 import {pumpMseStream} from "./mseBufferPump";
 import {modernMseMime} from "./mseCodec";
 import {hasHlsHint} from "./hlsSource";
@@ -255,6 +256,19 @@ export class HtmlVideoEngine implements PlayerEngine {
   private virtualTimeOffset: number = 0;
   private probedDuration: number = 0;
   private hasProbedAudioTracks = false;
+  private drmPlayer: Awaited<ReturnType<typeof createDrmPlayer>> | null = null;
+  private drmCleanup: Promise<void> | null = null;
+
+  private releaseDrmPlayer(): Promise<void> {
+    const player = this.drmPlayer;
+    this.drmPlayer = null;
+    if (!player) return this.drmCleanup ?? Promise.resolve();
+    this.drmCleanup = player.destroy().catch(() => {}).finally(() => {
+      this.drmCleanup = null;
+    });
+    return this.drmCleanup;
+  }
+
   private isDestroyed: boolean = false;
   private videoEventController = new AbortController();
   private externalSubtitles: { url?: string; uri?: string; language?: string; title?: string }[] = [];
@@ -1189,6 +1203,10 @@ export class HtmlVideoEngine implements PlayerEngine {
 
   public async load(source: string, options?: PlayerEngineOptions): Promise<void> {
     const currentLoadId = ++this.loadRequestId;
+    if (this.drmPlayer || this.drmCleanup) {
+      await this.releaseDrmPlayer();
+      if (this.loadRequestId !== currentLoadId || this.isDestroyed) return;
+    }
     this.pendingAutoplay = options?.autoPlay !== false;
     this.hasTriedCodecFallback = false;
     this.isCodecFallbackInProgress = false;
@@ -1296,6 +1314,51 @@ export class HtmlVideoEngine implements PlayerEngine {
       subtitleDelay: 0,
       speed: this.playbackSpeed,
     });
+
+    if (options?.drm) {
+      this.playbackMode = "direct";
+      this.usesRemuxClock = false;
+      this.probedDuration = 0;
+      this.updateState({
+        tracks: [], audioTracks: [], subtitleTracks: [], videoTracks: [], chapters: [], videoHeight: 0,
+      });
+      this.setExternalSubtitles(this.externalSubtitles);
+      const drm = options.drm;
+      let player: Awaited<ReturnType<typeof createDrmPlayer>> | undefined;
+      const isCurrent = () => this.loadRequestId === currentLoadId && !this.isDestroyed;
+      const reportError = () => {
+        const error = "Protected playback failed. Check WebView support and the stream license.";
+        this.updateState({ error, isBuffering: false, isPaused: true });
+        return error;
+      };
+      try {
+        player = await createDrmPlayer(drm, source, this.currentHeaders);
+        if (!isCurrent()) {
+          await player.destroy();
+          return;
+        }
+        this.drmPlayer = player;
+        player.addEventListener("error", () => {
+          if (isCurrent() && this.drmPlayer === player) reportError();
+        });
+        await player.attach(this.video);
+        if (!isCurrent()) return;
+        const mimeType = /^(dash|mpd|application\/dash\+xml)$/i.test(options.streamType ?? "")
+          ? "application/dash+xml"
+          : hasHlsHint(source, options.streamType, this.currentHeaders)
+            ? "application/x-mpegurl" : undefined;
+        await player.load(source, options.startTime, mimeType);
+        if (!isCurrent()) return;
+        this.applyPlaybackSpeed();
+        this.updateState({ isBuffering: false, error: null });
+        if (this.pendingAutoplay) await this.play();
+      } catch {
+        if (!isCurrent()) return;
+        await this.releaseDrmPlayer();
+        if (isCurrent()) throw new Error(reportError());
+      }
+      return;
+    }
 
     const isHls = hasHlsHint(source, options?.streamType, this.currentHeaders);
 
@@ -2641,6 +2704,7 @@ export class HtmlVideoEngine implements PlayerEngine {
     if (this.playbackCheckTimer) clearTimeout(this.playbackCheckTimer);
     this.playbackCheckTimer = null;
     this.isDestroyed = true;
+    void this.releaseDrmPlayer();
     this.videoEventController.abort();
     this.listeners.clear();
     this.subtitleContentMap.clear();

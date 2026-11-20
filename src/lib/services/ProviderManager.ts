@@ -526,7 +526,10 @@ export class ProviderManager {
         Array.isArray(streams) ? `${streams.length} stream(s)` : streams,
       );
       return Array.isArray(streams)
-        ? this.withJarCookies(getStreamModule.author, streams)
+        ? this.withJarCookies(
+            getStreamModule.author,
+            isDownload ? streams.filter((stream) => !stream?.drm) : streams,
+          )
         : streams;
     } catch (error) {
       console.error("Error in stream function:", error);
@@ -546,7 +549,11 @@ export class ProviderManager {
   private withJarCookies(author: string, streams: Stream[]): Stream[] {
     return streams.map((stream) => {
       if (!stream || typeof stream.link !== 'string') throw new Error('Invalid provider stream');
-      if (!stream.link.startsWith('magnet:')) publicHttpUrl(stream.link);
+      if (stream.drm || !stream.link.startsWith('magnet:')) publicHttpUrl(stream.link);
+      if (stream.drm) {
+        if (stream.drm.licenseServer) publicHttpUrl(stream.drm.licenseServer);
+        if (stream.drm.certificateUrl) publicHttpUrl(stream.drm.certificateUrl);
+      }
       if (stream.localBaseDir) throw new Error('Providers cannot supply local file directories');
       for (const subtitle of stream.subtitles || []) publicHttpUrl(subtitle.uri);
       const headers =

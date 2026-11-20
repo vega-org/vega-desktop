@@ -163,8 +163,16 @@ are embedded in the app projects.
   protected HLS rewriting/ranges and revocation against a local fixture.
 
 Interactive WAF verification is **not implemented on these TV wrappers**; the
-shared consent settings remain, and verification fails explicitly. DRM/DASH,
-variable/low-latency HLS, provider-specific anti-bot behavior, remote media keys,
+shared consent settings remain, and verification fails explicitly.
+
+Provider streams with DRM use Shaka and the TV WebView's Encrypted Media
+Extensions. On compatible LG webOS and Amazon Vega OS devices this path targets
+Widevine and PlayReady. The Amazon package declares the WebView's DRM services.
+DRM uses browser media and license requests, so the endpoints must accept the
+app's origin and any required headers must be browser-settable. Verify encrypted
+playback on a physical TV before declaring a device or stream supported.
+
+Variable/low-latency HLS, provider-specific anti-bot behavior, remote media keys,
 long playback, focus/back/exit behavior and real hardware codecs need device QA.
 The common player's runtime WASM currently retains its existing CDN dependency.
 

@@ -1,3 +1,5 @@
+import type { StreamDrm } from "../providers/types";
+
 export interface TrackInfo {
   id: number;
   type: "video" | "audio" | "sub";
@@ -43,6 +45,7 @@ export interface PlayerEngineState {
 }
 
 export interface PlayerEngineOptions {
+  drm?: StreamDrm;
   headers?: Record<string, string>;
   streamType?: string;
   startTime?: number;

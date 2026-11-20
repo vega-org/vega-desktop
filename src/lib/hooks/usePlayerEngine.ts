@@ -5,7 +5,7 @@ import type {LibmediaPlayerAdapter} from "../player/LibmediaPlayerAdapter";
 import type {PlayerEngine} from "../player/PlayerEngine";
 import { HtmlVideoEngine } from "../player/HtmlVideoEngine";
 import {getLibmediaRuntimeError} from '../player/libmediaRuntime';
-import type { PlayerEngineState } from "../player/PlayerEngine";
+import type { PlayerEngineOptions, PlayerEngineState } from "../player/PlayerEngine";
 
 export interface UsePlayerEngineOptions {
   onEof?: () => void;
@@ -23,9 +23,11 @@ type VideoRefType =
 export function usePlayerEngine(
   videoRef?: VideoRefType,
   opts?: UsePlayerEngineOptions,
-  requestedEngineKind: "builtin" | "libmedia" = "builtin",
+  requestedEngineKind: "builtin" | "libmedia" | "drm" = "builtin",
 ) {
-  const engineKind = import.meta.env.VITE_TV_HOST ? 'libmedia' : requestedEngineKind;
+  const engineKind = requestedEngineKind === "drm"
+    ? "builtin"
+    : import.meta.env.VITE_TV_HOST ? "libmedia" : requestedEngineKind;
   const runtimeError = engineKind === 'libmedia' ? getLibmediaRuntimeError() : null;
   const libmediaAdapterRef=useRef<typeof LibmediaPlayerAdapter|null>(null);
   const [libmediaReady,setLibmediaReady]=useState(false);
@@ -78,10 +80,12 @@ export function usePlayerEngine(
     headers?: Record<string, string>;
     subtitles?: { url?: string; uri?: string; language?: string; title?: string }[];
     streamType?: string;
+    drm?: PlayerEngineOptions["drm"];
     localBaseDir?: string;
     speed?: number;
   } | null>(null);
 
+  const protectedStreamRef = useRef(false);
   const thumbnailSourceRef = useRef<{
     source: string;
     headers?: Record<string, string>;
@@ -91,14 +95,13 @@ export function usePlayerEngine(
   const seekDebounceTimerRef = useRef<any>(null);
 
   const resolveVideoElement = useCallback((): HTMLVideoElement | null => {
-    if (videoNode) return videoNode;
     if (videoRef && typeof videoRef === "object" && "current" in videoRef) {
       return videoRef.current;
     }
     if (videoRef instanceof HTMLVideoElement) {
       return videoRef;
     }
-    return null;
+    return videoNode;
   }, [videoNode, videoRef]);
 
   const bindVideo = useCallback(
@@ -161,6 +164,7 @@ export function usePlayerEngine(
           .load(pending.source, {
             headers: pending.headers,
             streamType: pending.streamType,
+            drm: pending.drm,
             subtitles: pending.subtitles,
             autoPlay: true,
             speed: pending.speed || currentSpeedRef.current,
@@ -263,8 +267,10 @@ export function usePlayerEngine(
       subtitles?: { url?: string; uri?: string; language?: string; title?: string }[],
       streamType?: string,
       localBaseDir?: string,
+      drm?: PlayerEngineOptions["drm"],
     ) => {
       if (runtimeError) return;
+      protectedStreamRef.current = Boolean(drm);
       thumbnailSourceRef.current = { source, headers };
       let engine = engineRef.current;
       if (!engine) {
@@ -281,6 +287,7 @@ export function usePlayerEngine(
           headers,
           subtitles,
           streamType,
+          drm,
           localBaseDir,
           speed: currentSpeedRef.current,
         };
@@ -292,6 +299,7 @@ export function usePlayerEngine(
         await engine.load(source, {
           headers,
           streamType,
+          drm,
           subtitles,
           autoPlay: true,
           speed: currentSpeedRef.current,
@@ -403,7 +411,7 @@ export function usePlayerEngine(
 
   const requestThumbnail = useCallback(
     async (time: number, sourceUrl?: string, headers?: Record<string, string>) => {
-      if (!isTauriRuntime()) return null;
+      if (!isTauriRuntime() || protectedStreamRef.current) return null;
       const activeSource =
         sourceUrl ||
         thumbnailSourceRef.current?.source ||

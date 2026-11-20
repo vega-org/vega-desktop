@@ -69,6 +69,7 @@
     "react-dom": "^19.1.0",
     "react-icons": "^5.6.0",
     "react-router-dom": "^7.18.0",
+    "shaka-player": "^5.3.5",
     "swiper": "^14.1.0",
     "tailwind-merge": "^3.6.0",
     "tauri-plugin-libmpv-api": "~0.3.2",
