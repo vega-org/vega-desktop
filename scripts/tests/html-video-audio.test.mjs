@@ -14,7 +14,7 @@ const hlsSourceCode = ts.transpileModule(readFileSync(new URL("../../src/lib/pla
 }).outputText;
 runInNewContext(hlsSourceCode, {module: hlsModule, exports: hlsModule.exports});
 
-function fixture(userAgent = "", supportsHls = false) {
+function fixture(userAgent = "", supportsHls = false, createDrmPlayer) {
   let probe = {
     duration: 120, format_name: "mov,mp4",
     video_tracks: [{ index: 0, codec_name: "h264", width: 1920, height: 1080 }],
@@ -29,6 +29,7 @@ function fixture(userAgent = "", supportsHls = false) {
     "@tauri-apps/api/core": { invoke: async (name) => name === "probe_media_info" ? probe : undefined },
     "hls.js": { __esModule: true, default: { isSupported: () => supportsHls } },
     "./hlsSource": hlsModule.exports,
+    "./drmPlayback": { createDrmPlayer },
     "./jassubManager": { JassubManager: class {} },
     "./deviceProfile": { isLowEndDevice: () => false },
     "./mseCodec": { modernMseMime: () => null },
@@ -72,6 +73,35 @@ function fixture(userAgent = "", supportsHls = false) {
   engine.startHlsStream = async (source, options) => hlsStarts.push({source, options});
   return { engine, video, starts, hlsStarts, metadata: () => events.get("loadedmetadata")(), setProbe: (value) => { probe = value; } };
 }
+
+test("protected streams use the DRM player and release it when switching to clear video", async () => {
+  const source = "https://media.example.com/signed";
+  const drm = { type: "clearkey", clearKeys: {} };
+  const headers = { Authorization: "Bearer media" };
+  const calls = [];
+  const player = {
+    addEventListener() {},
+    attach: async (video) => calls.push(["attach", video]),
+    load: async (...args) => calls.push(["load", ...args]),
+    destroy: async () => calls.push(["destroy"]),
+  };
+  const { engine, video, starts, hlsStarts } = fixture("", true, async (...args) => {
+    calls.push(["create", ...args]);
+    return player;
+  });
+
+  await engine.load(source, { drm, headers, streamType: "dash", startTime: 12, autoPlay: false });
+  assert.deepEqual(calls, [
+    ["create", drm, source, headers],
+    ["attach", video],
+    ["load", source, 12, "application/dash+xml"],
+  ]);
+  assert.equal(starts.length, 0);
+  assert.equal(hlsStarts.length, 0);
+  await engine.load("https://media.example.com/clear.m3u8", { autoPlay: false });
+  assert.deepEqual(calls.at(-1), ["destroy"]);
+  assert.equal(hlsStarts.length, 1);
+});
 
 test("provider-declared HLS with an opaque URL goes straight to HLS even when probing would fail", async () => {
   for (const streamType of ["m3u8", "hls", "HLS", "application/vnd.apple.mpegurl"]) {

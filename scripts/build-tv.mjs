@@ -91,6 +91,25 @@ if (target === 'webos' || legacy) {
       .replace(/^title\s*=.*$/m,'title = "Vega"')
       .replace(/^version\s*=.*$/m,`version = "${version}"`));
     if (!toml.includes('[network-traffic-policy.cleartext]')) toml+='\n[network-traffic-policy.cleartext]\nallowed-domains = ["127.0.0.1"]\n';
+    for (const [section, id] of [
+      ['wants.service', 'com.amazon.media.server'],
+      ['wants.service', 'com.amazon.mediametrics.service'],
+      ['wants.service', 'com.amazon.mediabuffer.service'],
+      ['wants.service', 'com.amazon.mediatransform.service'],
+      ['wants.service', 'com.amazon.audio.stream'],
+      ['wants.service', 'com.amazon.audio.control'],
+      ['wants.service', 'com.amazon.drm.key'],
+      ['wants.service', 'com.amazon.drm.crypto'],
+      ['wants.service', 'com.amazon.gipc.uuid.*'],
+      ['offers.service', 'com.amazon.gipc.uuid.*'],
+      ['needs.privilege', 'com.amazon.privilege.security.file-sharing'],
+    ]) {
+      // SDK templates can already declare these entries. Keep re-packaging idempotent.
+      const declared = toml.split(/^\[\[/m).some(block =>
+        block.startsWith(section + ']]') && block.split(/^\[/m, 1)[0].split(/\r?\n/).some(line =>
+          line.replace(/\s*#.*$/, '').trim().replace(/\s*=\s*/, '=').replace(/'/g, '"') === 'id="' + id + '"'));
+      if (!declared) toml += '\n[[' + section + ']]\nid = "' + id + '"\n';
+    }
     await writeFile(manifest,toml);
     run('vega',['project','update-manifest','--os-min','1.2','--os-version','1.2'],app);
     run('npm',['install','--include=dev','--save',moduleArchive],app);
