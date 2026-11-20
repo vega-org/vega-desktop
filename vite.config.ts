@@ -23,7 +23,8 @@ const getSharedMobileTmdbKey = () => {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const legacyWebos = mode === 'webos-legacy';
-  const tvHost = mode === 'webos' || legacyWebos ? 'webos' : mode === 'amazon-vega' ? 'amazon-vega' : '';
+  const tizen = mode === 'tizen';
+  const tvHost = mode === 'webos' || legacyWebos ? 'webos' : mode === 'amazon-vega' || tizen ? mode : '';
   const webBuild = mode === "web" || !!tvHost;
   const desktopEnv = loadEnv(mode, process.cwd(), "");
   const tmdbApiKey =
@@ -41,7 +42,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: tvHost ? './' : '/',
-    plugins: [react(), tailwindcss(), libmediaChunkPlugin(), ...(legacyWebos ? [legacyWebosPlugin()] : tvHost==='webos' ? [legacyWebosPlugin({chrome:94,lowerSandbox:false})] : []), {
+    plugins: [react(), tailwindcss(), libmediaChunkPlugin(), ...(legacyWebos ? [legacyWebosPlugin()] : (tvHost==='webos' || tizen) ? [legacyWebosPlugin({chrome:tizen ? 108 : 94,lowerSandbox:false})] : []), {
       name:'production-script-policy', apply:'build',
       transformIndexHtml: {order:'post', handler(html) {
         const hashes = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
@@ -93,7 +94,7 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: legacyWebos ? 'dist-tv/webos-legacy/ui' : tvHost ? `dist-tv/${tvHost}/ui` : webBuild ? "dist-web" : "dist",
       target:
-        legacyWebos ? 'chrome68' : tvHost==='webos' ? 'chrome94' : webBuild ? "es2022" : process.env.TAURI_ENV_PLATFORM === "windows"
+        legacyWebos ? 'chrome68' : tvHost==='webos' ? 'chrome94' : tizen ? 'chrome108' : webBuild ? "es2022" : process.env.TAURI_ENV_PLATFORM === "windows"
           ? "chrome105"
           : "safari13",
       sourcemap: !!process.env.TAURI_ENV_DEBUG,

@@ -22,6 +22,8 @@
     "build:msix": "npx -y cross-env VITE_IS_MS_STORE=true tauri-windows-bundle build --arch x64 --runner npm",
     "build:msix:arm64": "npx -y cross-env VITE_IS_MS_STORE=true tauri-windows-bundle build --arch arm64 --runner npm",
     "test:security": "node scripts/setup-browser-host.mjs && node scripts/setup-provider-sandbox.mjs && node --test tests/provider-url-policy.test.mjs tests/provider-security.test.mjs tests/native-provider-security.test.mjs scripts/tests/provider-axios-redirects.test.mjs && playwright test tests/browser/provider-security.spec.mjs",
+    "build:tizen": "node scripts/build-tv.mjs tizen",
+    "package:tizen": "node scripts/build-tv.mjs tizen --package",
     "build:webos": "node scripts/build-tv.mjs webos",
     "package:webos": "node scripts/build-tv.mjs webos --package",
     "build:amazon-vega": "node scripts/build-tv.mjs amazon-vega",

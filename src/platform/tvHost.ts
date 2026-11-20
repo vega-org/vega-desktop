@@ -1,9 +1,37 @@
 import type {HostRequest, HostResponse, PlatformHost} from './host';
 import {cookieHeader, decodeCookieJar, responseCookies, suppliedCookies} from '../lib/providers/cookieRules';
 
-/** Both installed TV apps serve their packaged UI from an authenticated loopback host. */
+function installBackNavigation(backKeyCode: number): void {
+  document.addEventListener('keydown', event => {
+    if (event.keyCode !== backKeyCode && event.keyCode !== 27 && event.key !== 'Escape') return;
+    // Player controls and dialogs get the first chance to consume Back.
+    const dialogOpen = !!document.querySelector('[role="dialog"]');
+    queueMicrotask(() => {
+      if (!event.defaultPrevented && !dialogOpen && location.hash && location.hash !== '#/') {
+        event.preventDefault();
+        history.back();
+      }
+    });
+  });
+}
+
+/** The webOS and Amazon wrappers serve packaged UI from an authenticated loopback host. */
 export function installTvHost(): void {
   const kind = import.meta.env.VITE_TV_HOST;
+  if (kind === 'tizen') {
+    installBackNavigation(10009);
+    // Normalize Samsung Back for components that already handle Escape.
+    document.addEventListener('keydown', event => {
+      if (event.keyCode !== 10009 || event.key === 'Escape') return;
+      event.stopImmediatePropagation();
+      const escape = new KeyboardEvent('keydown', {
+        key:'Escape', code:'Escape', bubbles:true, cancelable:true, repeat:event.repeat,
+      });
+      const handled = !(event.target ?? document).dispatchEvent(escape);
+      if (handled || (location.hash && location.hash !== '#/')) event.preventDefault();
+    }, true);
+    return;
+  }
   if (kind !== 'webos' && kind !== 'amazon-vega') return;
   const match = location.pathname.match(/^\/app\/([a-f0-9]{64})\/index\.html$/);
   if (location.hostname !== '127.0.0.1' || location.protocol !== 'http:' || !match) {
@@ -49,13 +77,5 @@ export function installTvHost(): void {
   // Keeps the webOS service alive while the app is open, also expires abandoned playback leases.
   const heartbeat = setInterval(() => {void rpc('heartbeat', {}).catch(() => {});}, 20_000);
   window.addEventListener('pagehide', () => clearInterval(heartbeat), {once:true});
-  document.addEventListener('keydown', event => {
-    if (event.keyCode === 461 || event.keyCode === 27) {
-      // Player controls and dialogs get the first chance to consume Back.
-      const dialogOpen = !!document.querySelector('[role="dialog"]');
-      queueMicrotask(() => {
-        if (!event.defaultPrevented && !dialogOpen && location.hash && location.hash !== '#/') {event.preventDefault(); history.back();}
-      });
-    }
-  });
+  installBackNavigation(461);
 }

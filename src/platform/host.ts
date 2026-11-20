@@ -65,7 +65,7 @@ export async function waitForPlatformHost(): Promise<void> {
 /** TV wrappers currently provide playback networking, not file downloads. */
 export function supportsMediaDownloads(): boolean {
   const kind = import.meta.env.VITE_TV_HOST || window.vegaPlatformHost?.kind;
-  return kind !== 'webos' && kind !== 'amazon-vega';
+  return kind !== 'webos' && kind !== 'amazon-vega' && kind !== 'tizen';
 }
 
 export function isTauriRuntime(): boolean {

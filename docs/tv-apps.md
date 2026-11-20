@@ -1,11 +1,11 @@
-# Installed LG webOS and Amazon Vega apps
+# Installed TV apps
 
 The TV builds reuse the shared React UI, QuickJS provider sandbox, source-scoped
 cookie jar, auto-update preference and common Libmedia player. They do not use a
 Chrome extension, MPV or an FFmpeg player. Installations start with no provider
 sources and no providers; users add and install their own explicitly.
 
-Both wrappers serve the packaged UI from a loopback host. HTTP is performed by
+The LG webOS and Amazon Vega OS wrappers serve the packaged UI from a loopback host. HTTP is performed by
 the app's service/native module, outside the WebView's CORS/header restrictions.
 The WebView's security remains enabled. A packaged app alone does not bypass CORS.
 
@@ -17,6 +17,7 @@ sufficient for TV-only builds; it skips Desktop binary downloads).
 ```sh
 npm run build:webos
 npm run build:amazon-vega
+npm run build:tizen
 npm run test:tv
 cargo test --locked --manifest-path tv/native-host/Cargo.toml
 npm run test:tv:browser
@@ -25,6 +26,26 @@ npm run test:tv:browser
 `build:*` builds the actual production UI and stages the corresponding native
 project in `dist-tv/<platform>`. It does not claim an installable Amazon package.
 The browser check also needs Rust and Playwright Chromium (`npx playwright install chromium`).
+
+### Samsung Tizen
+
+`npm run build:tizen` stages a TV web project in `dist-tv/tizen/app`. The initial
+target is Tizen 8.0 (2024 models) and later. It reuses Vegaâ€™s TV focus controls;
+Samsung Back is handled as Escape so it can close an open dialog or go back.
+
+The TV GitHub Actions workflow uploads this project as
+`vega-samsung-tizen-unsigned` for local signing.
+
+Install the Tizen Studio Web CLI, Samsung TV Extension, and Samsung Certificate
+Extension. Activate a Samsung certificate profile for the test TV and put the
+`tizen` CLI on PATH. Run `npm run package:tizen` to sign a `.wgt` in
+`dist-tv/tizen/app/.buildResult`. Use Tizen Studio Device Manager to connect to
+the TV in Developer Mode, permit app installation, and install the widget.
+
+The widget uses browser networking. Provider and playback endpoints must allow
+the appâ€™s origin and browser-settable headers. DRM uses the shared Shaka path
+when the TV WebView exposes the requested key system. Signed installation,
+playback and DRM need verification on a physical Samsung TV.
 
 ### LG webOS
 

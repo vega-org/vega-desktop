@@ -54,6 +54,24 @@ jobs:
           name: vega-lg-webos
           path: dist-tv/webos/*.ipk
           if-no-files-found: error
+  samsung-tizen:
+    needs: transport-checks
+    runs-on: ubuntu-22.04
+    env:
+      VITE_TMDB_API_KEY: ${{ secrets.VITE_TMDB_API_KEY || secrets.TMDB_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build:tizen
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vega-samsung-tizen-unsigned
+          path: dist-tv/tizen/app/
+          if-no-files-found: error
   amazon-vega:
     if: inputs.amazon_vega == true || startsWith(github.ref, 'refs/tags/tv-v')
     needs: transport-checks
