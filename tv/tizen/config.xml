@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
+  id="https://vega-app.in/tizen" version="__VEGA_VERSION__" viewmodes="maximized">
+  <tizen:application id="VegaPlayer.Vega" package="VegaPlayer" required_version="8.0"/>
+  <tizen:profile name="tv-samsung"/>
+  <tizen:metadata key="http://samsung.com/tv/metadata/devel.api.version" value="8.0"/>
+  <tizen:setting screen-orientation="landscape"/>
+  <tizen:privilege name="http://tizen.org/privilege/internet"/>
+  <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
+  <access origin="*" subdomains="true"/>
+  <content src="index.html"/>
+  <icon src="icon.png"/>
+  <name>Vega</name>
+</widget>

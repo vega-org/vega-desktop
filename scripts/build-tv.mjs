@@ -7,7 +7,7 @@ import {builtinModules} from 'node:module';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const target = process.argv[2], packaging = process.argv.includes('--package');
-if (!['webos','webos-legacy','amazon-vega'].includes(target)) throw new Error('Choose webos, webos-legacy or amazon-vega');
+if (!['webos','webos-legacy','amazon-vega','tizen'].includes(target)) throw new Error('Choose webos, webos-legacy, amazon-vega, or tizen');
 const legacy=target==='webos-legacy';
 const out = path.join(root,'dist-tv',target);
 async function resetGenerated(directory) {
@@ -24,7 +24,26 @@ run(process.execPath,['scripts/setup-libmedia.mjs']);
 run(process.execPath,['scripts/setup-provider-sandbox.mjs']);
 run(process.platform==='win32'?'npx.cmd':'npx',['tsc','--noEmit']);
 await build({root,mode:target});
-if (target === 'webos' || legacy) {
+if (target === 'tizen') {
+  const app = path.join(out, 'app');
+  await resetGenerated(app);
+  await cp(path.join(out, 'ui'), app, {recursive:true});
+  await cp(path.join(root, 'tv/tizen/config.xml'), path.join(app, 'config.xml'));
+  await cp(path.join(root, 'tv/webos/app/icon.png'), path.join(app, 'icon.png'));
+  const configPath = path.join(app, 'config.xml');
+  const config = await readFile(configPath, 'utf8');
+  const {version} = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+  if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version)) throw new Error('Tizen requires a numeric major.minor.patch version.');
+  await writeFile(configPath, config.replace('__VEGA_VERSION__', version));
+  if (packaging) {
+    try {
+      run('tizen', ['build-web', '--', '.'], app);
+      run('tizen', ['package', '-t', 'wgt', '--', '.buildResult'], app);
+    } catch (error) {
+      throw new Error('Tizen packaging requires the Tizen Studio Web CLI on PATH and a Samsung certificate profile.', {cause:error});
+    }
+  }
+} else if (target === 'webos' || legacy) {
   await resetGenerated(path.join(out,'app'));
   await resetGenerated(path.join(out,'service'));
   await cp(path.join(root,'tv/webos/app'),path.join(out,'app'),{recursive:true});
