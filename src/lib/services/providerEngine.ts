@@ -1,4 +1,4 @@
-import wasmUrl from '@jitl/quickjs-wasmfile-release-sync/wasm?url';
+import wasmUrl from '@jitl/quickjs-ng-wasmfile-release-sync/wasm?url';
 
 // Share compiled, immutable engine code. Each invocation still instantiates
 // its own WASM memory and QuickJS runtime inside a fresh worker.

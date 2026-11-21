@@ -157,7 +157,18 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: var(--spacing-lg);
-  align-items: end;
+  align-items: start;
+}
+
+.search-grid.search-grid-landscape {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.search-grid .post-card,
+.search-grid .post-card.post-card-landscape,
+.search-grid .post-card.post-card-square {
+  width: 100%;
+  min-width: 0;
 }
 
 /* Rows inset their first card by 44px (16px when narrow); pull them back so

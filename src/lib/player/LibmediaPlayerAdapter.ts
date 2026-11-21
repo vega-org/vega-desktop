@@ -22,6 +22,9 @@ export class LibmediaPlayerAdapter implements PlayerEngine {
  private subtitleQueue:Promise<void>=Promise.resolve();
  private qualities:VideoQuality[]=[];
  private qualityId:number|null=null;
+ private pendingQualityId:number|null=null;
+ private qualityChanging=false;
+ private statusBuffering=false;
  private audioNeedsGesture=false;
  private paused=true;
  private styleObserver:ResizeObserver|null=null;
@@ -55,7 +58,9 @@ export class LibmediaPlayerAdapter implements PlayerEngine {
  private track(track:MediaTrack):TrackInfo{return {id:track.id,type:track.type==='subtitle'?'sub':track.type,title:track.title||track.label,lang:track.language||'',codec:track.codec||'',selected:track.selected,external:[...this.subtitleIds.values()].includes(track.id),demuxW:track.width,demuxH:track.height};}
  private receive(state:Partial<PlaybackState>){
   const next:Partial<PlayerEngineState>={};
-  if(state.status){next.isBuffering=['loading','seeking','buffering'].includes(state.status);if(['playing','paused','ended','idle'].includes(state.status))this.paused=state.status!=='playing';}
+  if(state.status){this.statusBuffering=['loading','seeking','buffering'].includes(state.status);if(['playing','paused','ended','idle'].includes(state.status))this.paused=state.status!=='playing';}
+  if(state.qualityChanging!==undefined)this.qualityChanging=state.qualityChanging;
+  if(state.status||state.qualityChanging!==undefined)next.isBuffering=this.statusBuffering||this.qualityChanging||this.pendingQualityId!==null;
   if(state.audioNeedsUserGesture!==undefined)this.audioNeedsGesture=state.audioNeedsUserGesture;
   // Reuse desktop's Play action to unlock audio; no receiver dialog/UI.
   if(state.status||state.audioNeedsUserGesture!==undefined)next.isPaused=this.paused||this.audioNeedsGesture;
@@ -71,7 +76,8 @@ export class LibmediaPlayerAdapter implements PlayerEngine {
   if(state.qualities)this.qualities=state.qualities;
   if(state.selectedQualityId!==undefined)this.qualityId=state.selectedQualityId;
   if(this.qualities.length>1){
-   next.videoTracks=this.qualities.map(quality=>({id:quality.id,type:'video',title:quality.label,lang:'',codec:quality.codec||'',selected:quality.id===this.qualityId,external:false,demuxW:quality.width,demuxH:quality.height}));
+   const activeQualityId=this.pendingQualityId??this.qualityId;
+   next.videoTracks=this.qualities.map(quality=>({id:quality.id,type:'video',title:quality.label,lang:'',codec:quality.codec||'',selected:quality.id===activeQualityId,external:false,demuxW:quality.width,demuxH:quality.height}));
    next.videoHeight=next.videoTracks.find(track=>track.selected)?.demuxH||next.videoHeight;
   }
   if(next.audioTracks||next.subtitleTracks||next.videoTracks)next.tracks=[...(next.videoTracks||this.state.videoTracks),...(next.audioTracks||this.state.audioTracks),...(next.subtitleTracks||this.state.subtitleTracks)];
@@ -82,7 +88,7 @@ export class LibmediaPlayerAdapter implements PlayerEngine {
   const previous=this.delivered;this.delivered=undefined;
   await releaseMediaSource(previous);
   if(generation!==this.generation||this.disposed)return;
-  this.qualities=[];this.qualityId=null;
+  this.qualities=[];this.qualityId=null;this.pendingQualityId=null;this.qualityChanging=false;this.statusBuffering=false;
   this.audioNeedsGesture=false;this.paused=true;
   this.subtitleIds.clear();this.subtitles=options.subtitles||[];this.externalTracks=[];
   this.update({error:null,isBuffering:true,currentTime:0,duration:0,tracks:[],audioTracks:[],subtitleTracks:[],videoTracks:[]});
@@ -117,7 +123,16 @@ export class LibmediaPlayerAdapter implements PlayerEngine {
   }
   if(type==='sid'){if(id==='no')await this.engine.setSubtitleEnabled(false);else{const track=id==='auto'?this.state.subtitleTracks[0]?.id:id;if(track!==undefined){await this.engine.selectSubtitleTrack(track);await this.engine.setSubtitleEnabled(true);}}}
   else if(type==='aid'){const track=typeof id==='number'?id:this.state.audioTracks[0]?.id;if(track!==undefined)await this.engine.selectAudioTrack(track);}
-  else if(this.qualities.length>1&&typeof id==='number')await this.engine.selectQuality(id);
+  else if(this.qualities.length>1&&typeof id==='number'){
+   const target=this.qualities.find(q=>q.id===id);
+   if(target){
+    this.pendingQualityId=id;
+    const videoTracks=this.qualities.map(quality=>({id:quality.id,type:'video' as const,title:quality.label,lang:'',codec:quality.codec||'',selected:quality.id===id,external:false,demuxW:quality.width,demuxH:quality.height}));
+    this.update({isBuffering:true,videoTracks,videoHeight:target.height||this.state.videoHeight,tracks:[...videoTracks,...this.state.audioTracks,...this.state.subtitleTracks]});
+   }
+   try{await this.engine.selectQuality(id);}
+   finally{this.pendingQualityId=null;this.receive({qualityChanging:this.qualityChanging});}
+  }
   else if(!this.state.videoTracks.some(track=>track.selected&&track.id===id))throw new Error('Video track switching is unavailable for this source');
  }
  setProperty(property:string,value:unknown){if(property==='panscan')this.engine.setAspectFit(Boolean(value));}

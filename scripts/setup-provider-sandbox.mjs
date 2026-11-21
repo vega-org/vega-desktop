@@ -7,5 +7,5 @@ await build({root, configFile:false, publicDir:false, logLevel:'warn', build:{
   target:'es2022', outDir:'src/lib/services/generated', emptyOutDir:false, minify:true,
   lib:{entry:fileURLToPath(new URL('../src/lib/services/providerSdk.ts', import.meta.url)), name:'VegaProviderSdk', formats:['iife'], fileName:() => 'providerSdk.js'},
 }});
-const licenses = await Promise.all(['quickjs-emscripten','quickjs-emscripten-core','@jitl/quickjs-singlefile-browser-release-sync','core-js-pure','ipaddr.js'].map(async name => `${name}\n${await readFile(new URL(`../node_modules/${name}/LICENSE`,import.meta.url),'utf8')}`));
+const licenses = await Promise.all(['quickjs-emscripten','quickjs-emscripten-core','@jitl/quickjs-ng-wasmfile-release-sync','core-js-pure','ipaddr.js'].map(async name => `${name}\n${await readFile(new URL(`../node_modules/${name}/LICENSE`,import.meta.url),'utf8')}`));
 await writeFile(new URL('../public/vega-provider-runtime-notices.txt',import.meta.url),licenses.join('\n\n'));

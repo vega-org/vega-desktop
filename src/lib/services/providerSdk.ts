@@ -3,6 +3,7 @@ import axios, { AxiosHeaders, type AxiosAdapter } from "axios";
 import * as cheerio from "cheerio";
 import { headers as commonHeaders } from "../providers/headers";
 import { getErrorMessage } from "./providerErrors";
+import { hoistYieldInForOf } from "./quickjsCompat";
 
 type SerializedResponse = {
   status: number;
@@ -291,32 +292,47 @@ const executeProvider = async (
 ) => {
   const exports: Record<string, unknown> = {};
   const module = { exports };
-  const executeModule = new Function(
-    "exports",
-    "module",
-    "require",
-    "console",
-    "Promise",
-    "setTimeout",
-    "clearTimeout",
-    "setInterval",
-    "clearInterval",
-    "fetch",
-    "__awaiter",
-    "providerGlobal",
-    "globalThis",
-    "self",
-    "postMessage",
-    "XMLHttpRequest",
-    "WebSocket",
-    "EventSource",
-    "Worker",
-    "SharedWorker",
-    "BroadcastChannel",
-    "indexedDB",
-    "caches",
-    `"use strict";\n${moduleCode}`,
-  );
+  const compileModule = (source: string) =>
+    new Function(
+      "exports",
+      "module",
+      "require",
+      "console",
+      "Promise",
+      "setTimeout",
+      "clearTimeout",
+      "setInterval",
+      "clearInterval",
+      "fetch",
+      "__awaiter",
+      "providerGlobal",
+      "globalThis",
+      "self",
+      "postMessage",
+      "XMLHttpRequest",
+      "WebSocket",
+      "EventSource",
+      "Worker",
+      "SharedWorker",
+      "BroadcastChannel",
+      "indexedDB",
+      "caches",
+      `"use strict";\n${source}`,
+    );
+
+  let executeModule: Function;
+  try {
+    executeModule = compileModule(moduleCode);
+  } catch (error) {
+    if (!/stack underflow/i.test(getErrorMessage(error))) {
+      throw error;
+    }
+    const patchedCode = hoistYieldInForOf(moduleCode);
+    if (patchedCode === moduleCode) {
+      throw error;
+    }
+    executeModule = compileModule(patchedCode);
+  }
 
   executeModule(
     exports,

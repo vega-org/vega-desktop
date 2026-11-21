@@ -18,6 +18,8 @@ npm run build:web
 npm run preview:web
 ```
 
+For the hosted proxy, deploy the Worker and assets together with `npm run deploy:web`; see [hosted proxy setup](hosted-proxy.md). Static-only hosting supports extension networking but does not supply the proxy.
+
 Deploy the contents of `dist-web` at the origin root. Configure your static server
 to serve `index.html` for application routes such as `/settings` and `/extensions`,
 while serving real asset files normally. Subdirectory hosting has not been tested.
@@ -54,12 +56,14 @@ output. The browser build targets ES2022; older TV browsers need device validati
 
 ## Networking limits
 
+The provider setup dialog recommends the extension for better playback and offers **Skip and use proxy**. Skipping persists the proxy preference and resumes setup. The proxy requires its Worker secret and Cloudflare WAF configuration; all public HTTPS domains are supported; see [hosted proxy setup](hosted-proxy.md).
+
 Public servers permitting browser CORS can be used directly without an extension.
 Provider requests requiring restricted headers, isolated cookies or protected
 media delivery need a platform host. Missing capabilities produce explicit errors.
 An initial optional [Chrome extension adapter](../browser-extension/README.md)
 now implements the host contract for metadata, protected files and finite HLS
-VOD. With extension 0.5.0, open its popup and choose **Allow all websites**, then approve Chrome’s permission request before using provider networking. Access can be revoked from the same popup. Once approved, it activates automatically on `vega-app.in` and localhost
+VOD. With extension 0.5.0, open its popup and choose **Allow all websites**, then approve ChromeÃ¢â‚¬â„¢s permission request before using provider networking. Access can be revoked from the same popup. Once approved, it activates automatically on `vega-app.in` and localhost
 (including the `127.0.0.1` development alias); see its
 installation instructions and current limits. Installed LG/Amazon TV builds use
 their own [native host projects](tv-apps.md) and do not need this extension.

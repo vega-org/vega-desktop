@@ -25,7 +25,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { useArtworkPalette, useArtworkPaletteReady } from "../lib/hooks/useArtworkPalette";
 import { useContentDetails } from "../lib/hooks/useContentInfo";
 import { useEpisodes } from "../lib/hooks/useEpisodes";
-import { useImageIsPortrait } from "../lib/hooks/useImageIsPortrait";
+import { useHeroImageLayout } from "../lib/hooks/useImageIsPortrait";
 import type { EpisodeLink, Link, Stream, SkipInterval } from "../lib/providers/types";
 import { providerManager } from "../lib/services/ProviderManager";
 import { cacheStorage, type WatchHistoryItem } from "../lib/storage";
@@ -286,7 +286,8 @@ export const MetaPage: React.FC = () => {
   const cachedPosterImage = searchParams.get("poster") || "";
   const cachedBgImage = searchParams.get("background") || searchParams.get("bg") || "";
   const bgImage = meta?.background || info?.image || cachedBgImage;
-  const isPortrait = useImageIsPortrait(bgImage);
+  const heroLayout = useHeroImageLayout(bgImage);
+  const isPortrait = heroLayout.useCardHero;
   const posterImage = info?.poster || meta?.poster || cachedPosterImage || info?.image;
   const title = meta?.name || info?.title || "Untitled";
   const description = meta?.description || info?.synopsis || info?.description;
@@ -803,6 +804,8 @@ export const MetaPage: React.FC = () => {
           onBack={() => navigate(-1)}
           onMore={localTitle ? undefined : () => setMetadataOpen(true)}
           isPortrait={isPortrait}
+          posterContain={heroLayout.containPoster}
+          posterAspectRatio={heroLayout.posterAspectRatio}
           overview={
             isPortrait ? (
               <ContentOverview

@@ -15,6 +15,7 @@
     "test:extension": "node scripts/setup-browser-host.mjs && node --test tests/extension-policy.test.mjs tests/extension-access.test.mjs tests/verification-host.test.mjs && playwright test --config playwright.extension.config.mjs",
     "preview": "vite preview",
     "test:libmedia": "node --test tests/libmedia-adapter.test.mjs",
+    "test:proxy": "node --test tests/hosted-proxy.test.mjs",
     "test:platform": "node --test tests/platform.test.mjs tests/provider-cookies.test.mjs tests/verification-consent.test.mjs tests/provider-auto-updates.test.mjs",
     "test:libmedia:browser": "playwright test",
     "tauri": "tauri",
@@ -35,6 +36,7 @@
     "package:webos:legacy": "node scripts/build-tv.mjs webos-legacy --package"
   },
   "dependencies": {
+    "@jitl/quickjs-ng-wasmfile-release-sync": "0.32.0",
     "@jitl/quickjs-singlefile-browser-release-sync": "0.32.0",
     "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
     "@noriginmedia/norigin-spatial-navigation-core": "^3.2.0",

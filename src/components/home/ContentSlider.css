@@ -207,6 +207,12 @@
   transition: transform 260ms ease;
 }
 
+.post-image.post-image-contain {
+  object-fit: contain;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
 .post-card.tv-focus .post-image {
   transform: scale(1.035);
 }

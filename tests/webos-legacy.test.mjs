@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {legacyCss,legacySandboxWasm,lowerLibmediaChunk} from '../scripts/legacy-webos.mjs';
 import {newQuickJSWASMModuleFromVariant,newVariant} from 'quickjs-emscripten';
-import variant from '@jitl/quickjs-wasmfile-release-sync';
+import variant from '@jitl/quickjs-ng-wasmfile-release-sync';
 import ts from 'typescript';
 
 test('Node 8 service compatibility preserves cancellation and safe header keys',async()=>{
@@ -32,7 +32,7 @@ test('legacy stylesheet removes unsupported layers, colors and sizing syntax',as
 
 test('lowered current QuickJS retains execution and memory limits',async()=>{
   const require=createRequire(import.meta.url);
-  const bytes=await legacySandboxWasm(await readFile(require.resolve('@jitl/quickjs-wasmfile-release-sync/wasm')));
+  const bytes=await legacySandboxWasm(await readFile(require.resolve('@jitl/quickjs-ng-wasmfile-release-sync/wasm')));
   const compiled=await WebAssembly.compile(bytes);
   const engine=await newQuickJSWASMModuleFromVariant(newVariant(variant,{wasmModule:compiled}));
   const runtime=engine.newRuntime();runtime.setMemoryLimit(16*1024*1024);

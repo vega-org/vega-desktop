@@ -6,6 +6,7 @@ import type { MpvChapter } from "../../lib/player/PlayerEngine";
 import type { SkipInterval } from "../../lib/providers/types";
 
 interface TimelineScrubberProps {
+  isLive?: boolean;
   duration: number;
   renderedTime: number;
   progressPercent: number;
@@ -25,6 +26,7 @@ interface TimelineScrubberProps {
 }
 
 export const TimelineScrubber: React.FC<TimelineScrubberProps> = ({
+  isLive = false,
   duration,
   renderedTime,
   progressPercent,
@@ -63,37 +65,45 @@ export const TimelineScrubber: React.FC<TimelineScrubberProps> = ({
     },
   });
 
+  const canSeek = !isLive && duration > 0;
+  const clampedProgress = Math.min(100, Math.max(0, progressPercent));
+  const clampedCache = Math.min(100, Math.max(0, cachePercent));
   const stop = (e: React.MouseEvent) => e.stopPropagation();
 
   return (
     <div
       ref={focusRef}
-      className={`player-timeline ${focused && canFocus ? "tv-focus" : ""}`}
+      className={`player-timeline ${isLive ? "is-live" : ""} ${focused && canFocus ? "tv-focus" : ""}`}
       onClick={stop}
       onDoubleClick={stop}
     >
-      <span className="timeline-time">{formatTime(renderedTime)}</span>
+      {!isLive && <span className="timeline-time">{formatTime(renderedTime)}</span>}
       <div
         ref={trackRef}
         className="timeline-track"
-        onPointerDown={handleTrackPointerDown}
-        style={{touchAction: "none"}}
-        onMouseEnter={(event) => {
+        onPointerDown={canSeek ? handleTrackPointerDown : undefined}
+        style={{
+          touchAction: "none",
+          opacity: canSeek ? 1 : 0.35,
+          pointerEvents: canSeek ? "auto" : "none",
+          cursor: canSeek ? "pointer" : "default",
+        }}
+        onMouseEnter={canSeek ? (event) => {
           onScrubbingChange?.(true);
           updateTimelinePreview(event);
-        }}
-        onMouseMove={(event) => {
+        } : undefined}
+        onMouseMove={canSeek ? (event) => {
           if (!draggingTimelineRef.current) onScrubbingChange?.(true);
           updateTimelinePreview(event);
-        }}
-        onMouseLeave={() => {
+        } : undefined}
+        onMouseLeave={canSeek ? () => {
           if (!draggingTimelineRef.current) {
             setTimelinePreview(null);
             onScrubbingChange?.(false);
           }
-        }}
+        } : undefined}
       >
-        {timelinePreview && (
+        {canSeek && timelinePreview && (
           <div
             className={`timeline-preview ${timelinePreview.image ? "ready" : ""}`}
             style={{
@@ -119,7 +129,7 @@ export const TimelineScrubber: React.FC<TimelineScrubberProps> = ({
         <div
           className="timeline-cache"
           style={{
-            width: `${cachePercent}%`,
+            width: `${clampedCache}%`,
             position: "absolute",
             top: 0,
             left: 0,
@@ -131,11 +141,11 @@ export const TimelineScrubber: React.FC<TimelineScrubberProps> = ({
         />
         <div
           className="timeline-progress"
-          style={{ width: `${progressPercent}%` }}
+          style={{ width: `${clampedProgress}%` }}
         >
-          <div className="timeline-thumb" />
+          {canSeek && <div className="timeline-thumb" />}
         </div>
-        {duration > 0 &&
+        {canSeek &&
           chapters.slice(1).map((chapter, index) => (
             <span
               key={`${chapter.time}-${index}`}
@@ -147,7 +157,7 @@ export const TimelineScrubber: React.FC<TimelineScrubberProps> = ({
               aria-hidden="true"
             />
           ))}
-        {duration > 0 &&
+        {canSeek &&
           skips.map((skip, index) => {
             const gaps = [];
             if (skip.from > 0 && skip.from < duration) {
@@ -179,7 +189,7 @@ export const TimelineScrubber: React.FC<TimelineScrubberProps> = ({
             return gaps;
           })}
       </div>
-      <span className="timeline-time right">{formatTime(duration)}</span>
+      {!isLive && <span className="timeline-time right">{formatTime(duration)}</span>}
     </div>
   );
 };

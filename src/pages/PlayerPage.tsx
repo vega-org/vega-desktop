@@ -2485,6 +2485,15 @@ const DesktopPlayer: React.FC<any> = ({
           }}
           onSelectVideoTrack={(id) => {
             mpv.selectTrack("vid", id);
+            if (id === "auto") {
+              toast("Quality: Auto");
+            } else if (typeof id === "number") {
+              const track = mpv.videoTracks.find((t) => t.id === id);
+              const label = track?.demuxH
+                ? `${Math.round(track.demuxH)}p`
+                : track?.title || String(id);
+              toast(`Switching quality to ${label}...`);
+            }
           }}
           onAddSubtitleFile={(path, title) => mpv.addSubtitleFile(path, title)}
           onPlaybackRateChange={(rate) => {
