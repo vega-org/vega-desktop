@@ -160,6 +160,39 @@ jobs:
           gh release upload "app-v$version" "store-bundle/Vega_${version}_x64_arm64.msixbundle" --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Failed to upload the Windows Store bundle.' }
 
+  release-samsung-tizen:
+    name: Samsung Tizen
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      VITE_TMDB_API_KEY: ${{ secrets.VITE_TMDB_API_KEY || secrets.TMDB_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build:tizen
+      - name: Package widget
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          cd dist-tv/tizen/app
+          zip -qr "../Vega_${VERSION}_tizen.wgt" .
+      - name: Publish widget
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="app-v${VERSION}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Vega v${VERSION}" --notes "Automated release of Vega." --draft || gh release view "$TAG"
+          fi
+          gh release upload "$TAG" "dist-tv/tizen/Vega_${VERSION}_tizen.wgt" --clobber
+
   release-lg-webos:
     name: LG webOS
     permissions:
