@@ -14,6 +14,7 @@ import { PlayerSettings } from "../components/settings/PlayerSettings";
 import { SubtitleSettings } from "../components/settings/SubtitleSettings";
 import { PreferencesSettings } from "../components/settings/PreferencesSettings";
 import { GitHubStarButton } from "../components/settings/GitHubStarButton";
+import { BROWSER_EXTENSION_STORE_URL } from "../components/extensions/BrowserExtensionPrompt";
 import { checkAppUpdates } from "../lib/hooks/useAppUpdater";
 import { FocusableButton } from "../components/layout/FocusableButton";
 import { Switch } from "../components/ui/switch";
@@ -309,6 +310,26 @@ export const SettingsPage: React.FC = () => {
             </div>
             <div className="settings-divider" />
             </>}
+            {!isTauriRuntime() && !import.meta.env.VITE_TV_HOST && (
+              <>
+                <div className="settings-divider" />
+                <div className="settings-row">
+                  <div className="settings-info">
+                    <h3 className="label-lg">Browser Extension</h3>
+                    <p className="body-md text-muted">
+                      Install the Vega browser extension for better playback and provider compatibility.
+                    </p>
+                  </div>
+                  <FocusableButton
+                    className="theme-toggle-btn active"
+                    onClick={() => window.open(BROWSER_EXTENSION_STORE_URL, "_blank", "noopener,noreferrer")}
+                  >
+                    Download Extension
+                  </FocusableButton>
+                </div>
+                <div className="settings-divider" />
+              </>
+            )}
             <div className="github-star-row">
               <GitHubStarButton />
             </div>

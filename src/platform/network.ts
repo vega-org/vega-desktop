@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type {AxiosAdapter} from 'axios';
 import {buildRequestCookieHeader, getJarCookies, getVerificationUserAgent, storeSetCookies} from '../lib/providers/providerCookieJar';
-import {assertBrowserHeaders, getPlatformHost, isTauriRuntime, PlatformAccessError, waitForPlatformHost, requirePublicDestinationChecks} from './host';
+import {assertBrowserHeaders, getPlatformHost, isBrowserExtensionInstalled, isTauriRuntime, PlatformAccessError, waitForPlatformHost, requirePublicDestinationChecks} from './host';
 import {publicHttpUrl} from './publicNetworkPolicy';
 
 function throwIfAborted(signal: AbortSignal): void {
@@ -40,6 +40,9 @@ export async function platformFetch(input: RequestInfo | URL, init: RequestInit 
   throwIfAborted(request.signal);
   await withCancellation(request.signal, waitForPlatformHost);
   const host = getPlatformHost();
+  if (!host && scope && isBrowserExtensionInstalled()) {
+    throw new PlatformAccessError('HOST_REQUIRED', 'Website access is required. Open the Vega extension and choose Allow all websites.');
+  }
   if (!host?.request || !host.capabilities.restrictedHeaders) assertBrowserHeaders(headers);
   if (host?.request) {
     if (scope) requirePublicDestinationChecks(host);

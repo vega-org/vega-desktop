@@ -32,6 +32,66 @@ test('public browser fetch and Axios work without a host or extension', async ()
   assert.equal(reads, 2); assert.deepEqual(native.calls, []);
 });
 
+test('opting into the proxy routes provider HTTP through same-origin endpoints while an extension takes precedence', async () => {
+  localStorage.setItem('vega_web_proxy_enabled', 'true');
+  assert.equal(getPlatformHost().kind, 'hosted-proxy');
+  const paths = [];
+  globalThis.fetch = async (path, init) => {
+    paths.push(path);
+    assert.equal(init.credentials, 'same-origin');
+    if (path.endsWith('/session')) return Response.json({ok: true});
+    const input = JSON.parse(init.body);
+    assert.equal(input.scope, 'source-a');
+    assert.equal(new Headers(input.headers).get('referer'), 'https://provider.example/');
+    return Response.json(reply(input.url, 'proxied'));
+  };
+  assert.equal(await (await providerFetch('source-a', 'https://provider.example/data', {headers: {Referer: 'https://provider.example/'}})).text(), 'proxied');
+  assert.deepEqual(paths, ['/api/proxy/session', '/api/proxy/request']);
+  window.vegaPlatformHost = {version: 1, kind: 'browser-extension', capabilities, request: async input => reply(input.url, 'extension')};
+  assert.equal(getPlatformHost().kind, 'browser-extension');
+  assert.equal(await (await providerFetch('source-a', 'https://provider.example/data')).text(), 'extension');
+  assert.equal(paths.length, 2);
+});
+
+test('installed extension without website permission never falls back to hosted proxy', async () => {
+  localStorage.setItem('vega_web_proxy_enabled', 'true');
+  window.__vegaBrowserBridge = true;
+  assert.equal(getPlatformHost(), undefined);
+  globalThis.fetch = () => {throw new Error('Should not fall back to proxy or browser fetch');};
+  await assert.rejects(
+    providerFetch('source-a', 'https://provider.example/data'),
+    {code: 'HOST_REQUIRED', message: /Allow all websites/},
+  );
+});
+
+test('browser extension falls back to hosted proxy media delivery for live HLS streams', async () => {
+  window.__vegaBrowserBridge = true;
+  window.vegaPlatformHost = {
+    version: 1,
+    kind: 'browser-extension',
+    capabilities: {...capabilities, mediaDelivery: true},
+    prepareMediaSource: async () => {
+      throw new Error('Live HLS needs a streaming transport; this extension currently supports on-demand HLS.');
+    },
+  };
+  const paths = [];
+  globalThis.fetch = async (path) => {
+    paths.push(path);
+    if (path.endsWith('/session')) return Response.json({ok: true});
+    return Response.json({url: '/api/proxy/media?token=live-hls'});
+  };
+  const prepared = await prepareMediaSource({id: 'live-1', source: 'https://live.example/channel.m3u8', format: 'hls', headers: {Referer: 'https://live.example/'}});
+  assert.equal(prepared.source, '/api/proxy/media?token=live-hls');
+  assert.equal(prepared.headers, undefined);
+  assert.deepEqual(paths, ['/api/proxy/session', '/api/proxy/prepare']);
+});
+
+test('a WAF challenge produces an actionable proxy verification error', async () => {
+  localStorage.setItem('vega_web_proxy_enabled', 'true');
+  globalThis.fetch = async () => new Response('<html>Challenge</html>', {status: 403, headers: {'cf-mitigated': 'challenge', 'content-type': 'text/html'}});
+  await assert.rejects(providerFetch('source-a', 'https://provider.example/data'), /Reload Vega to complete verification/);
+});
+
 test('browser restricted headers fail explicitly instead of being silently dropped', async () => {
   globalThis.fetch = () => {throw new Error('Should not reach fetch');};
   for (const name of ['Cookie', 'Referer', 'User-Agent', 'Origin', 'Sec-Fetch-Site']) {

@@ -12,7 +12,7 @@ import { LuRefreshCw as RefreshCw } from "react-icons/lu";
 import useWatchHistoryStore from "../lib/zustand/watchHistrory";
 import { settingsStorage } from "../lib/storage";
 import { FocusableButton } from "../components/layout/FocusableButton";
-import { PostCardItem } from "../components/home/PostCardItem";
+import { PostCardItem, parseAspectRatio } from "../components/home/PostCardItem";
 import { Spinner } from "../components/ui/spinner";
 import "./HomePage.css";
 import "../pages/SearchPage.css";
@@ -178,25 +178,30 @@ export const HomePage: React.FC = () => {
         {!isSearchLoading &&
           !searchError &&
           searchResults &&
-          searchResults.length > 0 && (
-            <div className="search-grid pb-xl">
-              {searchResults.map((post, index) => (
-                <PostCardItem
-                  key={`${post.link}-${index}`}
-                  post={post}
-                  onClick={() => {
-                    const params = new URLSearchParams();
-                    if (provider?.value)
-                      params.append("provider", provider.value);
-                    if (post.image) params.append("poster", post.image);
-                    navigate(
-                      `/content/${encodeURIComponent(post.link)}?${params.toString()}`,
-                    );
-                  }}
-                />
-              ))}
-            </div>
-          )}
+          searchResults.length > 0 && (() => {
+            const isLandscapeGrid =
+              searchResults.filter((post) => parseAspectRatio(post.aspectRatio, 2 / 3) > 1.2).length >
+              searchResults.length / 2;
+            return (
+              <div className={`search-grid pb-xl ${isLandscapeGrid ? "search-grid-landscape" : ""}`}>
+                {searchResults.map((post, index) => (
+                  <PostCardItem
+                    key={`${post.link}-${index}`}
+                    post={post}
+                    onClick={() => {
+                      const params = new URLSearchParams();
+                      if (provider?.value)
+                        params.append("provider", provider.value);
+                      if (post.image) params.append("poster", post.image);
+                      navigate(
+                        `/content/${encodeURIComponent(post.link)}?${params.toString()}`,
+                      );
+                    }}
+                  />
+                ))}
+              </div>
+            );
+          })()}
       </div>
     );
   }

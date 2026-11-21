@@ -109,6 +109,7 @@ interface PlayerControlsProps {
   thumbnailKey?: string;
   onMenuOpenChange?: (open: boolean) => void;
   onScrubbingChange?: (scrubbing: boolean) => void;
+  isLive?: boolean;
   isTV?: boolean;
 }
 
@@ -207,6 +208,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   thumbnailKey,
   onScrubbingChange,
   onMenuOpenChange,
+  isLive,
 }) => {
   const tvMode = settingsStorage.isTvModeEnabled();
   const controlsPresent = useExitPresence(visible, 250);
@@ -261,7 +263,12 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   const pendingSeekTimerRef = useRef<number | null>(null);
   const pendingSeekRef = useRef<number | null>(null);
   const seekCommitTimerRef = useRef<number | null>(null);
-  const showSeekButtons = !settingsStorage.hideSeekButtons();
+  const isLiveStream =
+    Boolean(isLive) ||
+    Boolean(selectedStream?.isLive) ||
+    (typeof duration === "number" && !Number.isFinite(duration)) ||
+    (duration > 0 && Number.isFinite(currentTime) && currentTime > duration + 10);
+  const showSeekButtons = !isLiveStream && !settingsStorage.hideSeekButtons();
 
   const hasOpenMenu = Boolean(openMenu || showOnlineSearch);
   useEffect(() => {
@@ -378,10 +385,15 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
       : pendingSeekTime !== null
         ? pendingSeekTime
         : currentTime;
-  const progressPercent = duration > 0 ? (renderedTime / duration) * 100 : 0;
-  const cachePercent =
-    duration > 0
-      ? Math.min(((currentTime + (cacheDuration || 0)) / duration) * 100, 100)
+  const progressPercent = isLiveStream
+    ? 100
+    : duration > 0
+      ? Math.min(100, Math.max(0, (renderedTime / duration) * 100))
+      : 0;
+  const cachePercent = isLiveStream
+    ? 100
+    : duration > 0
+      ? Math.min(100, Math.max(0, ((currentTime + (cacheDuration || 0)) / duration) * 100))
       : 0;
   let activeChapterIndex = -1;
   for (let index = 0; index < chapters.length; index++) {
@@ -682,6 +694,12 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
               <span className="player-secondary-title">{secondaryTitle}</span>
             )}
           </div>
+          {isLiveStream && (
+            <div className="player-live-badge" aria-label="Live stream">
+              <span className="player-live-dot" aria-hidden="true" />
+              <span>LIVE</span>
+            </div>
+          )}
         </div>
 
         {/* Center playback controls */}
@@ -747,7 +765,8 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
         {/* Bottom bar */}
         <div className="player-bottom-bar">
           <TimelineScrubber
-            focusable={visible && tvMode}
+            focusable={visible && tvMode && !isLiveStream}
+            isLive={isLiveStream}
             duration={duration}
             renderedTime={renderedTime}
             progressPercent={progressPercent}
@@ -858,24 +877,26 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                 )}
               </div>
 
-              <div className="inline-menu-container">
-                <FocusableButton
-                  focusable={true}
-                  focusKey="PLAYER_SPEED"
-                  className={`action-btn text-btn ${openMenu === "speed" ? "active" : ""}`}
-                  onClick={(e) => toggleMenu(e, "speed")}
-                >
-                  <Gauge size={20} />
-                  <span>{playbackRate.toFixed(1)}x</span>
-                </FocusableButton>
-                {openMenu === "speed" && (
-                  <SpeedSelectMenu
-                    playbackRate={playbackRate}
-                    onPlaybackRateChange={onPlaybackRateChange}
-                    onClose={() => setOpenMenu(null)}
-                  />
-                )}
-              </div>
+              {!isLiveStream && (
+                <div className="inline-menu-container">
+                  <FocusableButton
+                    focusable={true}
+                    focusKey="PLAYER_SPEED"
+                    className={`action-btn text-btn ${openMenu === "speed" ? "active" : ""}`}
+                    onClick={(e) => toggleMenu(e, "speed")}
+                  >
+                    <Gauge size={20} />
+                    <span>{playbackRate.toFixed(1)}x</span>
+                  </FocusableButton>
+                  {openMenu === "speed" && (
+                    <SpeedSelectMenu
+                      playbackRate={playbackRate}
+                      onPlaybackRateChange={onPlaybackRateChange}
+                      onClose={() => setOpenMenu(null)}
+                    />
+                  )}
+                </div>
+              )}
             </div>
 
             <div

@@ -1,6 +1,6 @@
 import {newQuickJSWASMModuleFromVariant, newVariant, type QuickJSContext, type QuickJSRuntime} from 'quickjs-emscripten';
-import variant from '@jitl/quickjs-wasmfile-release-sync';
-import wasmUrl from '@jitl/quickjs-wasmfile-release-sync/wasm?url';
+import variant from '@jitl/quickjs-ng-wasmfile-release-sync';
+import wasmUrl from '@jitl/quickjs-ng-wasmfile-release-sync/wasm?url';
 import sdk from './generated/providerSdk.js?raw';
 import {Crypto} from '../../platform/crypto';
 

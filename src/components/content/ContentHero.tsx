@@ -14,6 +14,8 @@ interface ContentHeroProps {
   onBack: () => void;
   onMore?: () => void;
   isPortrait?: boolean;
+  posterContain?: boolean;
+  posterAspectRatio?: "portrait" | "square" | "landscape";
   overview?: React.ReactNode;
 }
 
@@ -29,6 +31,8 @@ export const ContentHero: React.FC<ContentHeroProps> = ({
   onBack,
   onMore,
   isPortrait,
+  posterContain = false,
+  posterAspectRatio = "portrait",
   overview,
 }) => {
   const normalizedRating = String(rating || "")
@@ -61,7 +65,15 @@ export const ContentHero: React.FC<ContentHeroProps> = ({
         {onMore && <FocusableButton className="content-back-button content-more-button" aria-label="More options" onClick={onMore}><LuEllipsisVertical size={22} /></FocusableButton>}
 
         <div className="content-hero-portrait-layout">
-          <div className="content-hero-portrait-poster">
+          <div
+            className={`content-hero-portrait-poster ${
+              posterAspectRatio === "landscape"
+                ? "is-landscape"
+                : posterAspectRatio === "square"
+                  ? "is-square"
+                  : ""
+            } ${posterContain ? "is-contain" : ""}`}
+          >
             {background && (
               <img
                 src={background}

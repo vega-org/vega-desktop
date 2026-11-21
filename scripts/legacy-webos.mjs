@@ -11,7 +11,7 @@ import {createHash} from 'node:crypto';
 
 const require=createRequire(import.meta.url);
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
-const sandboxHash=digest(readFileSync(require.resolve('@jitl/quickjs-wasmfile-release-sync/wasm')));
+const sandboxHash=digest(readFileSync(require.resolve('@jitl/quickjs-ng-wasmfile-release-sync/wasm')));
 
 export async function legacySandboxWasm(bytes) {
   const {default:binaryen}=await import('binaryen');

@@ -1,3 +1,4 @@
+import {proxyEnabled, proxyHost} from './proxyHost';
 import type {MediaSourceDescriptor} from '@vega/libmedia-engine/core/media';
 import type {StoredCookie} from '../lib/providers/cookieRules';
 import type {JarCookie} from '../lib/providers/cookieRules';
@@ -40,7 +41,7 @@ export interface HostResponse {
 
 export interface PlatformHost {
   version: 1;
-  kind: 'browser-extension' | 'webos' | 'amazon-vega';
+  kind: 'browser-extension' | 'hosted-proxy' | 'webos' | 'amazon-vega';
   capabilities: HostCapabilities;
   request?: (request: HostRequest, signal: AbortSignal) => Promise<HostResponse>;
   verifyProvider?: (request: ProviderVerificationRequest, signal: AbortSignal) => Promise<ProviderVerificationResult>;
@@ -51,7 +52,16 @@ export interface PlatformHost {
 }
 
 declare global {
-  interface Window {vegaPlatformHost?: PlatformHost; vegaPlatformHostReady?: Promise<void>}
+  interface Window {__vegaBrowserBridge?: boolean; vegaPlatformHost?: PlatformHost; vegaPlatformHostReady?: Promise<void>}
+}
+
+export function isBrowserExtensionInstalled(): boolean {
+  return typeof window !== 'undefined' && (window.__vegaBrowserBridge === true || window.vegaPlatformHost?.kind === 'browser-extension');
+}
+
+export function isBrowserExtensionPermissionMissing(): boolean {
+  if (isTauriRuntime() || import.meta.env?.VITE_TV_HOST || !isBrowserExtensionInstalled()) return false;
+  return typeof window === 'undefined' || window.vegaPlatformHost?.kind !== 'browser-extension';
 }
 
 /** An injected host may still be authorizing its document at app startup. */
@@ -74,7 +84,10 @@ export function isTauriRuntime(): boolean {
 
 export function getPlatformHost(): PlatformHost | undefined {
   const host = typeof window === 'undefined' ? undefined : window.vegaPlatformHost;
-  if (!host) return undefined;
+  if (!host) {
+    if (isBrowserExtensionInstalled()) return undefined;
+    return !isTauriRuntime() && !import.meta.env?.VITE_TV_HOST && proxyEnabled() ? proxyHost : undefined;
+  }
   if (host.version !== 1 || !host.capabilities || !['browser-extension', 'webos', 'amazon-vega'].includes(host.kind) ||
       ['restrictedHeaders', 'isolatedCookies', 'manualRedirects', 'mediaDelivery'].some(key => typeof host.capabilities[key as keyof HostCapabilities] !== 'boolean') ||
       (host.capabilities.publicDestinationChecks !== undefined && typeof host.capabilities.publicDestinationChecks !== 'boolean') ||

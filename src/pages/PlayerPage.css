@@ -349,6 +349,30 @@ canvas.JASSUB {
   text-overflow: ellipsis;
 }
 
+.player-live-badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 16px;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.player-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ef4444;
+}
+
 /* ---- Center Controls ---- */
 .player-center-controls {
   position: relative;

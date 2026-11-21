@@ -1,6 +1,7 @@
 import type {MediaSourceDescriptor} from '@vega/libmedia-engine/core/media';
 import {isTorrentSource} from '@vega/libmedia-engine/torrent-source';
 import {assertBrowserHeaders, getPlatformHost, isTauriRuntime, PlatformAccessError, waitForPlatformHost, requirePublicDestinationChecks} from './host';
+import {proxyHost} from './proxyHost';
 
 const owners = new WeakMap<MediaSourceDescriptor, (id: string) => Promise<void>>();
 
@@ -26,9 +27,22 @@ export async function prepareMediaSource(source: MediaSourceDescriptor): Promise
   const host = getPlatformHost();
   if (host?.capabilities.mediaDelivery && host.prepareMediaSource) {
     requirePublicDestinationChecks(host);
-    const delivered = await host.prepareMediaSource({...source, headers: {...source.headers}});
-    if (host.releaseMediaSource) owners.set(delivered, host.releaseMediaSource.bind(host));
-    return delivered;
+    try {
+      const delivered = await host.prepareMediaSource({...source, headers: {...source.headers}});
+      if (host.releaseMediaSource) owners.set(delivered, host.releaseMediaSource.bind(host));
+      return delivered;
+    } catch (error) {
+      if (
+        host.kind === 'browser-extension' &&
+        !import.meta.env?.VITE_TV_HOST &&
+        error instanceof Error &&
+        /live hls needs a streaming transport/i.test(error.message) &&
+        proxyHost.prepareMediaSource
+      ) {
+        return proxyHost.prepareMediaSource({...source, headers: {...source.headers}});
+      }
+      throw error;
+    }
   }
   assertBrowserHeaders(new Headers(source.headers));
   if (typeof source.source === 'string' && !/^(https?:|blob:|data:)/i.test(source.source)) {

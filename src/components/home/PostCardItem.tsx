@@ -103,12 +103,16 @@ export const PostCardItem = memo(function PostCardItem({
 }: PostCardItemProps) {
   const tvMode = settingsStorage.isTvModeEnabled();
   const [imageFailed, setImageFailed] = useState(false);
+  const [containImage, setContainImage] = useState(false);
   const [removeFocused, setRemoveFocused] = useState(false);
   const paletteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => () => clearTimeout(paletteTimer.current), [post.image]);
 
-  useEffect(() => setImageFailed(false), [post.image]);
+  useEffect(() => {
+    setImageFailed(false);
+    setContainImage(false);
+  }, [post.image]);
 
   const progressPalette = useArtworkPalette(
     post.progress !== undefined ? post.image : null,
@@ -212,11 +216,22 @@ export const PostCardItem = memo(function PostCardItem({
           <img
             {...cardArtwork(post.image, activeAspectRatio)}
             alt=""
-            className="post-image"
+            className={cn("post-image", containImage && "post-image-contain")}
             loading="lazy"
             decoding="async"
             draggable={false}
             referrerPolicy="no-referrer"
+            onLoad={(event) => {
+              const { naturalWidth, naturalHeight } = event.currentTarget;
+              if (!naturalWidth || !naturalHeight) return;
+              const naturalRatio = naturalWidth / naturalHeight;
+              const mismatch =
+                naturalRatio / activeAspectRatio > 1.35 ||
+                activeAspectRatio / naturalRatio > 1.35;
+              const isSmallLogo =
+                Math.max(naturalWidth, naturalHeight) < 320 && naturalRatio > 1.05;
+              setContainImage(mismatch || isSmallLogo);
+            }}
             onError={() => setImageFailed(true)}
           />
         )}

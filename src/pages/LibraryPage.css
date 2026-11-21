@@ -98,8 +98,11 @@
   gap: 24px 16px;
 }
 
-.library-grid .post-card {
+.library-grid .post-card,
+.library-grid .post-card.post-card-landscape,
+.library-grid .post-card.post-card-square {
   width: 100%;
+  min-width: 0;
 }
 
 @media (max-width: 720px) {

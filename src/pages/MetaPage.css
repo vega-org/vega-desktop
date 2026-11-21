@@ -100,11 +100,27 @@
   background: var(--surface-container-lowest);
 }
 
+.content-hero-portrait-poster.is-square {
+  width: clamp(200px, 22vw, 280px);
+  aspect-ratio: 1 / 1;
+}
+
+.content-hero-portrait-poster.is-landscape {
+  width: clamp(240px, 26vw, 340px);
+  aspect-ratio: 16 / 10;
+}
+
 .content-hero-portrait-poster .content-hero-portrait-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.content-hero-portrait-poster.is-contain .content-hero-portrait-image {
+  object-fit: contain;
+  padding: 20px;
+  box-sizing: border-box;
 }
 
 .content-hero-portrait-details {

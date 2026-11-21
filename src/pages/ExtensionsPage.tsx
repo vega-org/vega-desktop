@@ -113,6 +113,7 @@ export const ExtensionsPage: React.FC = () => {
   const [showAddSource, setShowAddSource] = useState(false);
   const extensionMissing = useBrowserExtensionRequired();
   const [showExtensionPrompt, setShowExtensionPrompt] = useState(false);
+  const pendingExtensionAction = useRef<(() => void) | null>(null);
   useEffect(() => {if (!extensionMissing) setShowExtensionPrompt(false);}, [extensionMissing]);
   const [refreshing, setRefreshing] = useState(false);
   const [operationKey, setOperationKey] = useState<string | null>(null);
@@ -290,7 +291,7 @@ export const ExtensionsPage: React.FC = () => {
   }, [availableProviders, installedProviders]);
 
   const handleAddSource = () => {
-    if (browserExtensionRequired()) {setShowExtensionPrompt(true); return;}
+    if (browserExtensionRequired()) {pendingExtensionAction.current = handleAddSource; setShowExtensionPrompt(true); return;}
     if (!inputValue.trim()) {
       setError("Enter a GitHub author, a repo URL or an HTTP or HTTPS manifest URL.");
       return;
@@ -377,7 +378,7 @@ export const ExtensionsPage: React.FC = () => {
   };
 
   const handleInstall = async (provider: ProviderExtension) => {
-    if (browserExtensionRequired()) {setShowExtensionPrompt(true); return;}
+    if (browserExtensionRequired()) {pendingExtensionAction.current = () => {void handleInstall(provider);}; setShowExtensionPrompt(true); return;}
     const key = providerKey(provider);
     try {
       setOperationKey(key);
@@ -797,7 +798,14 @@ export const ExtensionsPage: React.FC = () => {
       />
 
       <BrowserExtensionPrompt open={extensionMissing && (showAddSource || showExtensionPrompt)}
-        onOpenChange={open => {if (!open) {setShowExtensionPrompt(false); handleCloseAddSource();}}} />
+        onSkip={() => {
+          setShowExtensionPrompt(false);
+          const resume = pendingExtensionAction.current;
+          pendingExtensionAction.current = null;
+          if (resume) resume();
+          else setShowAddSource(true);
+        }}
+        onOpenChange={open => {if (!open) {pendingExtensionAction.current = null; setShowExtensionPrompt(false); handleCloseAddSource();}}} />
 
       <ConfirmActionDialog
         open={Boolean(sourceToRemove)}
