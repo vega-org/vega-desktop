@@ -1,0 +1,63 @@
+.extensions-dialog-content.backup-export-dialog {
+  width: min(calc(100vw - 48px), 520px);
+  max-height: min(88vh, 720px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 24px 20px;
+}
+
+.backup-export-dialog .extensions-dialog-header {
+  flex-shrink: 0;
+  margin-bottom: 6px;
+}
+
+.backup-export-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 14px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--rounded-md);
+  background: var(--surface-container);
+  overflow-y: auto;
+}
+
+.backup-export-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+}
+
+.backup-export-row + .backup-export-row {
+  border-top: 1px solid var(--outline-variant);
+}
+
+.backup-export-row-info {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.backup-export-row-info h3 {
+  margin: 0;
+  color: var(--on-surface);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.backup-export-row-info p {
+  margin: 0;
+  color: var(--on-surface-variant);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.backup-export-warning {
+  margin: 10px 0 0;
+  color: var(--on-surface-variant);
+  font-size: 12px;
+  line-height: 16px;
+}

@@ -26,7 +26,14 @@ import {
 } from "../lib/logging/vegaLog";
 import { toast } from "../lib/zustand/toastStore";
 
-import {exportBackup, pickBackup, restoreBackup} from "../lib/backup";
+import {
+  describeBackupSections,
+  exportBackup,
+  pickBackup,
+  restoreBackup,
+  type BackupSelection,
+} from "../lib/backup";
+import { BackupExportDialog } from "../components/settings/BackupExportDialog";
 import "./SettingsPage.css";
 import {CustomSelect} from '../components/CustomSelect';
 
@@ -55,20 +62,39 @@ export const SettingsPage: React.FC = () => {
   const [exportingLogs, setExportingLogs] = React.useState(false);
 
   const [backupBusy, setBackupBusy] = React.useState(false);
-  const handleBackup = async (action: "export" | "import") => {
+  const [showBackupExportDialog, setShowBackupExportDialog] = React.useState(false);
+
+  const handleConfirmExport = async (selection: BackupSelection) => {
     if (backupBusy) return;
     setBackupBusy(true);
     try {
-      if (action === "export") {
-        if (await exportBackup()) toast("Backup exported");
-      } else {
-        const backup = await pickBackup();
-        if (!backup) return;
-        const {ask} = await import("@tauri-apps/plugin-dialog");
-        if (!await ask("This replaces your settings and installed providers, and your library if included. Vega will reload after restoring.", {title: "Restore backup?", kind: "warning"})) return;
-        restoreBackup(backup);
-        window.location.reload();
+      const saved = await exportBackup(selection);
+      setShowBackupExportDialog(false);
+      if (saved) toast("Backup exported");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Could not process backup");
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const handleImportBackup = async () => {
+    if (backupBusy) return;
+    setBackupBusy(true);
+    try {
+      const backup = await pickBackup();
+      if (!backup) return;
+      const { ask } = await import("@tauri-apps/plugin-dialog");
+      if (
+        !(await ask(
+          `This restores ${describeBackupSections(backup)}. Sections absent from the backup stay unchanged. Vega will reload after restoring.`,
+          { title: "Restore backup?", kind: "warning" },
+        ))
+      ) {
+        return;
       }
+      restoreBackup(backup);
+      window.location.reload();
     } catch (error) {
       toast(error instanceof Error ? error.message : "Could not process backup");
     } finally {
@@ -305,8 +331,23 @@ export const SettingsPage: React.FC = () => {
                 <h3 className="label-lg">Backup</h3>
                 <p className="body-md text-muted">Export or restore settings, providers and library.</p>
               </div>
-              <FocusableButton className="theme-toggle-btn active" disabled={backupBusy} onClick={() => void handleBackup("export")}>Export</FocusableButton>
-              <FocusableButton className="theme-toggle-btn active" disabled={backupBusy} onClick={() => void handleBackup("import")}>Import</FocusableButton>
+              <div className="settings-row-actions">
+                <FocusableButton
+                  className="theme-toggle-btn active"
+                  focusKey="SETTINGS_BACKUP_EXPORT"
+                  disabled={backupBusy}
+                  onClick={() => setShowBackupExportDialog(true)}
+                >
+                  Export
+                </FocusableButton>
+                <FocusableButton
+                  className="theme-toggle-btn active"
+                  disabled={backupBusy}
+                  onClick={() => void handleImportBackup()}
+                >
+                  Import
+                </FocusableButton>
+              </div>
             </div>
             <div className="settings-divider" />
             </>}
@@ -336,6 +377,15 @@ export const SettingsPage: React.FC = () => {
           </div>
         </section>
       </div>
+      {isTauriRuntime() && (
+        <BackupExportDialog
+          open={showBackupExportDialog}
+          busy={backupBusy}
+          onOpenChange={setShowBackupExportDialog}
+          onExport={(selection) => void handleConfirmExport(selection)}
+          restoreFocusKey="SETTINGS_BACKUP_EXPORT"
+        />
+      )}
     </div>
   );
 };

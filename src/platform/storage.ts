@@ -14,6 +14,7 @@ export interface IStorageService {
   setArray<T>(key: string, value: T[]): void;
   delete(key: string): void;
   contains(key: string): boolean;
+  getKeys(): string[];
   clearAll(): void;
 }
 
@@ -142,6 +143,17 @@ export class StorageService implements IStorageService {
   // Check if key exists
   contains(key: string): boolean {
     return localStorage.getItem(this.getKey(key)) !== null;
+  }
+
+  getKeys(): string[] {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (!this.prefix) keys.push(k);
+      else if (k.startsWith(this.prefix)) keys.push(k.slice(this.prefix.length));
+    }
+    return keys;
   }
 
   // Clear all storage
