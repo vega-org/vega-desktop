@@ -20,6 +20,7 @@ import { SearchPage } from "./pages/SearchPage";
 import { AnimatedHourglass } from "./components/AnimatedHourglass";
 import { WafDialog } from "./components/WafDialog";
 import { VerificationConsentDialog } from "./components/VerificationConsentDialog";
+import { AppUpdateDialog } from "./components/updater/AppUpdateDialog";
 import { BrowserExtensionPermissionPrompt } from "./components/extensions/BrowserExtensionPrompt";
 import useThemeStore from "./lib/zustand/themeStore";
 import { settingsStorage } from "./lib/storage";
@@ -240,6 +241,7 @@ export default function App() {
       <QueryClientProvider client={client}>
         <WafDialog />
         <VerificationConsentDialog />
+        <AppUpdateDialog />
         <BrowserExtensionPermissionPrompt />
         <ToastContainer />
         <AppRouter>

@@ -30,8 +30,12 @@ const QUALITIES = ["360p", "480p", "720p", "1080p", "4k"];
 export const PreferencesSettings: React.FC = () => {
   const [downloadLocation, setDownloadLocation] = useState<string>("vega");
   const [excludedQualities, setExcludedQualities] = useState<string[]>([]);
-  const [autoInstallUpdates, setAutoInstallUpdates] = useState<boolean>(true);
-  const [autoCheckUpdates, setAutoCheckUpdates] = useState<boolean>(true);
+  const [autoInstallUpdates, setAutoInstallUpdates] = useState<boolean>(() =>
+    settingsStorage.isAutoDownloadEnabled(),
+  );
+  const [autoCheckUpdates, setAutoCheckUpdates] = useState<boolean>(() =>
+    settingsStorage.isAutoCheckUpdateEnabled(),
+  );
   const [providerAutoUpdates, setProviderAutoUpdates] = useState(() => settingsStorage.isProviderAutoUpdateEnabled());
   const [tvModeEnabled, setTvModeEnabled] = useState<boolean>(false);
   const [devtoolsShortcutsEnabled, setDevtoolsShortcutsEnabled] =
@@ -267,37 +271,39 @@ export const PreferencesSettings: React.FC = () => {
 
       <div className="settings-divider" />
 
-      {/* Auto Install Updates */}
-      <div className="settings-row">
-        <div className="settings-info">
-          <h3 className="label-lg">Auto Install App Updates</h3>
-          <p className="body-md text-muted">
-            Automatically download and install new versions of Vega
-          </p>
-        </div>
-        <Switch
-          checked={autoInstallUpdates}
-          onCheckedChange={() => handleToggleAutoInstall()}
-          aria-label="Automatically install updates"
-        />
-      </div>
+      {import.meta.env?.VITE_IS_MS_STORE !== "true" && (
+        <>
+          <div className="settings-row">
+            <div className="settings-info">
+              <h3 className="label-lg">Download Updates in Vega</h3>
+              <p className="body-md text-muted">
+                Download and install new versions directly inside Vega when you click Update. Turn off to open the release page instead.
+              </p>
+            </div>
+            <Switch
+              checked={autoInstallUpdates}
+              onCheckedChange={() => handleToggleAutoInstall()}
+              aria-label="Download updates in Vega"
+            />
+          </div>
 
-      <div className="settings-divider" />
+          <div className="settings-divider" />
 
-      {/* Auto Check Updates */}
-      <div className="settings-row">
-        <div className="settings-info">
-          <h3 className="label-lg">Auto Check for Updates</h3>
-          <p className="body-md text-muted">Check for updates on app startup</p>
-        </div>
-        <Switch
-          checked={autoCheckUpdates}
-          onCheckedChange={() => handleToggleAutoCheck()}
-          aria-label="Automatically check for updates"
-        />
-      </div>
+          <div className="settings-row">
+            <div className="settings-info">
+              <h3 className="label-lg">Auto Check for Updates</h3>
+              <p className="body-md text-muted">Check for updates on app startup</p>
+            </div>
+            <Switch
+              checked={autoCheckUpdates}
+              onCheckedChange={() => handleToggleAutoCheck()}
+              aria-label="Automatically check for updates"
+            />
+          </div>
 
-      <div className="settings-divider" />
+          <div className="settings-divider" />
+        </>
+      )}
 
       {/* TV Mode */}
       </>}

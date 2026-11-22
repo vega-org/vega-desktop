@@ -55,6 +55,22 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
+async fn restart_app(app: tauri::AppHandle) -> Result<(), String> {
+    stream_server::kill_all_active_sessions();
+    media_probe::cancel_all_active_extractions();
+    proxy_manager::stop_all_proxies().await;
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        app.restart();
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = app;
+        Err("Restart is not supported on mobile platforms".to_string())
+    }
+}
+
+#[tauri::command]
 fn get_stream_proxy_port(state: tauri::State<'_, ProxyState>) -> Option<u16> {
     *state.port.lock().unwrap()
 }
@@ -816,6 +832,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet,
+            restart_app,
             app_log::log_write_batch,
             app_log::log_set_detailed,
             app_log::log_clear,
