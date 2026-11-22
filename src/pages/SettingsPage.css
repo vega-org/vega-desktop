@@ -17,6 +17,7 @@
 .settings-info { min-width: 0; display: grid; gap: 2px; }
 .settings-info h3 { margin: 0; color: var(--on-surface); font-size: 14px; font-weight: 500; line-height: 20px; }
 .settings-info p { max-width: 600px; margin: 0; color: var(--on-surface-variant); font-size: 12px; line-height: 16px; opacity: 1; }
+.settings-row-actions { display: inline-flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 
 .theme-toggle-group { display: inline-flex; flex: 0 0 auto; gap: 2px; padding: 3px; border: 1px solid var(--outline-variant); border-radius: var(--rounded-md); background: var(--surface-container-high); }
 .theme-toggle-btn { display: inline-flex; min-height: 32px; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1px solid transparent; border-radius: var(--rounded-DEFAULT); color: var(--on-surface-variant); background: transparent; font: inherit; font-size: 13px; font-weight: 600; }
@@ -269,7 +270,7 @@
 @media (max-width: 760px) {
   .settings-page { padding-inline: 2px; }
   .settings-row { align-items: flex-start; flex-direction: column; gap: 14px; }
-  .theme-toggle-group, .accent-color-grid, .quality-options, .slider-control, .color-picker-control, .color-preset-group { width: 100%; justify-content: flex-start; }
+  .settings-row-actions, .theme-toggle-group, .accent-color-grid, .quality-options, .slider-control, .color-picker-control, .color-preset-group { width: 100%; justify-content: flex-start; }
   .settings-stacked-control { width: 100%; align-items: stretch; }
   .doh-settings-fields { width: 100%; }
   .tmdb-key-control { width: 100%; }
