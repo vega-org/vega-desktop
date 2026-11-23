@@ -4,18 +4,10 @@ import {
   type MarkdownBlock,
   type MarkdownInline,
 } from '../../lib/updater/releaseNotes';
-import { isTauriRuntime } from '../../platform/host';
+import { openExternalUrl } from '../../lib/updater/appUpdater';
 
 function openReleaseLink(href: string): void {
-  if (isTauriRuntime()) {
-    import('@tauri-apps/plugin-opener')
-      .then(({ openUrl }) => openUrl(href))
-      .catch(() => {
-        window.open(href, '_blank', 'noopener,noreferrer');
-      });
-    return;
-  }
-  window.open(href, '_blank', 'noopener,noreferrer');
+  void openExternalUrl(href);
 }
 
 function renderInlines(

@@ -19,6 +19,9 @@ async function compileModule(relative, imports = {}) {
       .replaceAll(`'${name}'`, JSON.stringify(value))
       .replaceAll(`"${name}"`, JSON.stringify(value));
   }
+  if (relative.endsWith("/appUpdater.ts")) {
+    js = js.replaceAll("import.meta.env", "globalThis.__vegaUpdaterTest.env");
+  }
   return moduleUrl(js);
 }
 
@@ -79,7 +82,7 @@ const zustandUrl = import.meta.resolve("zustand");
 const storageUrl = await compileModule("../src/platform/storage.ts");
 const storageFacadeUrl = moduleUrl(`export * from ${JSON.stringify(storageUrl)};`);
 const hostMockUrl = moduleUrl(`
-  export const isTauriRuntime = () => true;
+  export const isTauriRuntime = () => !globalThis.__vegaUpdaterTest.env?.VITE_TV_HOST;
 `);
 const deviceLayoutMockUrl = moduleUrl(`
   export const isTelevisionDevice = () => false;
@@ -145,6 +148,7 @@ const { useAppUpdateStore } = await import(appUpdateStoreUrl);
 const {
   cancelOrDismissAppUpdate,
   checkAppUpdates,
+  openExternalUrl,
   resetAppUpdaterForTest,
   restartAfterUpdate,
   retryAppUpdate,
@@ -195,7 +199,7 @@ test("formatReleaseNotes removes CI placeholders and Downloads tables while keep
     "- Web app https://web.vega-app.in",
     "- New player engine libmedia",
     "",
-    "### Vega v2.3.0 — Downloads",
+    "### Vega v2.3.0 â€” Downloads",
     "",
     "| Platform | Architecture | Download |",
     "| --- | --- | --- |",
@@ -205,7 +209,7 @@ test("formatReleaseNotes removes CI placeholders and Downloads tables while keep
   ].join("\n");
 
   const formatted = formatReleaseNotes(rawBody);
-  assert.equal(formatted.includes("### Vega v2.3.0 — Downloads"), false);
+  assert.equal(formatted.includes("### Vega v2.3.0 â€” Downloads"), false);
   assert.equal(formatted.includes("| Windows |"), false);
   assert.equal(formatted.includes("- New player engine libmedia"), true);
   assert.equal(formatted.includes("**Full Changelog**"), true);
@@ -485,5 +489,47 @@ test("appUpdater supports retry after download failure and shows toast on up-to-
     assert.equal(toasts[0].title, "Up to Date");
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("webOS shows a newer release and opens it in the TV browser", async () => {
+  const releaseUrl = "https://github.com/vega-org/vega-desktop/releases/tag/v2.4.0";
+  const originalFetch = globalThis.fetch;
+  const launches = [];
+  globalThis.__vegaUpdaterTest.env = { VITE_TV_HOST: "webos", VITE_APP_VERSION: "2.3.0" };
+  globalThis.fetch = async () => Response.json({ tag_name: "v2.4.0", html_url: releaseUrl });
+  globalThis.window.PalmServiceBridge = class {
+    call(uri, params) {
+      launches.push([uri, JSON.parse(params)]);
+      this.onservicecallback('{"returnValue":true}');
+    }
+  };
+  try {
+    await checkAppUpdates(true);
+    const update = useAppUpdateStore.getState();
+    assert.equal(update.stage, "available");
+    assert.equal(update.currentVersion, "2.3.0");
+    assert.equal(update.canAutoDownload, false);
+    await startAppUpdate();
+    assert.deepEqual(launches, [[
+      "luna://com.webos.applicationManager/launch",
+      { id: "com.webos.app.browser", params: { target: releaseUrl } },
+    ]]);
+    assert.deepEqual(invokes, []);
+
+    const assigned = [];
+    globalThis.window.location = { assign: (u) => assigned.push(u) };
+    globalThis.window.PalmServiceBridge = class {
+      call() {
+        this.onservicecallback('{"returnValue":false}');
+      }
+    };
+    await openExternalUrl(releaseUrl);
+    assert.deepEqual(assigned, [releaseUrl]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete globalThis.__vegaUpdaterTest.env;
+    delete globalThis.window.PalmServiceBridge;
+    delete globalThis.window.location;
   }
 });

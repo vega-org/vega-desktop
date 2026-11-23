@@ -163,7 +163,9 @@ export const AppUpdateDialog: React.FC = () => {
             {stage === 'available' && (
               <>
                 <Dialog.Description className="app-update-subtitle">
-                  A new version of Vega is ready to install.
+                  {canDirectUpdate
+                    ? 'A new version of Vega is ready to install.'
+                    : 'A new version of Vega is available on GitHub.'}
                 </Dialog.Description>
                 <div className="app-update-notes-label">What&apos;s New</div>
                 <div className="app-update-notes" tabIndex={0}>

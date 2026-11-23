@@ -22,6 +22,7 @@ import { CustomSelect } from "../CustomSelect";
 import { syncFromSharedFolder } from "../../lib/sync/syncService";
 import { clearAppCache } from "../../lib/clearAppCache";
 import {updateProvidersService} from '../../lib/services/UpdateProviders';
+import { getWebosUpdateVersion } from '../../lib/updater/appUpdater';
 import { ProxyPreferenceSection } from "./ProxyPreferenceSection";
 import { FocusableSlider } from "./SubtitleSettings";
 
@@ -288,7 +289,14 @@ export const PreferencesSettings: React.FC = () => {
           </div>
 
           <div className="settings-divider" />
+        </>
+      )}
 
+      {/* TV Mode */}
+      </>}
+      {((isTauriRuntime() && import.meta.env?.VITE_IS_MS_STORE !== "true") ||
+        Boolean(getWebosUpdateVersion())) && (
+        <>
           <div className="settings-row">
             <div className="settings-info">
               <h3 className="label-lg">Auto Check for Updates</h3>
@@ -304,9 +312,6 @@ export const PreferencesSettings: React.FC = () => {
           <div className="settings-divider" />
         </>
       )}
-
-      {/* TV Mode */}
-      </>}
       <div className="settings-row">
         <div className="settings-info">
           <h3 className="label-lg">Auto update providers</h3>

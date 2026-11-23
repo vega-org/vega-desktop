@@ -10,5 +10,5 @@
   "resolution": "1920x1080",
   "disableBackHistoryAPI": true,
   "requiredMemory": 256,
-  "requiredACG": ["activity.operation"]
+  "requiredACG": ["activity.operation", "application.launcher"]
 }

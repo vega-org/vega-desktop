@@ -65,6 +65,7 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_LEGACY_WEBOS': JSON.stringify(legacyWebos),
       'import.meta.env.VITE_WEBOS_COMPAT': JSON.stringify(tvHost==='webos'),
       'import.meta.env.VITE_TV_HOST': JSON.stringify(tvHost),
+      'import.meta.env.VITE_APP_VERSION': JSON.stringify(JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version),
       ...(webBuild ? {'import.meta.env.VITE_TV_MODE': JSON.stringify(tvHost ? 'true' : 'false')} : {}),
       "import.meta.env.VITE_TMDB_API_KEY": JSON.stringify(tmdbApiKey),
       "import.meta.env.VITE_PROXY_API_URL": JSON.stringify(proxyApiUrl),

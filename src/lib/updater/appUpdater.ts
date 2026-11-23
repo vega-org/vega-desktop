@@ -14,6 +14,12 @@ import {
   isSafeHttpUrl,
 } from './releaseNotes';
 
+export function getWebosUpdateVersion(): string | undefined {
+  return import.meta.env?.VITE_TV_HOST === 'webos'
+    ? import.meta.env.VITE_APP_VERSION
+    : undefined;
+}
+
 let pendingUpdate: Update | null = null;
 let activeAttemptId = 0;
 let activeCheckPromise: Promise<void> | null = null;
@@ -26,8 +32,34 @@ async function closeUpdateHandle(update: Update | null): Promise<void> {
   await update.close().catch(() => {});
 }
 
-async function openExternalUrl(url: string): Promise<void> {
+export async function openExternalUrl(url: string): Promise<void> {
   if (!isSafeHttpUrl(url)) return;
+  if (getWebosUpdateVersion() && typeof window !== 'undefined') {
+    const { PalmServiceBridge } = window as Window & {
+      PalmServiceBridge?: new () => {
+        onservicecallback: (response: string) => void;
+        call: (uri: string, params: string) => void;
+      };
+    };
+    try {
+      if (PalmServiceBridge) {
+        const bridge = new PalmServiceBridge();
+        bridge.onservicecallback = (response) => {
+          try {
+            if (JSON.parse(response).returnValue === true) return;
+          } catch {}
+          window.location.assign(url);
+        };
+        bridge.call('luna://com.webos.applicationManager/launch', JSON.stringify({
+          id: 'com.webos.app.browser',
+          params: { target: url },
+        }));
+        return;
+      }
+    } catch {}
+    window.location.assign(url);
+    return;
+  }
   try {
     const { openUrl } = await import('@tauri-apps/plugin-opener');
     await openUrl(url);
@@ -49,7 +81,8 @@ function isRateLimitError(error: unknown): boolean {
   return typeof err?.message === 'string' && /rate limit/i.test(err.message);
 }
 
-async function checkAndroidUpdates(
+async function checkGitHubUpdates(
+  currentVersion: string,
   manual: boolean,
   restoreFocusKey?: string,
 ): Promise<void> {
@@ -70,8 +103,6 @@ async function checkAndroidUpdates(
     html_url?: string;
   };
   const latestVersion = release?.tag_name ?? '';
-  const currentVersion = await getVersion();
-
   if (latestVersion && isNewerVersion(latestVersion, currentVersion)) {
     await closeUpdateHandle(pendingUpdate);
     useAppUpdateStore.getState().showAvailable({
@@ -257,7 +288,8 @@ export const checkAppUpdates = async (
   manual = false,
   options?: { restoreFocusKey?: string },
 ): Promise<void> => {
-  if (!isTauriRuntime()) return;
+  const webosVersion = getWebosUpdateVersion();
+  if (!webosVersion && !isTauriRuntime()) return;
 
   const currentStage = useAppUpdateStore.getState().stage;
   if (currentStage === 'downloading' || currentStage === 'installing') {
@@ -286,8 +318,8 @@ export const checkAppUpdates = async (
         typeof navigator !== 'undefined'
           ? navigator.userAgent.toLowerCase()
           : '';
-      if (userAgent.includes('android')) {
-        await checkAndroidUpdates(manual, options?.restoreFocusKey);
+      if (webosVersion || userAgent.includes('android')) {
+        await checkGitHubUpdates(webosVersion || await getVersion(), manual, options?.restoreFocusKey);
       } else {
         await checkDesktopUpdates(manual, options?.restoreFocusKey);
       }

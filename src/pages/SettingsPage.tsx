@@ -15,7 +15,7 @@ import { SubtitleSettings } from "../components/settings/SubtitleSettings";
 import { PreferencesSettings } from "../components/settings/PreferencesSettings";
 import { GitHubStarButton } from "../components/settings/GitHubStarButton";
 import { BROWSER_EXTENSION_STORE_URL } from "../components/extensions/BrowserExtensionPrompt";
-import { checkAppUpdates } from "../lib/hooks/useAppUpdater";
+import { checkAppUpdates, getWebosUpdateVersion } from "../lib/updater/appUpdater";
 import { useAppUpdateStore } from "../lib/zustand/appUpdateStore";
 import { FocusableButton } from "../components/layout/FocusableButton";
 import { Switch } from "../components/ui/switch";
@@ -39,6 +39,7 @@ import "./SettingsPage.css";
 import {CustomSelect} from '../components/CustomSelect';
 
 export const SettingsPage: React.FC = () => {
+  const webosVersion = getWebosUpdateVersion();
   const { primary, setPrimary } = useThemeStore();
   const isCheckingUpdate = useAppUpdateStore((state) => state.isChecking);
   const updateStage = useAppUpdateStore((state) => state.stage);
@@ -117,12 +118,12 @@ export const SettingsPage: React.FC = () => {
   };
 
   React.useEffect(() => {
-    if (!isTauriRuntime()) {setAppVersion("Web application"); return;}
+    if (!isTauriRuntime()) {setAppVersion(webosVersion ? "Version " + webosVersion : "Web application"); return;}
     import("@tauri-apps/api/app")
       .then((app) => app.getVersion())
       .then((v) => setAppVersion(`Version ${v}`))
       .catch(() => setAppVersion("Version 1.0.0"));
-  }, []);
+  }, [webosVersion]);
 
   return (
     <div className="settings-page">
@@ -280,7 +281,7 @@ export const SettingsPage: React.FC = () => {
               <div className="settings-info">
                 <h3 className="label-lg">{isTauriRuntime() ? "Vega Desktop" : "Vega"}</h3>
                 <p className="body-md text-muted">{appVersion}</p>
-                {isTauriRuntime() && (
+                {(isTauriRuntime() || webosVersion) && (
                   <FocusableButton
                     className="theme-toggle-btn active"
                     focusKey="SETTINGS_CHECK_UPDATES"
