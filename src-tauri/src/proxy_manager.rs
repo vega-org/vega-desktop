@@ -54,11 +54,11 @@ pub async fn get_active_proxy_url() -> Option<String> {
     state.proxy_url.clone()
 }
 
-/// The app-owned ByeDPI relay validates DNS and IP targets before forwarding.
+/// The app-owned relay validates DNS and IP targets before forwarding.
 /// A generic HTTP proxy may resolve/connect independently of our resolver.
 pub async fn get_checked_provider_proxy_url() -> Result<Option<String>, String> {
     let state = GLOBAL_PROXY_STATE.read().await;
-    if state.proxy_url.is_some() && !(state.active_type == ProxyType::ByeDpi && state.relay.is_some()) {
+    if state.proxy_url.is_some() && state.relay.is_none() {
         return Err("Provider requests require destination-IP checks. This proxy cannot enforce them; disable it to continue.".into());
     }
     Ok(state.proxy_url.clone())
@@ -546,6 +546,18 @@ pub async fn start_byedpi(
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn normalize_byedpi_args(custom_args: Option<String>) -> String {
+    let trimmed = custom_args.as_deref().unwrap_or("").trim();
+    match trimmed {
+        "" | "--split 1 --disorder 1 --auto=torst" => {
+            "--split 1 --auto=torst --disorder 1 --auto=torst --tlsrec 1+s".to_string()
+        }
+        "-s 1 -q 1 -Y" => "-s 1 --auto=torst -o 1 --auto=torst -q 1".to_string(),
+        _ => trimmed.to_string(),
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 pub async fn start_byedpi(
     app: tauri::AppHandle,
@@ -554,9 +566,7 @@ pub async fn start_byedpi(
     let bin_path = resolve_or_download_proxy_binary(Some(&app), "byedpi", "ciadpi").await?;
     let port = find_available_port()?;
 
-    let args_str = custom_args
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| "--split 1 --disorder 1 --auto=torst".to_string());
+    let args_str = normalize_byedpi_args(custom_args);
 
     let mut state = GLOBAL_PROXY_STATE.write().await;
     stop_current_proxy_internal(&mut state).await;
@@ -706,7 +716,7 @@ pub async fn start_warp(app: tauri::AppHandle) -> Result<ProxyStatus, String> {
     let mut cmd = tokio::process::Command::new(&bin_path);
     cmd.arg("-c")
         .arg(&config_path)
-        .arg("http-proxy")
+        .arg("socks")
         .arg("-b")
         .arg("127.0.0.1")
         .arg("-p")
@@ -735,12 +745,22 @@ pub async fn start_warp(app: tauri::AppHandle) -> Result<ProxyStatus, String> {
         return Err("WARP proxy failed to start listening in time".to_string());
     }
 
-    let proxy_url = format!("http://127.0.0.1:{}", port);
+    let (relay_port, relay) = match crate::byedpi_relay::start(port).await {
+        Ok(started) => started,
+        Err(e) => {
+            if let Some(p) = pid {
+                crate::process_guard::kill_pid(p);
+            }
+            return Err(e);
+        }
+    };
+    let proxy_url = format!("socks5h://127.0.0.1:{}", relay_port);
     state.active_type = ProxyType::Warp;
     state.port = Some(port);
     state.proxy_url = Some(proxy_url.clone());
     state.child = Some(child);
     state.pid = pid;
+    state.relay = Some(relay);
 
     crate::doh_client::clear_client_cache().await;
     crate::stream_server::update_stream_proxy(Some(proxy_url)).await;

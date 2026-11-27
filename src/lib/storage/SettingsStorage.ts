@@ -627,10 +627,14 @@ export class SettingsStorage {
   }
 
   getByeDpiCmdArgs(): string {
-    return (
-      mainStorage.getString(SettingsKeys.BYEDPI_CMD_ARGS) ||
-      "--split 1 --disorder 1 --auto=torst"
-    );
+    const raw = mainStorage.getString(SettingsKeys.BYEDPI_CMD_ARGS)?.trim();
+    if (!raw || raw === "--split 1 --disorder 1 --auto=torst") {
+      return "--split 1 --auto=torst --disorder 1 --auto=torst --tlsrec 1+s";
+    }
+    if (raw === "-s 1 -q 1 -Y") {
+      return "-s 1 --auto=torst -o 1 --auto=torst -q 1";
+    }
+    return raw;
   }
 
   setByeDpiCmdArgs(args: string): void {

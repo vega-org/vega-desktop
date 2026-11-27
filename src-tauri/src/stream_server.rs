@@ -139,8 +139,9 @@ impl Resolve for StreamDnsResolver {
                 let resolver = resolver_lock.read().await;
                 match resolver.lookup_ip(name_str.as_str()).await {
                     Ok(response) => {
-                        let resolved: Vec<_> = response.into_iter().collect();
+                        let mut resolved: Vec<_> = response.into_iter().collect();
                         crate::public_network::validate_addresses(&resolved)?;
+                        resolved.sort_by_key(|ip| !ip.is_ipv4());
                         let ips = crate::doh_client::network_addresses(resolved).await;
                         let addrs: Vec<SocketAddr> = ips.into_iter().map(|ip| SocketAddr::new(ip, 0)).collect();
                         return Ok(Box::new(addrs.into_iter()) as Addrs);

@@ -139,12 +139,17 @@ export async function providerFetch(
   let response: NativeResponse | undefined;
   let currentUrl = publicHttpUrl(url).href;
   let method = (init.method || 'GET').toUpperCase();
+  const isDohEnabled =
+    typeof settingsStorage.isDohEnabled === "function"
+      ? settingsStorage.isDohEnabled()
+      : true;
+  const dohProvider = isDohEnabled ? settingsStorage.getDohProvider() : "system";
   for (let hop = 0; hop <= 10; hop++) {
     init.signal?.throwIfAborted();
     publicHttpUrl(currentUrl);
     response = await invoke<NativeResponse>('doh_fetch', {args:{
       url:currentUrl, method, headers:plainHeaders, body, max_redirects:0,
-      doh_provider:settingsStorage.getDohProvider(), doh_custom_url:settingsStorage.getDohCustomUrl(), isolated_cookies:true,
+      doh_provider:dohProvider, doh_custom_url:settingsStorage.getDohCustomUrl(), isolated_cookies:true,
     }});
     init.signal?.throwIfAborted();
     const setCookies = response.headers.filter(([name]) => name.toLowerCase() === 'set-cookie').map(([,value]) => value);

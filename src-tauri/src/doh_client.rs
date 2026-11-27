@@ -17,6 +17,8 @@ use wreq_util::Emulation;
 
 lazy_static::lazy_static! {
     static ref NAT64_CACHE: tokio::sync::RwLock<Option<(Instant, Vec<Nat64Prefix>)>> = tokio::sync::RwLock::new(None);
+    static ref NAT64_REFRESH_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::new(());
+    static ref RESOLVER_CACHE: std::sync::RwLock<HashMap<String, Arc<TokioAsyncResolver>>> = std::sync::RwLock::new(HashMap::new());
 }
 
 /// Discover the network's DNS64 prefix without resolving provider names through ISP DNS.
@@ -30,8 +32,17 @@ pub async fn network_addresses(ips: Vec<IpAddr>) -> Vec<IpAddr> {
             }
         }
     }
+    let _guard = NAT64_REFRESH_LOCK.lock().await;
+    {
+        let cache = NAT64_CACHE.read().await;
+        if let Some((time, prefixes)) = &*cache {
+            if time.elapsed() < Duration::from_secs(60) {
+                return order_addresses(ips, prefixes);
+            }
+        }
+    }
     let addresses = tokio::time::timeout(
-        Duration::from_secs(2), tokio::net::lookup_host("ipv4only.arpa:0")
+        Duration::from_millis(1500), tokio::net::lookup_host("ipv4only.arpa:0")
     ).await;
     let mut prefixes = Vec::new();
     if let Ok(Ok(addresses)) = addresses {
@@ -54,6 +65,9 @@ pub fn build_hickory_resolver(provider: &str, custom_url: Option<String>) -> Tok
     opts.use_hosts_file = true;
     opts.ip_strategy = hickory_resolver::config::LookupIpStrategy::Ipv4AndIpv6;
     opts.num_concurrent_reqs = 2;
+    opts.timeout = Duration::from_secs(3);
+    opts.attempts = 2;
+    opts.cache_size = 256;
 
     let config = if let Some(url) = custom_url.filter(|u| !u.is_empty()) {
         if url.to_lowercase().contains("google") {
@@ -96,11 +110,30 @@ struct CustomDnsResolver {
 
 impl CustomDnsResolver {
     fn new(provider: &str, custom_url: Option<String>) -> Self {
-        let resolver = build_hickory_resolver(provider, custom_url);
+        let system = provider.eq_ignore_ascii_case("system") || provider.eq_ignore_ascii_case("none");
+        let key = format!(
+            "{}_{}",
+            provider.to_lowercase(),
+            custom_url.as_deref().unwrap_or_default()
+        );
+        let resolver = if let Some(cached) = RESOLVER_CACHE
+            .read()
+            .ok()
+            .and_then(|cache| cache.get(&key).cloned())
+        {
+            cached
+        } else {
+            let created = Arc::new(build_hickory_resolver(provider, custom_url));
+            if let Ok(mut cache) = RESOLVER_CACHE.write() {
+                cache.entry(key).or_insert_with(|| created.clone()).clone()
+            } else {
+                created
+            }
+        };
         Self {
-            resolver: Arc::new(resolver),
+            resolver,
             public_only: false,
-            system: provider.eq_ignore_ascii_case("system") || provider.eq_ignore_ascii_case("none"),
+            system,
         }
     }
 }
@@ -130,14 +163,16 @@ impl Resolve for CustomDnsResolver {
 
             vlog_debug!("[DoH] Resolving: {}", name_str);
             if public_only && system {
-                let addresses: Vec<_> = tokio::net::lookup_host((name_str.as_str(), 0)).await?.collect();
+                let mut addresses: Vec<_> = tokio::net::lookup_host((name_str.as_str(), 0)).await?.collect();
                 crate::public_network::validate_addresses(&addresses.iter().map(|a| a.ip()).collect::<Vec<_>>())?;
+                addresses.sort_by_key(|a| !a.ip().is_ipv4());
                 return Ok(Box::new(addresses.into_iter()) as wreq::dns::Addrs);
             }
             match resolver.lookup_ip(name_str.as_str()).await {
                 Ok(response) => {
-                    let resolved: Vec<_> = response.into_iter().collect();
+                    let mut resolved: Vec<_> = response.into_iter().collect();
                     if public_only { crate::public_network::validate_addresses(&resolved)?; }
+                    resolved.sort_by_key(|ip| !ip.is_ipv4());
                     let ips = network_addresses(resolved).await;
                     let addrs: Vec<SocketAddr> = ips.into_iter().map(|ip| SocketAddr::new(ip, 0)).collect();
                     vlog_debug!("[DoH] Resolved {} to {:?}", name_str, addrs);
@@ -150,8 +185,9 @@ impl Resolve for CustomDnsResolver {
                     );
                     match tokio::net::lookup_host(format!("{}:0", name_str)).await {
                         Ok(std_addrs) => {
-                            let addrs: Vec<SocketAddr> = std_addrs.collect();
+                            let mut addrs: Vec<SocketAddr> = std_addrs.collect();
                             if public_only { crate::public_network::validate_addresses(&addrs.iter().map(|a| a.ip()).collect::<Vec<_>>())?; }
+                            addrs.sort_by_key(|a| !a.ip().is_ipv4());
                             vlog_debug!("[DoH] System DNS resolved {} to {:?}", name_str, addrs);
                             Ok(Box::new(addrs.into_iter()) as wreq::dns::Addrs)
                         }
@@ -222,12 +258,14 @@ async fn get_client(
         }
     }
 
-    if public_only || !provider.eq_ignore_ascii_case("system") && !provider.eq_ignore_ascii_case("none") {
+    if active_proxy.is_none()
+        && (public_only || (!provider.eq_ignore_ascii_case("system") && !provider.eq_ignore_ascii_case("none")))
+    {
         let mut resolver = CustomDnsResolver::new(provider, custom_url);
         resolver.public_only = public_only;
         builder = builder.dns_resolver(Arc::new(resolver));
     }
-    if public_only { builder = builder.timeout(Duration::from_secs(22)).connect_timeout(Duration::from_secs(10)); }
+    if public_only { builder = builder.timeout(Duration::from_secs(30)).connect_timeout(Duration::from_secs(20)); }
 
     let client = builder
         .build()

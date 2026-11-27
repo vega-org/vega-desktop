@@ -136,7 +136,7 @@ async fn relay(mut client: TcpStream, upstream_port: u16) -> std::io::Result<()>
     let mut last_reply = None;
     for ip in ips.into_iter().take(MAX_ADDRESS_ATTEMPTS) {
         let connection = tokio::time::timeout(
-            Duration::from_secs(5), connect_through_byedpi(upstream_port, ip, port_bytes)
+            Duration::from_secs(4), connect_through_byedpi(upstream_port, ip, port_bytes)
         ).await.unwrap_or_else(|_| Err(Error::new(ErrorKind::TimedOut, "ByeDPI connection timed out")));
         match connection {
             Ok((mut upstream, reply)) => {
