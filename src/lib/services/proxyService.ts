@@ -10,26 +10,29 @@ export interface ProxyStatus {
   error: string | null;
 }
 
+export const DEFAULT_BYEDPI_ARGS =
+  "--split 1 --auto=torst --disorder 1 --auto=torst --tlsrec 1+s";
+
 export const BYEDPI_PRESETS = [
   {
     id: "split-disorder",
     label: "Split & Disorder (Recommended)",
-    args: "--split 1 --disorder 1 --auto=torst",
+    args: DEFAULT_BYEDPI_ARGS,
   },
   {
     id: "disorder-only",
     label: "Disorder only",
-    args: "--disorder 1 --auto=torst",
+    args: "--disorder 1 --auto=torst --split 1",
   },
   {
     id: "split-only",
     label: "Split only",
-    args: "--split 1",
+    args: "--split 1 --auto=torst --tlsrec 1+s",
   },
   {
     id: "fake-oob",
     label: "Fake packet (OOB)",
-    args: "-s 1 -q 1 -Y",
+    args: "-s 1 --auto=torst -o 1 --auto=torst -q 1",
   },
 ];
 

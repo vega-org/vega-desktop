@@ -11,6 +11,7 @@ import {
   stopWarp,
   getWarpStatus,
   BYEDPI_PRESETS,
+  DEFAULT_BYEDPI_ARGS,
   ProxyStatus,
 } from "../../lib/services/proxyService";
 import { LuCheck as Check, LuRotateCcw as Reset } from "react-icons/lu";
@@ -138,7 +139,7 @@ export const ProxyPreferenceSection: React.FC = () => {
   };
 
   const handleResetArgs = () => {
-    const defaultArgs = "--split 1 --disorder 1 --auto=torst";
+    const defaultArgs = DEFAULT_BYEDPI_ARGS;
     setCmdArgs(defaultArgs);
     settingsStorage.setByeDpiCmdArgs(defaultArgs);
     setArgsSaved(true);
@@ -227,7 +228,7 @@ export const ProxyPreferenceSection: React.FC = () => {
                   value={cmdArgs}
                   onChange={(e) => setCmdArgs(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSaveArgs()}
-                  placeholder="--split 1 --disorder 1 --auto=torst"
+                  placeholder={DEFAULT_BYEDPI_ARGS}
                   className="tmdb-key-input"
                   style={{ fontFamily: "monospace", fontSize: "11px" }}
                 />
